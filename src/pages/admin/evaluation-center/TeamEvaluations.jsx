@@ -74,12 +74,12 @@ const TeamEvaluations = () => {
   const filteredTeams = teams.filter(t => {
     const query = searchQuery.toLowerCase();
     const matchesSearch = 
-      t.teamId.toLowerCase().includes(query) ||
-      t.teamName.toLowerCase().includes(query) ||
-      t.guideName.toLowerCase().includes(query) ||
-      t.reviewerName.toLowerCase().includes(query) ||
-      t.facultyPanelName.toLowerCase().includes(query) ||
-      t.department.toLowerCase().includes(query);
+      (t.teamId || '').toLowerCase().includes(query) ||
+      (t.teamName || '').toLowerCase().includes(query) ||
+      (t.guideName || '').toLowerCase().includes(query) ||
+      (t.reviewerName || '').toLowerCase().includes(query) ||
+      (t.facultyPanelName || '').toLowerCase().includes(query) ||
+      (t.department || '').toLowerCase().includes(query);
 
     const matchesDept = selectedDept === 'All' || t.department === selectedDept;
     const matchesStatus = selectedStatus === 'All' || t.status === selectedStatus;
@@ -173,22 +173,26 @@ const TeamEvaluations = () => {
     {
       key: 'finalScore',
       header: 'Final Score',
-      render: (_, row) => (
-        <div>
-          <div className="text-sm font-extrabold text-primary-700">{row.finalScore}/100</div>
-          <div className="flex items-center gap-1 mt-0.5">
-            <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded ${
-              row.grade.startsWith('A') ? 'bg-green-100 text-green-800' :
-              row.grade === 'B' ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800'
-            }`}>
-              Grade {row.grade}
-            </span>
-            <span className={`text-[10px] font-bold ${row.passStatus === 'Pass' ? 'text-green-600' : 'text-red-600'}`}>
-              {row.passStatus}
-            </span>
+      render: (_, row) => {
+        const gradeStr = String(row?.grade || 'F');
+        const isGradeA = gradeStr.startsWith('A');
+        return (
+          <div>
+            <div className="text-sm font-extrabold text-primary-700">{row.finalScore}/100</div>
+            <div className="flex items-center gap-1 mt-0.5">
+              <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded ${
+                isGradeA ? 'bg-green-100 text-green-800' :
+                gradeStr === 'B' ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800'
+              }`}>
+                Grade {gradeStr}
+              </span>
+              <span className={`text-[10px] font-bold ${row.passStatus === 'Pass' ? 'text-green-600' : 'text-red-600'}`}>
+                {row.passStatus}
+              </span>
+            </div>
           </div>
-        </div>
-      )
+        );
+      }
     },
     {
       key: 'approvalStage',

@@ -21,10 +21,12 @@ export const evaluationCenterService = {
 
   // Calculate grade based on percentage
   calculateGrade: (percentage) => {
-    if (percentage >= 90) return 'A+';
-    if (percentage >= 80) return 'A';
-    if (percentage >= 70) return 'B';
-    if (percentage >= 50) return 'C';
+    const val = Number(percentage);
+    if (isNaN(val)) return 'F';
+    if (val >= 90) return 'A+';
+    if (val >= 80) return 'A';
+    if (val >= 70) return 'B';
+    if (val >= 50) return 'C';
     return 'F';
   },
 
