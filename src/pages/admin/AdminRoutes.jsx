@@ -12,6 +12,8 @@ import AdminNotifications from './AdminNotifications';
 import AdminSettings from './AdminSettings';
 import BackupRestore from './BackupRestore';
 
+import EvaluationCenter from './evaluation-center/EvaluationCenter';
+
 const AdminRoutes = () => {
   return (
     <Routes>
@@ -22,6 +24,7 @@ const AdminRoutes = () => {
       <Route path="reviewers" element={<ReviewerManagement />} />
       <Route path="faculty" element={<FacultyManagement />} />
       <Route path="submissions" element={<SubmissionsManagement />} />
+      <Route path="evaluation-center/*" element={<EvaluationCenter />} />
       <Route path="sync" element={<CsvSync />} />
       <Route path="reports" element={<AdminReports />} />
       <Route path="notifications" element={<AdminNotifications />} />

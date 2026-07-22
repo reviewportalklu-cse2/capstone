@@ -23,7 +23,7 @@ const StudentDownloads = () => {
   };
 
   return (
-    <DashboardLayout navigationItems={studentNavigation} title="CapstoneFlow - Downloads">
+    <DashboardLayout navigationItems={studentNavigation} title="KL CSE Capstone Portal - Downloads">
       <div className="max-w-5xl mx-auto space-y-6">
         
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">

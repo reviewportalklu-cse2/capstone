@@ -1,6 +1,7 @@
 import React from 'react';
-import { Bell, Menu, Search, ChevronDown, Moon, CalendarDays, HelpCircle } from 'lucide-react';
+import { Bell, Menu, ChevronDown, Moon, CalendarDays, HelpCircle } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
+import GlobalSearch from '@/components/common/GlobalSearch';
 
 const Header = ({ title = "Dashboard", setMobileMenuOpen }) => {
   const { currentUser, userRole } = useAuth();
@@ -22,16 +23,7 @@ const Header = ({ title = "Dashboard", setMobileMenuOpen }) => {
 
           {/* Global Search */}
           <div className="flex-1 max-w-xl ml-8 hidden md:block">
-            <div className="relative group">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <Search className="h-4 w-4 text-gray-400 group-focus-within:text-primary-600 transition-colors" />
-              </div>
-              <input
-                type="text"
-                className="block w-full pl-10 pr-3 py-2 border border-gray-200 rounded-lg leading-5 bg-gray-50 text-gray-900 placeholder-gray-400 focus:outline-none focus:bg-white focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition-all sm:text-sm"
-                placeholder={`Search in ${userRole} workspace... (Press /)`}
-              />
-            </div>
+            <GlobalSearch />
           </div>
         </div>
         

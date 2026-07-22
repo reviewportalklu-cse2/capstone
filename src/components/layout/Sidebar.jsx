@@ -10,12 +10,16 @@ const Sidebar = ({ navigationItems }) => {
     <div className="hidden md:flex md:flex-shrink-0 shadow-lg z-20">
       <div className="flex flex-col w-64 bg-sidebar-dark border-r border-gray-800/50 relative">
         {/* Brand Header */}
-        <div className="flex items-center px-6 h-16 bg-sidebar-dark/95 backdrop-blur-sm sticky top-0 border-b border-gray-800/80 mt-2 mb-2">
+        <div className="flex items-center px-5 h-16 bg-sidebar-dark/95 backdrop-blur-sm sticky top-0 border-b border-gray-800/80 mt-2 mb-2">
           <div className="flex items-center gap-3 w-full">
-            <img src="/logo.png" alt="CapstoneFlow Logo" className="h-8 w-auto object-contain bg-white rounded p-1" />
-            <div className="flex flex-col">
-              <span className="text-white font-bold tracking-wide text-lg leading-tight">CapstoneFlow</span>
-              <span className="text-gray-400 text-[10px] tracking-wider uppercase font-semibold">Enterprise ERP</span>
+            <img src="/logo.png" alt="KL CSE Logo" className="h-8 w-auto object-contain bg-white rounded p-1" />
+            <div className="flex flex-col min-w-0">
+              <span className="text-white font-bold tracking-tight text-sm leading-tight truncate" title="KL CSE Capstone Portal">
+                KL CSE Capstone Portal
+              </span>
+              <span className="text-gray-400 text-[9px] tracking-tight leading-tight uppercase font-medium truncate" title="Official Capstone Project Management Portal">
+                Official Capstone Project Management Portal
+              </span>
             </div>
           </div>
         </div>

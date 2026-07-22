@@ -9,7 +9,8 @@ import {
   FileBarChart,
   Bell,
   Settings,
-  DatabaseBackup
+  DatabaseBackup,
+  ShieldCheck
 } from 'lucide-react';
 
 export const adminNavigation = [
@@ -19,6 +20,7 @@ export const adminNavigation = [
   { name: 'Reviewers', href: '/admin/reviewers', icon: UserCog },
   { name: 'Faculty', href: '/admin/faculty', icon: GraduationCap },
   { name: 'Submissions', href: '/admin/submissions', icon: ClipboardList },
+  { name: 'Evaluation Center ⭐', href: '/admin/evaluation-center', icon: ShieldCheck },
   { name: 'CSV / Excel Sync', href: '/admin/sync', icon: Upload },
   { name: 'Reports', href: '/admin/reports', icon: FileBarChart },
   { name: 'Notifications', href: '/admin/notifications', icon: Bell },
@@ -30,6 +32,7 @@ export const guideNavigation = [
   { name: 'Dashboard', href: '/guide/dashboard', icon: LayoutDashboard },
   { name: 'My Projects', href: '/guide/projects', icon: FileBarChart },
   { name: 'My Students', href: '/guide/students', icon: Users },
+  { name: 'Guide Marks', href: '/guide/marks', icon: ClipboardList },
   { name: 'Review Remarks', href: '/guide/remarks', icon: ClipboardList },
   { name: 'Progress Tracking', href: '/guide/progress', icon: FileBarChart },
   { name: 'Meetings', href: '/guide/meetings', icon: Users },

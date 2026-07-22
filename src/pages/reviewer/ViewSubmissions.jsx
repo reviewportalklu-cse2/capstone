@@ -88,7 +88,7 @@ const ViewSubmissions = () => {
 
   if (loading) {
     return (
-      <DashboardLayout navigationItems={reviewerNavigation} title="CapstoneFlow - View Submissions">
+      <DashboardLayout navigationItems={reviewerNavigation} title="KL CSE Capstone Portal - View Submissions">
         <div className="flex h-[calc(100vh-4rem)] items-center justify-center">
           <Loader2 className="h-8 w-8 animate-spin text-primary-600" />
         </div>
@@ -97,7 +97,7 @@ const ViewSubmissions = () => {
   }
 
   return (
-    <DashboardLayout navigationItems={reviewerNavigation} title="CapstoneFlow - View Submissions">
+    <DashboardLayout navigationItems={reviewerNavigation} title="KL CSE Capstone Portal - View Submissions">
       <div className="max-w-7xl mx-auto space-y-6">
         
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">

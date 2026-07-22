@@ -31,7 +31,7 @@ const GuideHelp = () => {
   };
 
   return (
-    <DashboardLayout navigationItems={guideNavigation} title="CapstoneFlow - Help & Support">
+    <DashboardLayout navigationItems={guideNavigation} title="KL CSE Capstone Portal - Help & Support">
       <div className="max-w-5xl mx-auto space-y-6">
         
         <div>

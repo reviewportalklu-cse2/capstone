@@ -32,7 +32,7 @@ const ProgressStatus = () => {
 
   if (loading) {
     return (
-      <DashboardLayout navigationItems={studentNavigation} title="CapstoneFlow - Progress Tracking">
+      <DashboardLayout navigationItems={studentNavigation} title="KL CSE Capstone Portal - Progress Tracking">
         <div className="flex h-[calc(100vh-4rem)] items-center justify-center">
           <Loader2 className="h-8 w-8 animate-spin text-primary-600" />
         </div>
@@ -56,7 +56,7 @@ const ProgressStatus = () => {
   const progressPercentage = Math.round((completedCount / allMilestones.length) * 100);
 
   return (
-    <DashboardLayout navigationItems={studentNavigation} title="CapstoneFlow - Progress Tracking">
+    <DashboardLayout navigationItems={studentNavigation} title="KL CSE Capstone Portal - Progress Tracking">
       <div className="max-w-4xl mx-auto space-y-6">
         
         <div>

@@ -31,7 +31,7 @@ const StudentHelp = () => {
   };
 
   return (
-    <DashboardLayout navigationItems={studentNavigation} title="CapstoneFlow - Help & Support">
+    <DashboardLayout navigationItems={studentNavigation} title="KL CSE Capstone Portal - Help & Support">
       <div className="max-w-5xl mx-auto space-y-6">
         
         <div>

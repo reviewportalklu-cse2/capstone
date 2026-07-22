@@ -75,7 +75,7 @@ const MyProjects = () => {
 
   if (loading) {
     return (
-      <DashboardLayout navigationItems={guideNavigation} title="CapstoneFlow - My Projects">
+      <DashboardLayout navigationItems={guideNavigation} title="KL CSE Capstone Portal - My Projects">
         <div className="flex h-[calc(100vh-4rem)] items-center justify-center">
           <Loader2 className="h-8 w-8 animate-spin text-primary-600" />
         </div>
@@ -84,7 +84,7 @@ const MyProjects = () => {
   }
 
   return (
-    <DashboardLayout navigationItems={guideNavigation} title="CapstoneFlow - My Projects">
+    <DashboardLayout navigationItems={guideNavigation} title="KL CSE Capstone Portal - My Projects">
       <div className="max-w-7xl mx-auto space-y-6">
         
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">

@@ -59,7 +59,7 @@ const ProgressTracking = () => {
 
   if (loading) {
     return (
-      <DashboardLayout navigationItems={guideNavigation} title="CapstoneFlow - Progress Tracking">
+      <DashboardLayout navigationItems={guideNavigation} title="KL CSE Capstone Portal - Progress Tracking">
         <div className="flex h-[calc(100vh-4rem)] items-center justify-center">
           <Loader2 className="h-8 w-8 animate-spin text-primary-600" />
         </div>
@@ -71,7 +71,7 @@ const ProgressTracking = () => {
   const ongoingCount = projects.length - completedCount;
 
   return (
-    <DashboardLayout navigationItems={guideNavigation} title="CapstoneFlow - Progress Tracking">
+    <DashboardLayout navigationItems={guideNavigation} title="KL CSE Capstone Portal - Progress Tracking">
       <div className="max-w-7xl mx-auto space-y-6">
         
         <div>

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { authService } from '@/firebase/services/authService';
 import { userService } from '@/firebase/services/userService';
@@ -12,6 +12,10 @@ const Login = () => {
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const navigate = useNavigate();
+
+  useEffect(() => {
+    document.title = "KL CSE Capstone Portal";
+  }, []);
 
   const onSubmit = async (data) => {
     setLoading(true);
@@ -47,13 +51,13 @@ const Login = () => {
     <div className="min-h-screen bg-surface-dim flex flex-col justify-center py-12 sm:px-6 lg:px-8 font-sans">
       <div className="sm:mx-auto sm:w-full sm:max-w-md animate-fade-in">
         <div className="flex justify-center">
-          <img src="/logo.png" alt="CapstoneFlow Logo" className="h-16 w-auto object-contain" />
+          <img src="/logo.png" alt="KL CSE Logo" className="h-16 w-auto object-contain" />
         </div>
         <h2 className="mt-6 text-center text-3xl font-extrabold tracking-tight text-gray-900">
-          CapstoneFlow
+          KL CSE Capstone Portal
         </h2>
         <p className="mt-2 text-center text-sm text-gray-600 font-medium">
-          Enterprise Capstone Project Management & Review Platform
+          Official Capstone Project Management Portal
         </p>
       </div>
 
@@ -120,7 +124,7 @@ const Login = () => {
           </form>
         </div>
         <div className="mt-8 text-center text-xs font-medium text-gray-400">
-          &copy; {new Date().getFullYear()} CapstoneFlow. All rights reserved.
+          &copy; {new Date().getFullYear()} KL CSE Capstone Portal. All rights reserved.
         </div>
       </div>
     </div>

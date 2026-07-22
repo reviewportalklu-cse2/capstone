@@ -191,7 +191,7 @@ const ProjectManagement = () => {
   ];
 
   return (
-    <DashboardLayout navigationItems={adminNavigation} title="CapstoneFlow - Project Administration">
+    <DashboardLayout navigationItems={adminNavigation} title="KL CSE Capstone Portal - Project Administration">
       <div className="space-y-6">
         
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">

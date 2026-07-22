@@ -3,6 +3,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import GuideDashboard from './GuideDashboard';
 import MyStudents from './MyStudents';
 import MyProjects from './MyProjects';
+import GuideMarks from './GuideMarks';
 import Remarks from './Remarks';
 import Meetings from './Meetings';
 import ProgressTracking from './ProgressTracking';
@@ -18,6 +19,7 @@ const GuideRoutes = () => {
       <Route path="dashboard" element={<GuideDashboard />} />
       <Route path="students" element={<MyStudents />} />
       <Route path="projects" element={<MyProjects />} />
+      <Route path="marks" element={<GuideMarks />} />
       <Route path="remarks" element={<Remarks />} />
       <Route path="meetings" element={<Meetings />} />
       <Route path="progress" element={<ProgressTracking />} />

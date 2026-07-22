@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Sidebar from './Sidebar';
 import Header from './Header';
 import { X } from 'lucide-react';
@@ -8,6 +8,10 @@ import { useAuth } from '@/contexts/AuthContext';
 const DashboardLayout = ({ children, navigationItems, title }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const { logout } = useAuth();
+
+  useEffect(() => {
+    document.title = "KL CSE Capstone Portal";
+  }, []);
 
   return (
     <div className="h-screen flex overflow-hidden bg-surface-dim font-sans">
@@ -28,8 +32,11 @@ const DashboardLayout = ({ children, navigationItems, title }) => {
             </div>
             
             <div className="flex-shrink-0 flex items-center px-4 gap-3">
-              <img src="/logo.png" alt="CapstoneFlow Logo" className="h-8 w-auto bg-white p-1 rounded" />
-              <span className="text-white font-bold text-xl tracking-tight">CapstoneFlow</span>
+              <img src="/logo.png" alt="KL CSE Logo" className="h-8 w-auto bg-white p-1 rounded" />
+              <div className="flex flex-col">
+                <span className="text-white font-bold text-sm leading-tight tracking-tight">KL CSE Capstone Portal</span>
+                <span className="text-gray-400 text-[9px] uppercase font-medium">Official Capstone Project Management Portal</span>
+              </div>
             </div>
             
             <div className="mt-5 flex-1 h-0 overflow-y-auto">

@@ -8,13 +8,14 @@ import { useAuth } from '@/contexts/AuthContext';
 import { studentService } from '@/firebase/services/studentService';
 import { reviewService } from '@/firebase/services/reviewService';
 import { marksService } from '@/firebase/services/marksService';
-import { Loader2, Award, FileText, CheckCircle, Calculator, BookOpen } from 'lucide-react';
+import { Loader2, Award, Calculator, BookOpen, UserCheck } from 'lucide-react';
 
 const MyMarks = () => {
   const { currentUser } = useAuth();
   const [loading, setLoading] = useState(true);
   const [reviews, setReviews] = useState([]);
   const [facultyMarks, setFacultyMarks] = useState([]);
+  const [guideMarks, setGuideMarks] = useState([]);
 
   useEffect(() => {
     if (currentUser?.uid) {
@@ -26,16 +27,16 @@ const MyMarks = () => {
     try {
       setLoading(true);
       const studentData = await studentService.getById(uid);
-      if (studentData) {
-        // Fetch formal reviews (Reviewer) and faculty marks (Internal)
-        const [revData, facData] = await Promise.all([
-          reviewService.getByStudentId(uid),
-          marksService.getByRollNumber ? marksService.getByRollNumber(studentData.rollNumber) : []
-        ]);
-        
-        setReviews(revData.filter(r => r.status === 'Final'));
-        setFacultyMarks(facData || []);
-      }
+      
+      const [revData, facData, gData] = await Promise.all([
+        reviewService.getByStudentId(uid),
+        marksService.getFacultyMarksByStudentId(uid),
+        marksService.getGuideMarksByStudentId(uid)
+      ]);
+      
+      setReviews(revData.filter(r => r.status === 'Final'));
+      setFacultyMarks(facData || []);
+      setGuideMarks(gData || []);
     } catch (err) {
       console.error('Error fetching marks:', err);
     } finally {
@@ -45,7 +46,7 @@ const MyMarks = () => {
 
   if (loading) {
     return (
-      <DashboardLayout navigationItems={studentNavigation} title="CapstoneFlow - My Marks">
+      <DashboardLayout navigationItems={studentNavigation} title="KL CSE Capstone Portal - My Marks">
         <div className="flex h-[calc(100vh-4rem)] items-center justify-center">
           <Loader2 className="h-8 w-8 animate-spin text-primary-600" />
         </div>
@@ -53,16 +54,16 @@ const MyMarks = () => {
     );
   }
 
-  const hasMarks = reviews.length > 0 || facultyMarks.length > 0;
+  const hasMarks = reviews.length > 0 || facultyMarks.length > 0 || guideMarks.length > 0;
 
   if (!hasMarks) {
     return (
-      <DashboardLayout navigationItems={studentNavigation} title="CapstoneFlow - My Marks">
+      <DashboardLayout navigationItems={studentNavigation} title="KL CSE Capstone Portal - My Marks">
         <div className="p-6 max-w-4xl mx-auto py-12">
           <EmptyState 
             icon={Award}
             title="No Marks Available" 
-            description="Your evaluations have not been published yet. Marks will appear here once finalized by your reviewer or faculty." 
+            description="Your evaluations have not been published yet. Marks will appear here once finalized by your guide, reviewer, or faculty." 
           />
         </div>
       </DashboardLayout>
@@ -77,15 +78,19 @@ const MyMarks = () => {
   facultyMarks.forEach(f => totalFacultyScore += (f.marks || 0));
   const avgFacultyScore = facultyMarks.length > 0 ? Math.round(totalFacultyScore / facultyMarks.length) : 0;
 
+  let totalGuideScore = 0;
+  guideMarks.forEach(g => totalGuideScore += (g.marks || 0));
+  const avgGuideScore = guideMarks.length > 0 ? Math.round(totalGuideScore / guideMarks.length) : 0;
+
   return (
-    <DashboardLayout navigationItems={studentNavigation} title="CapstoneFlow - My Marks">
+    <DashboardLayout navigationItems={studentNavigation} title="KL CSE Capstone Portal - My Marks">
       <div className="max-w-5xl mx-auto space-y-6">
         
         <div>
           <h1 className="text-2xl font-bold text-gray-900 tracking-tight flex items-center gap-2">
             <Award className="h-6 w-6 text-primary-600" /> Academic Performance
           </h1>
-          <p className="text-sm text-gray-500 mt-1">View your external review scores and internal faculty marks.</p>
+          <p className="text-sm text-gray-500 mt-1">View your external review scores, guide marks, and internal faculty marks.</p>
         </div>
 
         {/* Top-Level Summary */}
@@ -93,22 +98,30 @@ const MyMarks = () => {
           <Card className="bg-gradient-to-br from-indigo-50 to-white border-indigo-100">
             <div className="flex flex-col">
               <span className="text-sm font-semibold text-gray-500 uppercase flex items-center gap-2">
-                <Calculator className="w-4 h-4" /> Average External Score
+                <Calculator className="w-4 h-4" /> Avg External Score
               </span>
               <span className="text-3xl font-bold text-indigo-700 mt-2">{avgReviewScore} <span className="text-lg text-indigo-400">/ 100</span></span>
+            </div>
+          </Card>
+          <Card className="bg-gradient-to-br from-purple-50 to-white border-purple-100">
+            <div className="flex flex-col">
+              <span className="text-sm font-semibold text-gray-500 uppercase flex items-center gap-2">
+                <UserCheck className="w-4 h-4" /> Avg Guide Marks
+              </span>
+              <span className="text-3xl font-bold text-purple-700 mt-2">{avgGuideScore} <span className="text-lg text-purple-400">/ 100</span></span>
             </div>
           </Card>
           <Card className="bg-gradient-to-br from-emerald-50 to-white border-emerald-100">
             <div className="flex flex-col">
               <span className="text-sm font-semibold text-gray-500 uppercase flex items-center gap-2">
-                <BookOpen className="w-4 h-4" /> Average Internal Score
+                <BookOpen className="w-4 h-4" /> Avg Faculty Marks
               </span>
               <span className="text-3xl font-bold text-emerald-700 mt-2">{avgFacultyScore} <span className="text-lg text-emerald-400">/ 100</span></span>
             </div>
           </Card>
         </div>
 
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
           
           <div className="space-y-6">
             <h3 className="text-lg font-bold text-gray-900 border-b border-gray-200 pb-2">External Reviews</h3>
@@ -117,7 +130,7 @@ const MyMarks = () => {
                 <div className="flex justify-between items-start mb-4 border-b border-gray-100 pb-4">
                   <div>
                     <h4 className="font-bold text-gray-900">{review.reviewType}</h4>
-                    <p className="text-xs text-gray-500 mt-1">Evaluated on {new Date(review.createdAt).toLocaleDateString()}</p>
+                    <p className="text-xs text-gray-500 mt-1">Evaluated on {new Date(review.createdAt || review.updatedAt).toLocaleDateString()}</p>
                   </div>
                   <div className="bg-indigo-100 px-4 py-2 rounded-lg text-center">
                     <p className="text-xs font-semibold text-indigo-600 uppercase tracking-wide">Total Score</p>
@@ -125,24 +138,24 @@ const MyMarks = () => {
                   </div>
                 </div>
                 
-                <div className="grid grid-cols-3 gap-4 mb-4">
-                  <div className="bg-gray-50 p-3 rounded text-center border border-gray-100">
-                    <p className="text-xs text-gray-500 uppercase">Presentation</p>
-                    <p className="font-bold text-gray-900 mt-1">{review.scores?.presentation || 0}</p>
+                <div className="grid grid-cols-3 gap-2 mb-4">
+                  <div className="bg-gray-50 p-2 rounded text-center border border-gray-100">
+                    <p className="text-[10px] text-gray-500 uppercase">Presentation</p>
+                    <p className="font-bold text-gray-900 mt-1 text-sm">{review.scores?.presentation || 0}</p>
                   </div>
-                  <div className="bg-gray-50 p-3 rounded text-center border border-gray-100">
-                    <p className="text-xs text-gray-500 uppercase">Technical</p>
-                    <p className="font-bold text-gray-900 mt-1">{review.scores?.technical || 0}</p>
+                  <div className="bg-gray-50 p-2 rounded text-center border border-gray-100">
+                    <p className="text-[10px] text-gray-500 uppercase">Technical</p>
+                    <p className="font-bold text-gray-900 mt-1 text-sm">{review.scores?.technical || 0}</p>
                   </div>
-                  <div className="bg-gray-50 p-3 rounded text-center border border-gray-100">
-                    <p className="text-xs text-gray-500 uppercase">Q & A</p>
-                    <p className="font-bold text-gray-900 mt-1">{review.scores?.qa || 0}</p>
+                  <div className="bg-gray-50 p-2 rounded text-center border border-gray-100">
+                    <p className="text-[10px] text-gray-500 uppercase">Q & A</p>
+                    <p className="font-bold text-gray-900 mt-1 text-sm">{review.scores?.qa || 0}</p>
                   </div>
                 </div>
 
-                <div className="bg-blue-50 p-4 rounded-lg">
+                <div className="bg-blue-50 p-3 rounded-lg">
                   <p className="text-xs font-semibold text-blue-800 uppercase mb-1">Reviewer Feedback</p>
-                  <p className="text-sm text-blue-900 italic">"{review.remarks}"</p>
+                  <p className="text-xs text-blue-900 italic">"{review.remarks}"</p>
                 </div>
               </Card>
             )) : (
@@ -153,7 +166,33 @@ const MyMarks = () => {
           </div>
 
           <div className="space-y-6">
-            <h3 className="text-lg font-bold text-gray-900 border-b border-gray-200 pb-2">Internal Assessments</h3>
+            <h3 className="text-lg font-bold text-gray-900 border-b border-gray-200 pb-2">Guide Marks</h3>
+            {guideMarks.length > 0 ? guideMarks.map((mark, idx) => (
+              <Card key={idx} className="border-l-4 border-l-purple-500 shadow-sm">
+                <div className="flex justify-between items-center mb-4">
+                  <div>
+                    <h4 className="font-bold text-gray-900">Guide Internal Evaluation</h4>
+                    <p className="text-xs text-gray-500 mt-1">Evaluated on {new Date(mark.submittedAt).toLocaleDateString()}</p>
+                  </div>
+                  <div className="bg-purple-100 px-4 py-2 rounded-lg text-center">
+                    <p className="text-2xl font-bold text-purple-900">{mark.marks} <span className="text-sm font-normal text-purple-700">/ 100</span></p>
+                  </div>
+                </div>
+                
+                <div className="bg-gray-50 p-3 rounded-lg border border-gray-100">
+                  <p className="text-xs font-semibold text-gray-600 uppercase mb-1">Guide Comments</p>
+                  <p className="text-xs text-gray-800">"{mark.comments || 'No comments provided.'}"</p>
+                </div>
+              </Card>
+            )) : (
+              <div className="p-6 bg-gray-50 border border-dashed border-gray-300 rounded-lg text-center">
+                 <p className="text-gray-500 text-sm">No guide marks published yet.</p>
+               </div>
+            )}
+          </div>
+
+          <div className="space-y-6">
+            <h3 className="text-lg font-bold text-gray-900 border-b border-gray-200 pb-2">Faculty Assessments</h3>
             {facultyMarks.length > 0 ? facultyMarks.map((mark, idx) => (
               <Card key={idx} className="border-l-4 border-l-emerald-500 shadow-sm">
                 <div className="flex justify-between items-center mb-4">
@@ -161,19 +200,19 @@ const MyMarks = () => {
                     <h4 className="font-bold text-gray-900">Faculty Internal Evaluation</h4>
                     <p className="text-xs text-gray-500 mt-1">Evaluated on {new Date(mark.submittedAt).toLocaleDateString()}</p>
                   </div>
-                  <div className="bg-emerald-100 px-4 py-2 rounded-lg text-center flex items-center justify-center">
-                    <p className="text-2xl font-bold text-emerald-900">{mark.marks} <span className="text-sm font-normal text-emerald-700">/ {mark.total}</span></p>
+                  <div className="bg-emerald-100 px-4 py-2 rounded-lg text-center">
+                    <p className="text-2xl font-bold text-emerald-900">{mark.marks} <span className="text-sm font-normal text-emerald-700">/ {mark.total || 100}</span></p>
                   </div>
                 </div>
                 
-                <div className="bg-gray-50 p-4 rounded-lg border border-gray-100">
+                <div className="bg-gray-50 p-3 rounded-lg border border-gray-100">
                   <p className="text-xs font-semibold text-gray-600 uppercase mb-1">Faculty Comments</p>
-                  <p className="text-sm text-gray-800">"{mark.comments}"</p>
+                  <p className="text-xs text-gray-800">"{mark.comments || 'No comments provided.'}"</p>
                 </div>
               </Card>
             )) : (
               <div className="p-6 bg-gray-50 border border-dashed border-gray-300 rounded-lg text-center">
-                 <p className="text-gray-500 text-sm">No internal marks published yet.</p>
+                 <p className="text-gray-500 text-sm">No internal faculty marks published yet.</p>
                </div>
             )}
           </div>

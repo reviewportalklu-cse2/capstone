@@ -103,7 +103,7 @@ const ReviewerDashboard = () => {
 
   if (loading) {
     return (
-      <DashboardLayout navigationItems={reviewerNavigation} title="CapstoneFlow - Reviewer Workspace">
+      <DashboardLayout navigationItems={reviewerNavigation} title="KL CSE Capstone Portal - Reviewer Workspace">
         <div className="flex h-[calc(100vh-4rem)] items-center justify-center">
           <Loader2 className="h-8 w-8 animate-spin text-primary-600" />
         </div>
@@ -113,13 +113,13 @@ const ReviewerDashboard = () => {
 
   if (error) {
     return (
-      <DashboardLayout navigationItems={reviewerNavigation} title="CapstoneFlow - Reviewer Workspace">
-        <div className="p-6 max-w-7xl mx-auto space-y-6">
+      <DashboardLayout navigationItems={reviewerNavigation} title="KL CSE Capstone Portal - Reviewer Workspace">
+        <div className="p-6">
           <div className="bg-red-50 text-red-600 p-4 rounded-lg flex items-center">
             <AlertCircle className="w-5 h-5 mr-2" />
             {error}
           </div>
-          <Button onClick={() => fetchDashboardData(currentUser?.uid)}>
+          <Button className="mt-4 focus:outline-none focus:ring-2 focus:ring-primary-500" onClick={() => { setError(null); setLoading(true); fetchDashboardData(currentUser?.uid); }}>
             Retry
           </Button>
         </div>
@@ -156,13 +156,13 @@ const ReviewerDashboard = () => {
   ];
 
   return (
-    <DashboardLayout navigationItems={reviewerNavigation} title="CapstoneFlow - Reviewer Workspace">
+    <DashboardLayout navigationItems={reviewerNavigation} title="KL CSE Capstone Portal - Reviewer Workspace">
       <div className="space-y-6 max-w-7xl mx-auto">
         
-        {/* Workspace Header */}
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center bg-gradient-to-r from-slate-900 to-slate-800 rounded-xl p-6 md:p-8 text-white shadow-xl">
-          <div>
-            <h1 className="text-3xl font-bold mb-2 tracking-tight">CapstoneFlow Workspace</h1>
+        {/* Banner */}
+        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-slate-900 via-primary-900 to-indigo-950 p-6 md:p-8 text-white shadow-xl">
+          <div className="relative z-10">
+            <h1 className="text-3xl font-bold mb-2 tracking-tight">KL CSE Capstone Portal Workspace</h1>
             <p className="text-slate-300 text-lg">Welcome back. You have <span className="font-semibold text-white">{stats.pending}</span> evaluations pending.</p>
           </div>
           <div className="mt-4 md:mt-0 flex space-x-3">

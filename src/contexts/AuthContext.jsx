@@ -49,7 +49,7 @@ export const AuthProvider = ({ children }) => {
     return (
       <div className="min-h-screen bg-surface-dim flex flex-col justify-center items-center font-sans">
         <div className="animate-pulse flex flex-col items-center">
-          <img src="/logo.png" alt="CapstoneFlow Logo" className="h-16 w-auto mb-6 opacity-80" />
+          <img src="/logo.png" alt="KL CSE Capstone Portal Logo" className="h-16 w-auto mb-6 opacity-80" />
           <Loader2 className="h-8 w-8 text-primary-500 animate-spin" />
           <p className="mt-4 text-sm font-semibold text-gray-500 tracking-wide">Loading Workspace...</p>
         </div>

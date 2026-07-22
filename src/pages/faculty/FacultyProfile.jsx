@@ -81,7 +81,7 @@ const FacultyProfile = () => {
 
   if (loading) {
     return (
-      <DashboardLayout navigationItems={facultyNavigation} title="CapstoneFlow - Profile & Settings">
+      <DashboardLayout navigationItems={facultyNavigation} title="KL CSE Capstone Portal - Profile & Settings">
         <div className="flex h-[calc(100vh-4rem)] items-center justify-center">
           <Loader2 className="h-8 w-8 animate-spin text-primary-600" />
         </div>
@@ -90,7 +90,7 @@ const FacultyProfile = () => {
   }
 
   return (
-    <DashboardLayout navigationItems={facultyNavigation} title="CapstoneFlow - Profile & Settings">
+    <DashboardLayout navigationItems={facultyNavigation} title="KL CSE Capstone Portal - Profile & Settings">
       <div className="max-w-4xl mx-auto space-y-6">
         
         <div>

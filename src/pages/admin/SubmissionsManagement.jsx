@@ -136,7 +136,7 @@ const SubmissionsManagement = () => {
   ];
 
   return (
-    <DashboardLayout navigationItems={adminNavigation} title="CapstoneFlow - Submissions Management">
+    <DashboardLayout navigationItems={adminNavigation} title="KL CSE Capstone Portal - Submissions Management">
       <div className="space-y-6">
         
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">

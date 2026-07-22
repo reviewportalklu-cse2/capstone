@@ -13,7 +13,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { remarkService } from '@/firebase/services/remarkService';
 import { studentService } from '@/firebase/services/studentService';
 import { notificationService } from '@/firebase/services/notificationService';
-import { Loader2, Search, MessageSquare, Plus, Edit2, Trash2, CheckCircle, AlertCircle } from 'lucide-react';
+import { Loader2, Search, MessageSquare, Plus, Edit2, Trash2, AlertCircle } from 'lucide-react';
 
 const Remarks = () => {
   const { currentUser } = useAuth();
@@ -45,7 +45,9 @@ const Remarks = () => {
 
   useEffect(() => {
     if (preselectedStudent && students.length > 0) {
-      setFormData(prev => ({ ...prev, studentId: preselectedStudent }));
+      const match = students.find(s => s.id === preselectedStudent || s.uid === preselectedStudent);
+      const sId = match ? (match.id || match.uid) : preselectedStudent;
+      setFormData(prev => ({ ...prev, studentId: sId }));
       setIsModalOpen(true);
     }
   }, [preselectedStudent, students]);
@@ -54,24 +56,32 @@ const Remarks = () => {
     try {
       setLoading(true);
       setError(null);
-      const [remarksData, studentsData] = await Promise.all([
+      const [remarksData, studentsData, allStudents] = await Promise.all([
         remarkService.getRemarksByAuthor(uid),
-        studentService.getByGuideId(uid)
+        studentService.getByGuideId(uid),
+        studentService.getAll()
       ]);
+
+      const studentMap = new Map();
+      allStudents.forEach(s => {
+        const key1 = s.id;
+        const key2 = s.uid;
+        if (key1) studentMap.set(key1, s);
+        if (key2) studentMap.set(key2, s);
+      });
       
-      // Map student details into remarks
       const enrichedRemarks = remarksData.map(remark => {
-        const student = studentsData.find(s => s.uid === remark.studentId);
+        const student = studentMap.get(remark.studentId) || studentsData.find(s => s.id === remark.studentId || s.uid === remark.studentId);
         return {
           ...remark,
-          studentName: student?.name || 'Unknown Student',
-          rollNumber: student?.rollNumber || 'N/A',
-          projectTitle: student?.projectTitle || 'N/A'
+          studentName: student?.name || remark.studentName || 'Student',
+          rollNumber: student?.rollNumber || student?.rollNo || remark.rollNumber || 'N/A',
+          projectTitle: student?.projectTitle || remark.projectTitle || 'N/A'
         };
       });
 
       setRemarks(enrichedRemarks.sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt)));
-      setStudents(studentsData);
+      setStudents(studentsData.length > 0 ? studentsData : allStudents);
     } catch (err) {
       console.error("Error fetching remarks:", err);
       setError("Failed to load remarks data.");
@@ -114,8 +124,13 @@ const Remarks = () => {
     
     setSubmitting(true);
     try {
+      const selectedStudent = students.find(s => s.id === formData.studentId || s.uid === formData.studentId);
+      
       const payload = {
         studentId: formData.studentId,
+        studentName: selectedStudent?.name || '',
+        rollNumber: selectedStudent?.rollNumber || selectedStudent?.rollNo || '',
+        projectTitle: selectedStudent?.projectTitle || '',
         authorId: currentUser.uid,
         title: formData.title,
         content: formData.content,
@@ -126,10 +141,9 @@ const Remarks = () => {
         await remarkService.update(formData.id, payload);
       } else {
         payload.createdAt = new Date().toISOString();
-        payload.projectId = students.find(s => s.uid === formData.studentId)?.projectId || null;
+        payload.projectId = selectedStudent?.projectId || null;
         await remarkService.create(payload);
         
-        // Notify Student
         await notificationService.create({
           userId: formData.studentId,
           title: 'New Remark from Guide',
@@ -140,7 +154,7 @@ const Remarks = () => {
       }
 
       setIsModalOpen(false);
-      fetchData(currentUser.uid); // Refresh
+      fetchData(currentUser.uid);
     } catch (err) {
       console.error("Failed to save remark:", err);
       setError("Failed to save remark.");
@@ -153,9 +167,10 @@ const Remarks = () => {
     if (!searchQuery) return remarks;
     const lower = searchQuery.toLowerCase();
     return remarks.filter(r => 
-      r.studentName.toLowerCase().includes(lower) || 
-      r.rollNumber.toLowerCase().includes(lower) ||
-      r.title.toLowerCase().includes(lower)
+      r.studentName?.toLowerCase().includes(lower) || 
+      r.rollNumber?.toLowerCase().includes(lower) ||
+      r.title?.toLowerCase().includes(lower) ||
+      r.projectTitle?.toLowerCase().includes(lower)
     );
   }, [remarks, searchQuery]);
 
@@ -188,7 +203,7 @@ const Remarks = () => {
 
   if (loading) {
     return (
-      <DashboardLayout navigationItems={guideNavigation} title="CapstoneFlow - Review Remarks">
+      <DashboardLayout navigationItems={guideNavigation} title="KL CSE Capstone Portal - Review Remarks">
         <div className="flex h-[calc(100vh-4rem)] items-center justify-center">
           <Loader2 className="h-8 w-8 animate-spin text-primary-600" />
         </div>
@@ -197,7 +212,7 @@ const Remarks = () => {
   }
 
   return (
-    <DashboardLayout navigationItems={guideNavigation} title="CapstoneFlow - Review Remarks">
+    <DashboardLayout navigationItems={guideNavigation} title="KL CSE Capstone Portal - Review Remarks">
       <div className="max-w-7xl mx-auto space-y-6">
         
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -227,7 +242,7 @@ const Remarks = () => {
               </div>
               <Input
                 type="text"
-                placeholder="Search by student, title..."
+                placeholder="Search by student, roll number, or project..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-10"
@@ -255,7 +270,7 @@ const Remarks = () => {
           </div>
         </Card>
 
-        {/* CRUD Modal */}
+        {/* Modal */}
         <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={isEditMode ? "Edit Remark" : "Add New Remark"}>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
@@ -268,9 +283,13 @@ const Remarks = () => {
                 disabled={isEditMode}
               >
                 <option value="" disabled>Select a student</option>
-                {students.map(s => (
-                  <option key={s.uid} value={s.uid}>{s.name} ({s.rollNumber})</option>
-                ))}
+                {students.map(s => {
+                  const sId = s.id || s.uid;
+                  const roll = s.rollNumber || s.rollNo || 'N/A';
+                  return (
+                    <option key={sId} value={sId}>{s.name} ({roll})</option>
+                  );
+                })}
               </select>
             </div>
             <div>

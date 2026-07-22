@@ -80,7 +80,7 @@ const MyProject = () => {
 
   if (loading) {
     return (
-      <DashboardLayout navigationItems={studentNavigation} title="CapstoneFlow - My Project">
+      <DashboardLayout navigationItems={studentNavigation} title="KL CSE Capstone Portal - My Project">
         <div className="flex h-[calc(100vh-4rem)] items-center justify-center">
           <Loader2 className="h-8 w-8 animate-spin text-primary-600" />
         </div>
@@ -90,7 +90,7 @@ const MyProject = () => {
 
   if (!project) {
     return (
-      <DashboardLayout navigationItems={studentNavigation} title="CapstoneFlow - My Project">
+      <DashboardLayout navigationItems={studentNavigation} title="KL CSE Capstone Portal - My Project">
         <div className="p-6 max-w-4xl mx-auto py-12">
           <EmptyState 
             icon={Target}
@@ -103,7 +103,7 @@ const MyProject = () => {
   }
 
   return (
-    <DashboardLayout navigationItems={studentNavigation} title="CapstoneFlow - My Project">
+    <DashboardLayout navigationItems={studentNavigation} title="KL CSE Capstone Portal - My Project">
       <div className="max-w-6xl mx-auto space-y-6">
         
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">

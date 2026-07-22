@@ -45,14 +45,14 @@ const AssignedStudents = () => {
     const lowerQ = searchQuery.toLowerCase();
     return students.filter(s => 
       s.name?.toLowerCase().includes(lowerQ) || 
-      s.rollNumber?.toLowerCase().includes(lowerQ) ||
+      (s.rollNumber || s.rollNo)?.toLowerCase().includes(lowerQ) ||
       s.projectTitle?.toLowerCase().includes(lowerQ) ||
       s.batch?.toLowerCase().includes(lowerQ)
     );
   }, [students, searchQuery]);
 
   const columns = [
-    { header: 'Roll No.', accessor: 'rollNumber', render: (row) => <span className="font-semibold text-gray-900">{row.rollNumber}</span> },
+    { header: 'Roll No.', accessor: 'rollNumber', render: (row) => <span className="font-semibold text-gray-900">{row.rollNumber || row.rollNo || 'N/A'}</span> },
     { header: 'Student Name', accessor: 'name' },
     { header: 'Batch', accessor: 'batch' },
     { header: 'Project', accessor: 'projectTitle', render: (row) => (
@@ -65,25 +65,26 @@ const AssignedStudents = () => {
         {row.reviewStage || 'Review 1'}
       </Badge>
     )},
-    { header: 'Actions', render: (row) => (
-      <Button 
-        variant="outline" 
-        size="sm"
-        className="text-xs flex items-center"
-        onClick={() => {
-          const stage = row.reviewStage || 'Review 1';
-          const route = stage === 'Review 3' ? '/reviewer/review3' : stage === 'Review 2' ? '/reviewer/review2' : '/reviewer/review1';
-          navigate(`${route}?student=${row.uid}`);
-        }}
-      >
-        <PlayCircle className="w-3 h-3 mr-1" /> Evaluate
-      </Button>
-    )}
+    { header: 'Actions', render: (row) => {
+      const studentId = row.id || row.uid;
+      const stage = row.reviewStage || 'Review 1';
+      const route = stage === 'Review 3' ? '/reviewer/review3' : stage === 'Review 2' ? '/reviewer/review2' : '/reviewer/review1';
+      return (
+        <Button 
+          variant="outline" 
+          size="sm"
+          className="text-xs flex items-center"
+          onClick={() => navigate(`${route}?student=${studentId}`)}
+        >
+          <PlayCircle className="w-3 h-3 mr-1" /> Evaluate
+        </Button>
+      );
+    }}
   ];
 
   if (loading) {
     return (
-      <DashboardLayout navigationItems={reviewerNavigation} title="CapstoneFlow - Assigned Students">
+      <DashboardLayout navigationItems={reviewerNavigation} title="KL CSE Capstone Portal - Assigned Students">
         <div className="flex h-[calc(100vh-4rem)] items-center justify-center">
           <Loader2 className="h-8 w-8 animate-spin text-primary-600" />
         </div>
@@ -92,7 +93,7 @@ const AssignedStudents = () => {
   }
 
   return (
-    <DashboardLayout navigationItems={reviewerNavigation} title="CapstoneFlow - Assigned Students">
+    <DashboardLayout navigationItems={reviewerNavigation} title="KL CSE Capstone Portal - Assigned Students">
       <div className="max-w-7xl mx-auto space-y-6">
         
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">

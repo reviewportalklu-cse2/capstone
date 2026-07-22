@@ -74,7 +74,7 @@ const AdminDashboard = () => {
 
   if (loading) {
     return (
-      <DashboardLayout navigationItems={adminNavigation} title="CapstoneFlow Control Center">
+      <DashboardLayout navigationItems={adminNavigation} title="KL CSE Capstone Portal Control Center">
         <div className="flex h-[calc(100vh-4rem)] items-center justify-center">
           <Loader2 className="h-8 w-8 animate-spin text-primary-600" />
         </div>
@@ -83,7 +83,7 @@ const AdminDashboard = () => {
   }
 
   return (
-    <DashboardLayout navigationItems={adminNavigation} title="CapstoneFlow Control Center">
+    <DashboardLayout navigationItems={adminNavigation} title="KL CSE Capstone Portal Control Center">
       <div className="space-y-6 max-w-7xl mx-auto">
         
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">

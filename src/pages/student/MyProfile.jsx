@@ -87,7 +87,7 @@ const MyProfile = () => {
 
   if (loading) {
     return (
-      <DashboardLayout navigationItems={studentNavigation} title="CapstoneFlow - My Profile">
+      <DashboardLayout navigationItems={studentNavigation} title="KL CSE Capstone Portal - My Profile">
         <div className="flex h-[calc(100vh-4rem)] items-center justify-center">
           <Loader2 className="h-8 w-8 animate-spin text-primary-600" />
         </div>
@@ -96,7 +96,7 @@ const MyProfile = () => {
   }
 
   return (
-    <DashboardLayout navigationItems={studentNavigation} title="CapstoneFlow - My Profile">
+    <DashboardLayout navigationItems={studentNavigation} title="KL CSE Capstone Portal - My Profile">
       <div className="max-w-5xl mx-auto space-y-6">
         
         <div>

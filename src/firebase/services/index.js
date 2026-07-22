@@ -15,3 +15,4 @@ export { scheduleService } from './scheduleService';
 export { studentService } from './studentService';
 export { submissionService } from './submissionService';
 export { userService } from './userService';
+export { evaluationCenterService } from './evaluationCenterService';

@@ -206,7 +206,7 @@ const StudentManagement = () => {
   ];
 
   return (
-    <DashboardLayout navigationItems={adminNavigation} title="CapstoneFlow - Student Administration">
+    <DashboardLayout navigationItems={adminNavigation} title="KL CSE Capstone Portal - Student Administration">
       <div className="space-y-6">
         
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">

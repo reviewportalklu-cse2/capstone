@@ -90,7 +90,7 @@ const EnterMarks = () => {
 
   if (loading) {
     return (
-      <DashboardLayout navigationItems={facultyNavigation} title="CapstoneFlow - Enter Marks">
+      <DashboardLayout navigationItems={facultyNavigation} title="KL CSE Capstone Portal - Enter Marks">
         <div className="flex h-[calc(100vh-4rem)] items-center justify-center">
           <Loader2 className="h-8 w-8 animate-spin text-primary-600" />
         </div>
@@ -99,7 +99,7 @@ const EnterMarks = () => {
   }
 
   return (
-    <DashboardLayout navigationItems={facultyNavigation} title="CapstoneFlow - Enter Marks">
+    <DashboardLayout navigationItems={facultyNavigation} title="KL CSE Capstone Portal - Enter Marks">
       <div className="max-w-4xl mx-auto space-y-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Enter Marks</h1>

@@ -14,7 +14,7 @@ const EmptyState = ({
       <div className="mb-6 relative">
         {useLogo ? (
            <div className="bg-primary-50 rounded-full p-4 flex items-center justify-center border-4 border-white shadow-sm ring-1 ring-gray-100">
-             <img src="/logo.png" alt="CapstoneFlow" className="h-10 w-auto opacity-80 mix-blend-multiply" />
+             <img src="/logo.png" alt="KL CSE Capstone Portal" className="h-10 w-auto opacity-80 mix-blend-multiply" />
            </div>
         ) : (
           <div className="bg-gray-50 rounded-full p-5 shadow-sm border border-gray-100">

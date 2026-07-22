@@ -85,16 +85,15 @@ const FacultyDashboard = () => {
 
   if (error) {
     return (
-      <DashboardLayout navigationItems={facultyNavigation} title="CapstoneFlow - Evaluation Workspace">
-        <div className="flex h-screen items-center justify-center p-6">
-          <div className="text-center max-w-md">
-            <AlertCircle className="mx-auto h-12 w-12 text-red-500 mb-4" />
-            <h2 className="text-xl font-bold text-gray-900 mb-2">Error Loading Dashboard</h2>
-            <p className="text-gray-600 mb-6">{error}</p>
-            <Button onClick={() => window.location.reload()} variant="primary" className="focus:outline-none focus:ring-2 focus:ring-primary-500">
-              Retry
-            </Button>
+      <DashboardLayout navigationItems={facultyNavigation} title="KL CSE Capstone Portal - Evaluation Workspace">
+        <div className="p-6">
+          <div className="bg-red-50 text-red-600 p-4 rounded-lg flex items-center">
+            <AlertCircle className="w-5 h-5 mr-2" />
+            {error}
           </div>
+          <Button className="mt-4 focus:outline-none focus:ring-2 focus:ring-primary-500" onClick={() => { setError(null); setLoading(true); fetchDashboardData(currentUser.uid); }}>
+            Retry
+          </Button>
         </div>
       </DashboardLayout>
     );
@@ -102,7 +101,7 @@ const FacultyDashboard = () => {
 
   if (loading) {
     return (
-      <DashboardLayout navigationItems={facultyNavigation} title="CapstoneFlow - Evaluation Workspace">
+      <DashboardLayout navigationItems={facultyNavigation} title="KL CSE Capstone Portal - Evaluation Workspace">
         <div className="flex h-screen items-center justify-center">
           <Loader2 className="h-10 w-10 animate-spin text-primary-600" />
         </div>
@@ -141,7 +140,7 @@ const FacultyDashboard = () => {
   const pendingTasks = students.filter(s => s.status === 'Pending');
 
   return (
-    <DashboardLayout navigationItems={facultyNavigation} title="CapstoneFlow - Evaluation Workspace">
+    <DashboardLayout navigationItems={facultyNavigation} title="KL CSE Capstone Portal - Evaluation Workspace">
       <div className="space-y-8 max-w-7xl mx-auto pb-10 px-6 sm:px-8">
         
         {/* Header Section */}

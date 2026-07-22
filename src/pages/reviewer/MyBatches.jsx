@@ -53,7 +53,7 @@ const MyBatches = () => {
 
   if (loading) {
     return (
-      <DashboardLayout navigationItems={reviewerNavigation} title="CapstoneFlow - My Batches">
+      <DashboardLayout navigationItems={reviewerNavigation} title="KL CSE Capstone Portal - My Batches">
         <div className="flex h-[calc(100vh-4rem)] items-center justify-center">
           <Loader2 className="h-8 w-8 animate-spin text-primary-600" />
         </div>
@@ -76,7 +76,7 @@ const MyBatches = () => {
   ];
 
   return (
-    <DashboardLayout navigationItems={reviewerNavigation} title="CapstoneFlow - My Batches">
+    <DashboardLayout navigationItems={reviewerNavigation} title="KL CSE Capstone Portal - My Batches">
       <div className="max-w-5xl mx-auto space-y-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 tracking-tight flex items-center gap-2">

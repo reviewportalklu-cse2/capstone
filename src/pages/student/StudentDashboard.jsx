@@ -72,7 +72,7 @@ const StudentDashboard = () => {
 
   if (loading) {
     return (
-      <DashboardLayout navigationItems={studentNavigation} title="CapstoneFlow - Academic Progress">
+      <DashboardLayout navigationItems={studentNavigation} title="KL CSE Capstone Portal - Academic Progress">
         <div className="flex h-[calc(100vh-4rem)] items-center justify-center">
           <Loader2 className="h-8 w-8 animate-spin text-primary-600" />
         </div>
@@ -82,7 +82,7 @@ const StudentDashboard = () => {
 
   if (error) {
     return (
-      <DashboardLayout navigationItems={studentNavigation} title="CapstoneFlow - Academic Progress">
+      <DashboardLayout navigationItems={studentNavigation} title="KL CSE Capstone Portal - Academic Progress">
         <div className="flex h-64 flex-col items-center justify-center text-center space-y-4">
           <AlertTriangle className="h-10 w-10 text-red-500" />
           <p className="text-red-600 font-medium">{error}</p>
@@ -102,7 +102,7 @@ const StudentDashboard = () => {
   ];
 
   return (
-    <DashboardLayout navigationItems={studentNavigation} title="CapstoneFlow - Academic Progress">
+    <DashboardLayout navigationItems={studentNavigation} title="KL CSE Capstone Portal - Academic Progress">
       <div className="space-y-6 max-w-7xl mx-auto">
         
         {/* Workspace Header */}

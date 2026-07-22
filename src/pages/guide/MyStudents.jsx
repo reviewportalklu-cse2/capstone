@@ -65,23 +65,34 @@ const MyStudents = () => {
         {row.status || 'Unknown'}
       </Badge>
     )},
-    { header: 'Actions', render: (row) => (
-      <div className="flex gap-2">
-        <Button 
-          variant="outline" 
-          size="sm"
-          className="text-xs"
-          onClick={() => navigate(`/guide/remarks?student=${row.uid}`)}
-        >
-          <MessageSquare className="w-3 h-3 mr-1" /> Add Remark
-        </Button>
-      </div>
-    )}
+    { header: 'Actions', render: (row) => {
+      const studentId = row.id || row.uid;
+      return (
+        <div className="flex gap-2">
+          <Button 
+            variant="outline" 
+            size="sm"
+            className="text-xs"
+            onClick={() => navigate(`/guide/marks?student=${studentId}`)}
+          >
+            <GraduationCap className="w-3 h-3 mr-1" /> Enter Marks
+          </Button>
+          <Button 
+            variant="outline" 
+            size="sm"
+            className="text-xs"
+            onClick={() => navigate(`/guide/remarks?student=${studentId}`)}
+          >
+            <MessageSquare className="w-3 h-3 mr-1" /> Add Remark
+          </Button>
+        </div>
+      );
+    }}
   ];
 
   if (loading) {
     return (
-      <DashboardLayout navigationItems={guideNavigation} title="CapstoneFlow - My Students">
+      <DashboardLayout navigationItems={guideNavigation} title="KL CSE Capstone Portal - My Students">
         <div className="flex h-[calc(100vh-4rem)] items-center justify-center">
           <Loader2 className="h-8 w-8 animate-spin text-primary-600" />
         </div>
@@ -90,7 +101,7 @@ const MyStudents = () => {
   }
 
   return (
-    <DashboardLayout navigationItems={guideNavigation} title="CapstoneFlow - My Students">
+    <DashboardLayout navigationItems={guideNavigation} title="KL CSE Capstone Portal - My Students">
       <div className="max-w-7xl mx-auto space-y-6">
         
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">

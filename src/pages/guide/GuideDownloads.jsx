@@ -15,7 +15,7 @@ const GuideDownloads = () => {
   ];
 
   return (
-    <DashboardLayout navigationItems={guideNavigation} title="CapstoneFlow - Downloads">
+    <DashboardLayout navigationItems={guideNavigation} title="KL CSE Capstone Portal - Downloads">
       <div className="max-w-5xl mx-auto space-y-6">
         
         <div>

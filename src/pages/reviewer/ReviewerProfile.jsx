@@ -82,7 +82,7 @@ const ReviewerProfile = () => {
 
   if (loading) {
     return (
-      <DashboardLayout navigationItems={reviewerNavigation} title="CapstoneFlow - Profile">
+      <DashboardLayout navigationItems={reviewerNavigation} title="KL CSE Capstone Portal - Profile">
         <div className="flex h-[calc(100vh-4rem)] items-center justify-center">
           <Loader2 className="h-8 w-8 animate-spin text-primary-600" />
         </div>
@@ -91,7 +91,7 @@ const ReviewerProfile = () => {
   }
 
   return (
-    <DashboardLayout navigationItems={reviewerNavigation} title="CapstoneFlow - Profile">
+    <DashboardLayout navigationItems={reviewerNavigation} title="KL CSE Capstone Portal - Profile">
       <div className="max-w-4xl mx-auto space-y-6">
         
         <div>

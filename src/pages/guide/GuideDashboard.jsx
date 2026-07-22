@@ -73,7 +73,7 @@ const GuideDashboard = () => {
 
   if (loading) {
     return (
-      <DashboardLayout navigationItems={guideNavigation} title="CapstoneFlow - Mentoring Workspace">
+      <DashboardLayout navigationItems={guideNavigation} title="KL CSE Capstone Portal - Mentoring Workspace">
         <div className="flex h-[calc(100vh-4rem)] items-center justify-center">
           <Loader2 className="h-8 w-8 animate-spin text-primary-600" />
         </div>
@@ -83,7 +83,7 @@ const GuideDashboard = () => {
 
   if (error) {
     return (
-      <DashboardLayout navigationItems={guideNavigation} title="CapstoneFlow - Mentoring Workspace">
+      <DashboardLayout navigationItems={guideNavigation} title="KL CSE Capstone Portal - Mentoring Workspace">
         <div className="flex h-[calc(100vh-4rem)] items-center justify-center p-6">
           <EmptyState 
             icon={AlertCircle}
@@ -121,7 +121,7 @@ const GuideDashboard = () => {
   ];
 
   return (
-    <DashboardLayout navigationItems={guideNavigation} title="CapstoneFlow - Mentoring Workspace">
+    <DashboardLayout navigationItems={guideNavigation} title="KL CSE Capstone Portal - Mentoring Workspace">
       <div className="max-w-7xl mx-auto space-y-6">
         
         {/* Header Section */}
