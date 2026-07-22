@@ -1,0 +1,17 @@
+export { adminService } from './adminService';
+export { auditService } from './auditService';
+export { authService } from './authService';
+export { facultyService } from './facultyService';
+export { guideService } from './guideService';
+export { marksService } from './marksService';
+export { notificationService } from './notificationService';
+export { projectService } from './projectService';
+export { remarkService } from './remarkService';
+export { reportService } from './reportService';
+export { reviewerService } from './reviewerService';
+export { reviewService } from './reviewService';
+export { roomService } from './roomService';
+export { scheduleService } from './scheduleService';
+export { studentService } from './studentService';
+export { submissionService } from './submissionService';
+export { userService } from './userService';
