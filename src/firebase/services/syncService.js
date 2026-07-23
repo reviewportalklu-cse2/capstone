@@ -37,6 +37,9 @@ export const syncService = {
    * @param {Array} assignments Array of row objects from Assignments.xlsx
    */
   syncAssignments: async (assignments) => {
+    console.log(`[SYNC ENGINE] 1. Assignments upload started. Parse complete.`);
+    console.log(`[SYNC ENGINE] 2. Total assignment rows parsed: ${assignments.length}`);
+
     // 1. Fetch all existing entities to cross-reference
     const allStudents = await FirestoreService.getAll('students');
     const allGuides = await FirestoreService.getAll('guides');
@@ -44,39 +47,59 @@ export const syncService = {
     const allReviewers = await FirestoreService.getAll('reviewers');
     const allTeams = await FirestoreService.getAll('teams');
 
+    const getField = (obj, keys) => {
+      for (const key of keys) {
+        if (obj[key] !== undefined && obj[key] !== null) return String(obj[key]).trim();
+      }
+      return '';
+    };
+
     // Maps for fast lookup
-    const studentMap = new Map(allStudents.map(s => [String(s.rollNumber || s.employeeId || '').toLowerCase(), s]));
-    const guideMap = new Map(allGuides.map(g => [String(g.employeeId || g.email || '').toLowerCase(), g]));
-    const facultyMap = new Map(allFaculty.map(f => [String(f.employeeId || f.email || '').toLowerCase(), f]));
-    const reviewerMap = new Map(allReviewers.map(r => [String(r.employeeId || r.email || '').toLowerCase(), r]));
+    const studentMap = new Map(allStudents.map(s => [getField(s, ['rollNumber', 'Roll Number', 'employeeId', 'Employee ID', 'Email', 'email']).toLowerCase(), s]));
+    const guideMap = new Map(allGuides.map(g => [getField(g, ['employeeId', 'Employee ID', 'email', 'Email']).toLowerCase(), g]));
+    const facultyMap = new Map(allFaculty.map(f => [getField(f, ['employeeId', 'Employee ID', 'email', 'Email']).toLowerCase(), f]));
+    const reviewerMap = new Map(allReviewers.map(r => [getField(r, ['employeeId', 'Employee ID', 'email', 'Email']).toLowerCase(), r]));
 
     let teamsCreated = 0;
     let studentsAssigned = 0;
     const teamMap = new Map(allTeams.map(t => [t.teamId, t])); // teamId -> team object
 
-    for (const row of assignments) {
+    for (let i = 0; i < assignments.length; i++) {
+      const row = assignments[i];
       try {
+        console.log(`\n--- Processing Row ${i + 1} ---`);
         // Extract fields matching the Excel headers
-        const rollNumber = String(row['Roll Number'] || row.rollNumber || '').toLowerCase();
-        const teamId = String(row['Team ID'] || row.teamId || '');
-        const guideId = String(row['Guide Employee ID'] || row['Guide Email'] || row.guideEmail || '').toLowerCase();
-        const facultyId = String(row['Faculty Employee ID'] || row['Faculty Email'] || row.facultyEmail || '').toLowerCase();
-        const reviewerId = String(row['Reviewer Employee ID'] || row['Reviewer Email'] || row.reviewerEmail || '').toLowerCase();
-        const facultyPanel = row['Faculty Panel'] || row.facultyPanel || '';
-        const reviewSchedule = row['Review Schedule'] || row.reviewSchedule || '';
-        const room = row['Room'] || row.room || '';
-        const academicYear = row['Academic Year'] || row.academicYear || '2026-27';
-        const batch = row['Batch'] || row.batch || '2022-26';
-        const section = row['Section'] || row.section || 'A';
+        const rollNumber = getField(row, ['Roll Number', 'rollNumber']).toLowerCase();
+        const teamId = getField(row, ['Team ID', 'teamId']);
+        const guideId = getField(row, ['Guide Employee ID', 'Guide Email', 'guideEmail', 'guideId']).toLowerCase();
+        const facultyId = getField(row, ['Faculty Employee ID', 'Faculty Email', 'facultyEmail', 'facultyId']).toLowerCase();
+        const reviewerId = getField(row, ['Reviewer Employee ID', 'Reviewer Email', 'reviewerEmail', 'reviewerId']).toLowerCase();
+        const facultyPanel = getField(row, ['Faculty Panel', 'facultyPanel']);
+        const reviewSchedule = getField(row, ['Review Schedule', 'reviewSchedule']);
+        const room = getField(row, ['Room', 'room']);
+        const academicYear = getField(row, ['Academic Year', 'academicYear']) || '2026-27';
+        const batch = getField(row, ['Batch', 'batch']) || '2022-26';
+        const section = getField(row, ['Section', 'section']) || 'A';
 
-        if (!rollNumber || !teamId) continue;
+        if (!rollNumber || !teamId) {
+          console.warn(`[SYNC ENGINE] Row ${i + 1}: Missing Roll Number or Team ID. Skipping.`);
+          continue;
+        }
 
         const student = studentMap.get(rollNumber);
         const guide = guideMap.get(guideId);
         const faculty = facultyMap.get(facultyId);
         const reviewer = reviewerMap.get(reviewerId);
 
-        if (!student) continue;
+        console.log(`[SYNC ENGINE] 3. Student lookup for ${rollNumber}: ${student ? 'Found' : 'Not Found'}`);
+        console.log(`[SYNC ENGINE] 4. Guide lookup for ${guideId}: ${guide ? 'Found' : 'Not Found'}`);
+        console.log(`[SYNC ENGINE] 5. Faculty lookup for ${facultyId}: ${faculty ? 'Found' : 'Not Found'}`);
+        console.log(`[SYNC ENGINE] 6. Reviewer lookup for ${reviewerId}: ${reviewer ? 'Found' : 'Not Found'}`);
+
+        if (!student) {
+          console.warn(`[SYNC ENGINE] Row ${i + 1}: Cannot map student ${rollNumber}. Skipping.`);
+          continue;
+        }
 
         // 5. Create Team if it does not exist
         let currentTeam = teamMap.get(teamId);
@@ -100,6 +123,7 @@ export const syncService = {
           };
           const newTeamId = await FirestoreService.create('teams', currentTeam);
           currentTeam.id = newTeamId;
+          console.log(`[SYNC ENGINE] 7. Team created: ${teamId} (Doc ID: ${newTeamId})`);
           
           // Also create an associated project record for the team
           const newProjectId = await FirestoreService.create('projects', {
@@ -113,12 +137,16 @@ export const syncService = {
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString()
           });
+          console.log(`[SYNC ENGINE] 8. Project created: PRJ-${teamId} (Doc ID: ${newProjectId})`);
 
           currentTeam.projectId = newProjectId;
           await FirestoreService.update('teams', newTeamId, { projectId: newProjectId });
 
           teamMap.set(teamId, currentTeam);
           teamsCreated++;
+        } else {
+          console.log(`[SYNC ENGINE] 7. Team found: ${teamId}`);
+          console.log(`[SYNC ENGINE] 8. Project found: ${currentTeam.projectId || 'None'}`);
         }
 
         // Add student to team members if not already there
@@ -139,6 +167,7 @@ export const syncService = {
           room,
           status: 'Active'
         });
+        console.log(`[SYNC ENGINE] 9. Student updated: ${student.id}`);
         studentsAssigned++;
 
         // Update relationships for Guide, Faculty, Reviewer
@@ -160,6 +189,9 @@ export const syncService = {
             projectIds: guide.projectIds,
             studentCount: guide.studentCount
           });
+          console.log(`[SYNC ENGINE] 10. Guide updated: ${guide.id}`);
+        } else {
+          console.log(`[SYNC ENGINE] 10. Guide update skipped (none matched).`);
         }
 
         if (faculty) {
@@ -173,6 +205,9 @@ export const syncService = {
             projectIds: faculty.projectIds,
             studentCount: faculty.studentCount
           });
+          console.log(`[SYNC ENGINE] 11. Faculty updated: ${faculty.id}`);
+        } else {
+          console.log(`[SYNC ENGINE] 11. Faculty update skipped (none matched).`);
         }
 
         if (reviewer) {
@@ -186,12 +221,19 @@ export const syncService = {
             projectIds: reviewer.projectIds,
             studentCount: reviewer.studentCount
           });
+          console.log(`[SYNC ENGINE] 12. Reviewer updated: ${reviewer.id}`);
+        } else {
+          console.log(`[SYNC ENGINE] 12. Reviewer update skipped (none matched).`);
         }
+        
+        console.log(`[SYNC ENGINE] 13. Sequential writes for Row ${i + 1} completed successfully.`);
+
       } catch (err) {
-        console.error(`Failed to process row for Roll Number: ${row['Roll Number'] || row.rollNumber}:`, err);
+        console.error(`[SYNC ENGINE] ERROR on row ${i + 1}: ${err.message}`, err);
       }
     }
-
+    
+    console.log(`[SYNC ENGINE] 14. Synchronization completed.`);
     return { teamsCreated, studentsAssigned };
   }
 };
