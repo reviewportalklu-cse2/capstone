@@ -22,7 +22,8 @@ const AdminDashboard = () => {
     guides: 0,
     reviewers: 0,
     faculty: 0,
-    reviews: 0
+    reviews: 0,
+    teams: 0
   });
   const [recentReviews, setRecentReviews] = useState([]);
 
@@ -34,7 +35,7 @@ const AdminDashboard = () => {
     let loadedCount = 0;
     const checkLoaded = () => {
       loadedCount++;
-      if (loadedCount >= 6) setLoading(false);
+      if (loadedCount >= 7) setLoading(false);
     };
 
     unsubs.push(FirestoreService.subscribeAll('students', (data) => {
@@ -59,6 +60,11 @@ const AdminDashboard = () => {
     
     unsubs.push(FirestoreService.subscribeAll('classroomFaculty', (data) => {
       setStats(prev => ({...prev, faculty: data.length}));
+      checkLoaded();
+    }, () => checkLoaded()));
+
+    unsubs.push(FirestoreService.subscribeAll('teams', (data) => {
+      setStats(prev => ({...prev, teams: data.length}));
       checkLoaded();
     }, () => checkLoaded()));
     
@@ -98,11 +104,13 @@ const AdminDashboard = () => {
     <DashboardLayout navigationItems={adminNavigation} title="KL CSE Capstone Portal Control Center">
       <div className="space-y-6 max-w-7xl mx-auto">
         
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           <StatCard title="Total Students" value={stats.students} icon={Users} colorClass="text-blue-600" bgClass="bg-blue-100" />
-          <StatCard title="Active Projects" value={stats.projects} icon={Book} colorClass="text-indigo-600" bgClass="bg-indigo-100" />
-          <StatCard title="Assigned Guides" value={stats.guides} icon={UserCheck} colorClass="text-emerald-600" bgClass="bg-emerald-100" />
-          <StatCard title="Panel Reviewers" value={stats.reviewers} icon={UserCog} colorClass="text-orange-600" bgClass="bg-orange-100" />
+          <StatCard title="Total Guides" value={stats.guides} icon={UserCheck} colorClass="text-emerald-600" bgClass="bg-emerald-100" />
+          <StatCard title="Total Faculty" value={stats.faculty} icon={GraduationCap} colorClass="text-purple-600" bgClass="bg-purple-100" />
+          <StatCard title="Total Reviewers" value={stats.reviewers} icon={UserCog} colorClass="text-orange-600" bgClass="bg-orange-100" />
+          <StatCard title="Total Teams" value={stats.teams} icon={Users} colorClass="text-teal-600" bgClass="bg-teal-100" />
+          <StatCard title="Total Projects" value={stats.projects} icon={Book} colorClass="text-indigo-600" bgClass="bg-indigo-100" />
         </div>
 
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
