@@ -4,19 +4,22 @@ import { useAdminNavigation } from '@/hooks/useAdminNavigation';
 import Card from '@/components/common/Card';
 import Table from '@/components/common/Table';
 import Button from '@/components/common/Button';
-import { Upload as UploadIcon, FileSpreadsheet, Loader2, CheckCircle, AlertTriangle, Trash2 } from 'lucide-react';
+import Badge from '@/components/common/Badge';
+import { Upload as UploadIcon, FileSpreadsheet, Loader2, CheckCircle, AlertTriangle, Trash2, Info } from 'lucide-react';
 import * as XLSX from 'xlsx';
-import { studentService, guideService, reviewerService, facultyService, auditService, syncService } from '@/firebase/services';
+import { auditService, syncService } from '@/firebase/services';
+import { FirestoreService } from '@/firebase/services/firestore';
 import { useAuth } from '@/contexts/AuthContext';
 
 const CsvSync = () => {
   const navigationItems = useAdminNavigation();
-
   const { currentUser } = useAuth();
+  
   const [file, setFile] = useState(null);
-  const [uploadType, setUploadType] = useState('student');
+  const [uploadType, setUploadType] = useState('master');
   const [previewData, setPreviewData] = useState(null);
   const [processing, setProcessing] = useState(false);
+  const [processingState, setProcessingState] = useState('');
   const [syncStatus, setSyncStatus] = useState(null);
   const [errorMsg, setErrorMsg] = useState(null);
   const [purgeStatus, setPurgeStatus] = useState('');
@@ -25,11 +28,30 @@ const CsvSync = () => {
     const uploadedFile = e.target.files[0];
     if (uploadedFile) {
       setFile(uploadedFile);
-      parseFile(uploadedFile);
+      parseFile(uploadedFile, uploadType);
     }
   };
 
-  const parseFile = (file) => {
+  const getField = (obj, keys) => {
+    for (const key of keys) {
+      if (obj[key] !== undefined && obj[key] !== null) return String(obj[key]).trim();
+    }
+    return '';
+  };
+
+  const matchSheetName = (sheetName, targetType) => {
+    const normalized = sheetName.toLowerCase().replace(/[^a-z0-9]/g, '');
+    switch (targetType) {
+      case 'student': return normalized.includes('student');
+      case 'guide': return normalized.includes('guide');
+      case 'faculty': return normalized.includes('faculty');
+      case 'reviewer': return normalized.includes('reviewer');
+      case 'assignments': return normalized.includes('assignment');
+      default: return false;
+    }
+  };
+
+  const parseFile = (file, type) => {
     setProcessing(true);
     setErrorMsg(null);
     const reader = new FileReader();
@@ -37,19 +59,46 @@ const CsvSync = () => {
       try {
         const data = e.target.result;
         const workbook = XLSX.read(data, { type: 'binary' });
-        const sheetName = workbook.SheetNames[0];
-        const sheet = workbook.Sheets[sheetName];
-        const json = XLSX.utils.sheet_to_json(sheet);
         
-        setPreviewData({
-          records: json,
-          summary: {
-            total: json.length,
-            added: json.length,
-            updated: 0,
-            removed: 0
-          }
-        });
+        if (type === 'master') {
+          const extracted = { student: [], guide: [], faculty: [], reviewer: [], assignments: [] };
+          let totalRows = 0;
+          let sheetsFound = 0;
+
+          workbook.SheetNames.forEach(sheetName => {
+            const sheet = workbook.Sheets[sheetName];
+            const json = XLSX.utils.sheet_to_json(sheet);
+            
+            if (matchSheetName(sheetName, 'student')) { extracted.student = json; totalRows += json.length; sheetsFound++; }
+            else if (matchSheetName(sheetName, 'guide')) { extracted.guide = json; totalRows += json.length; sheetsFound++; }
+            else if (matchSheetName(sheetName, 'faculty')) { extracted.faculty = json; totalRows += json.length; sheetsFound++; }
+            else if (matchSheetName(sheetName, 'reviewer')) { extracted.reviewer = json; totalRows += json.length; sheetsFound++; }
+            else if (matchSheetName(sheetName, 'assignments')) { extracted.assignments = json; totalRows += json.length; sheetsFound++; }
+          });
+
+          setPreviewData({
+            isMaster: true,
+            sheets: extracted,
+            summary: {
+              sheetsFound,
+              total: totalRows
+            }
+          });
+        } else {
+          // Single sheet fallback mode
+          const sheetName = workbook.SheetNames[0];
+          const sheet = workbook.Sheets[sheetName];
+          const json = XLSX.utils.sheet_to_json(sheet);
+          
+          setPreviewData({
+            isMaster: false,
+            records: json,
+            summary: {
+              total: json.length,
+              added: json.length,
+            }
+          });
+        }
         setProcessing(false);
       } catch (err) {
         console.error("Error parsing file", err);
@@ -63,53 +112,109 @@ const CsvSync = () => {
   const handleSync = async () => {
     setProcessing(true);
     setErrorMsg(null);
+    setSyncStatus(null);
+    const now = new Date().toISOString();
+    const importId = `IMPORT-${Date.now()}`;
+    
+    let totalWrites = 0;
+    let syncResultText = "";
+
     try {
-      const records = previewData.records;
-      const now = new Date().toISOString();
-      
-      if (uploadType === 'assignments') {
-        const result = await syncService.syncAssignments(records);
-        await auditService.log(
-          currentUser.uid, 
-          'BULK_SYNC_ASSIGNMENTS', 
-          'BulkUpload', 
-          null, 
-          { count: records.length, teamsCreated: result.teamsCreated, studentsAssigned: result.studentsAssigned }
-        );
-        setSyncStatus(`Success! Created ${result.teamsCreated} Teams and assigned ${result.studentsAssigned} Students.`);
-      } else {
-        let service;
-        if (uploadType === 'student') service = studentService;
-        else if (uploadType === 'guide') service = guideService;
-        else if (uploadType === 'reviewer') service = reviewerService;
-        else if (uploadType === 'faculty') service = facultyService;
-        
-        // Batch processing sequentially
-        for (const record of records) {
-          await service.create({
-            ...record,
-            createdAt: now,
-            status: 'Active'
-          });
+      if (previewData.isMaster) {
+        setProcessingState('Initializing Master Import...');
+        const { student, guide, faculty, reviewer, assignments } = previewData.sheets;
+
+        // 1. Students
+        if (student.length > 0) {
+          setProcessingState(`Importing ${student.length} Students...`);
+          for (const row of student) {
+            const id = getField(row, ['Roll Number', 'rollNumber']).toLowerCase() || `STD-${Date.now()}-${Math.random()}`;
+            await FirestoreService.set('students', id, { ...row, createdAt: now, status: 'Active' });
+            totalWrites++;
+          }
         }
 
-        await auditService.log(
-          currentUser.uid, 
-          `BULK_IMPORT_${uploadType.toUpperCase()}`, 
-          'BulkUpload', 
-          null, 
-          { count: records.length, type: uploadType }
-        );
-        setSyncStatus(`success`);
+        // 2. Guides
+        if (guide.length > 0) {
+          setProcessingState(`Importing ${guide.length} Guides...`);
+          for (const row of guide) {
+            const id = getField(row, ['Employee ID', 'employeeId', 'Email', 'email']).toLowerCase() || `GUI-${Date.now()}-${Math.random()}`;
+            await FirestoreService.set('guides', id, { ...row, createdAt: now, status: 'Active' });
+            totalWrites++;
+          }
+        }
+
+        // 3. Faculty
+        if (faculty.length > 0) {
+          setProcessingState(`Importing ${faculty.length} Faculty...`);
+          for (const row of faculty) {
+            const id = getField(row, ['Employee ID', 'employeeId', 'Email', 'email']).toLowerCase() || `FAC-${Date.now()}-${Math.random()}`;
+            await FirestoreService.set('classroomFaculty', id, { ...row, createdAt: now, status: 'Active' });
+            totalWrites++;
+          }
+        }
+
+        // 4. Reviewers
+        if (reviewer.length > 0) {
+          setProcessingState(`Importing ${reviewer.length} Reviewers...`);
+          for (const row of reviewer) {
+            const id = getField(row, ['Employee ID', 'employeeId', 'Email', 'email']).toLowerCase() || `REV-${Date.now()}-${Math.random()}`;
+            await FirestoreService.set('reviewers', id, { ...row, createdAt: now, status: 'Active' });
+            totalWrites++;
+          }
+        }
+
+        // 5. Assignments (Executes the engine)
+        if (assignments.length > 0) {
+          setProcessingState(`Running Assignment Engine on ${assignments.length} mappings...`);
+          const result = await syncService.syncAssignments(assignments);
+          syncResultText = `Master Import Complete! Created ${result.teamsCreated} Teams and mapped ${result.studentsAssigned} Students.`;
+          totalWrites += (result.teamsCreated * 2) + result.studentsAssigned;
+        } else {
+          syncResultText = `Master Import Complete! Updated ${totalWrites} base entity records.`;
+        }
+
+        await auditService.log(currentUser.uid, 'MASTER_WORKBOOK_IMPORT', 'BulkUpload', importId, { 
+          totalWrites, 
+          sheetsProcessed: previewData.summary.sheetsFound 
+        });
+
+      } else {
+        // Fallback Single Mode
+        setProcessingState(`Importing ${previewData.summary.total} records...`);
+        const records = previewData.records;
+        
+        if (uploadType === 'assignments') {
+          const result = await syncService.syncAssignments(records);
+          syncResultText = `Success! Created ${result.teamsCreated} Teams and assigned ${result.studentsAssigned} Students.`;
+        } else {
+          let colName = '';
+          if (uploadType === 'student') colName = 'students';
+          else if (uploadType === 'guide') colName = 'guides';
+          else if (uploadType === 'reviewer') colName = 'reviewers';
+          else if (uploadType === 'faculty') colName = 'classroomFaculty';
+          
+          for (const row of records) {
+            let id = getField(row, ['Roll Number', 'rollNumber', 'Employee ID', 'employeeId', 'Email', 'email']).toLowerCase();
+            if (!id) id = `REC-${Date.now()}-${Math.random()}`;
+            await FirestoreService.set(colName, id, { ...row, createdAt: now, status: 'Active' });
+            totalWrites++;
+          }
+          syncResultText = `Success! Processed ${records.length} ${uploadType} records.`;
+        }
+        
+        await auditService.log(currentUser.uid, `SINGLE_IMPORT_${uploadType.toUpperCase()}`, 'BulkUpload', importId, { count: records.length });
       }
 
+      setSyncStatus(syncResultText);
       setPreviewData(null);
       setFile(null);
     } catch (err) {
       console.error("Error syncing data:", err);
-      setErrorMsg("Failed to synchronize data with the database.");
+      setErrorMsg("Critical Failure: " + err.message + ". The synchronization process was aborted safely.");
     } finally {
       setProcessing(false);
+      setProcessingState('');
     }
   };
 
@@ -129,23 +234,50 @@ const CsvSync = () => {
     }
   };
 
-  const renderPreviewTable = () => {
-    if (!previewData || !previewData.records.length) return null;
+  const renderPreviewStats = () => {
+    if (!previewData) return null;
     
-    const records = previewData.records.slice(0, 10);
-    const columns = Object.keys(records[0]).map(key => ({
-      header: key,
-      accessor: key
-    }));
-
-    return (
-      <div className="mt-6">
-        <h4 className="text-lg font-medium text-gray-900 mb-4 flex justify-between items-center">
-          <span>Data Preview <span className="text-sm font-normal text-gray-500">(Showing first 10 records)</span></span>
-        </h4>
-        <Table columns={columns} data={records} />
-      </div>
-    );
+    if (previewData.isMaster) {
+      const { student, guide, faculty, reviewer, assignments } = previewData.sheets;
+      return (
+        <div className="mt-6 space-y-4">
+          <h4 className="text-lg font-medium text-gray-900 mb-2">Master Workbook Detected Sheets</h4>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+            <div className="bg-white border p-4 rounded-lg shadow-sm text-center">
+              <div className="text-2xl font-bold text-blue-600">{student.length}</div>
+              <div className="text-xs text-gray-500 uppercase tracking-wide font-medium mt-1">Students</div>
+            </div>
+            <div className="bg-white border p-4 rounded-lg shadow-sm text-center">
+              <div className="text-2xl font-bold text-emerald-600">{guide.length}</div>
+              <div className="text-xs text-gray-500 uppercase tracking-wide font-medium mt-1">Guides</div>
+            </div>
+            <div className="bg-white border p-4 rounded-lg shadow-sm text-center">
+              <div className="text-2xl font-bold text-purple-600">{faculty.length}</div>
+              <div className="text-xs text-gray-500 uppercase tracking-wide font-medium mt-1">Faculty</div>
+            </div>
+            <div className="bg-white border p-4 rounded-lg shadow-sm text-center">
+              <div className="text-2xl font-bold text-orange-600">{reviewer.length}</div>
+              <div className="text-xs text-gray-500 uppercase tracking-wide font-medium mt-1">Reviewers</div>
+            </div>
+            <div className="bg-white border p-4 rounded-lg shadow-sm text-center">
+              <div className="text-2xl font-bold text-teal-600">{assignments.length}</div>
+              <div className="text-xs text-gray-500 uppercase tracking-wide font-medium mt-1">Assignments</div>
+            </div>
+          </div>
+        </div>
+      );
+    } else {
+      const records = previewData.records.slice(0, 5);
+      const columns = Object.keys(records[0] || {}).map(key => ({ header: key, accessor: key }));
+      return (
+        <div className="mt-6">
+          <h4 className="text-lg font-medium text-gray-900 mb-4 flex justify-between items-center">
+            <span>Data Preview <span className="text-sm font-normal text-gray-500">(First 5 records)</span></span>
+          </h4>
+          <Table columns={columns} data={records} />
+        </div>
+      );
+    }
   };
 
   return (
@@ -168,12 +300,12 @@ const CsvSync = () => {
             {purgeStatus && <div className="mt-2 text-sm font-bold text-red-800">{purgeStatus}</div>}
           </Card>
 
-          <Card title="Bulk Upload & Synchronization">
+          <Card title="Enterprise Bulk Upload">
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Entity Type</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Upload Mode</label>
                 <div className="flex flex-wrap gap-2">
-                  {['student', 'guide', 'reviewer', 'faculty', 'assignments'].map(type => (
+                  {['master', 'student', 'guide', 'reviewer', 'faculty', 'assignments'].map(type => (
                     <button
                       key={type}
                       onClick={() => {
@@ -185,11 +317,11 @@ const CsvSync = () => {
                       }}
                       className={`px-4 py-2 rounded-full text-sm font-medium border transition-colors ${
                         uploadType === type 
-                          ? 'bg-primary-50 text-primary-700 border-primary-200' 
+                          ? type === 'master' ? 'bg-primary-600 text-white border-primary-600 shadow-md' : 'bg-primary-50 text-primary-700 border-primary-200' 
                           : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'
                       }`}
                     >
-                      {type === 'assignments' ? 'Assignments ⭐' : type.charAt(0).toUpperCase() + type.slice(1) + ' Data'}
+                      {type === 'master' ? 'Master Workbook ⭐' : type === 'assignments' ? 'Assignments (Legacy)' : type.charAt(0).toUpperCase() + type.slice(1) + ' (Legacy)'}
                     </button>
                   ))}
                 </div>
@@ -198,7 +330,7 @@ const CsvSync = () => {
               <div className="mt-4">
                 <div className="flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-lg hover:border-primary-400 transition-colors bg-gray-50">
                   <div className="space-y-1 text-center">
-                    <FileSpreadsheet className="mx-auto h-12 w-12 text-gray-400" />
+                    <FileSpreadsheet className={`mx-auto h-12 w-12 ${uploadType === 'master' ? 'text-primary-500' : 'text-gray-400'}`} />
                     <div className="flex text-sm text-gray-600 justify-center">
                       <label htmlFor="file-upload" className="relative cursor-pointer rounded-md bg-transparent font-medium text-primary-600 focus-within:outline-none focus-within:ring-2 focus-within:ring-primary-500 focus-within:ring-offset-2 hover:text-primary-500">
                         <span>Browse file</span>
@@ -223,27 +355,31 @@ const CsvSync = () => {
 
           {processing && !syncStatus && (
             <div className="flex justify-center p-8 bg-white rounded-lg border border-gray-100 shadow-sm">
-              <div className="flex items-center space-x-3 text-primary-600">
-                <Loader2 className="animate-spin h-6 w-6" />
-                <span className="font-medium">Processing Data...</span>
+              <div className="flex flex-col items-center space-y-3 text-primary-600">
+                <Loader2 className="animate-spin h-8 w-8" />
+                <span className="font-bold text-lg">Processing Synchronization</span>
+                {processingState && <span className="text-sm text-gray-500 animate-pulse">{processingState}</span>}
               </div>
             </div>
           )}
 
-          {previewData && !processing && renderPreviewTable()}
+          {previewData && !processing && renderPreviewStats()}
         </div>
 
         {/* Sync Summary Section */}
         <div className="lg:col-span-1">
-          <Card title="Sync Summary" className="sticky top-6">
+          <Card title="Sync Status" className="sticky top-6">
             {syncStatus ? (
               <div className="text-center py-6">
                 <CheckCircle className="mx-auto h-12 w-12 text-green-500 mb-3" />
-                <h4 className="text-lg font-medium text-gray-900">Import Complete!</h4>
-                <p className="text-sm text-gray-500 mt-1">{syncStatus === 'success' ? `Firestore has been updated successfully with ${uploadType} data.` : syncStatus}</p>
+                <h4 className="text-lg font-bold text-gray-900">Synchronization Completed Successfully</h4>
+                <p className="text-sm text-gray-500 mt-2 bg-green-50 p-3 rounded-md text-green-800">{syncStatus}</p>
                 <button 
-                  onClick={() => setSyncStatus(null)}
-                  className="mt-4 w-full inline-flex justify-center items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700"
+                  onClick={() => {
+                    setSyncStatus(null);
+                    setUploadType('master');
+                  }}
+                  className="mt-6 w-full inline-flex justify-center items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700"
                 >
                   Upload Another File
                 </button>
@@ -251,10 +387,6 @@ const CsvSync = () => {
             ) : previewData ? (
               <div className="space-y-6">
                 <div className="space-y-4">
-                  <div className="flex justify-between items-center py-2 border-b border-gray-100">
-                    <span className="text-sm text-gray-500 flex items-center"><span className="w-2 h-2 bg-green-500 rounded-full mr-2"></span>Records to Add</span>
-                    <span className="font-semibold text-gray-900">{previewData.summary.added}</span>
-                  </div>
                   <div className="flex justify-between items-center py-2 bg-gray-50 px-3 rounded-md">
                     <span className="text-sm font-medium text-gray-900">Total Valid Rows</span>
                     <span className="font-bold text-primary-600">{previewData.summary.total}</span>
@@ -266,16 +398,17 @@ const CsvSync = () => {
                   className="w-full flex justify-center items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
                 >
                   <UploadIcon className="h-4 w-4 mr-2" />
-                  Start {uploadType === 'assignments' ? 'Synchronization' : 'Import'}
+                  Execute {uploadType === 'master' ? 'Master Synchronization' : 'Legacy Import'}
                 </button>
                 <div className="flex items-start mt-4 text-xs text-blue-600 bg-blue-50 p-3 rounded-md">
-                  <AlertTriangle className="h-4 w-4 mr-1 flex-shrink-0 text-blue-500" />
-                  <p>All imported records will be added to the {uploadType} database collection.</p>
+                  <Info className="h-4 w-4 mr-1 flex-shrink-0 text-blue-500" />
+                  <p>Updates existing records idempotently to prevent duplication. Referential relationships will be established at the end.</p>
                 </div>
               </div>
             ) : (
-              <div className="text-center py-8 text-sm text-gray-500">
-                Upload a file to preview the data before importing into the database.
+              <div className="text-center py-8 text-sm text-gray-500 flex flex-col items-center">
+                <FileSpreadsheet className="w-10 h-10 text-gray-200 mb-2"/>
+                Upload a workbook to preview the structural mapping before triggering the sync engine.
               </div>
             )}
           </Card>

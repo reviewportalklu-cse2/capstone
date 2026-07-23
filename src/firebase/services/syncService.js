@@ -121,12 +121,12 @@ export const syncService = {
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString()
           };
-          const newTeamId = await FirestoreService.create('teams', currentTeam);
+          const newTeamId = await FirestoreService.set('teams', teamId, currentTeam);
           currentTeam.id = newTeamId;
-          console.log(`[SYNC ENGINE] 7. Team created: ${teamId} (Doc ID: ${newTeamId})`);
+          console.log(`[SYNC ENGINE] 7. Team upserted: ${teamId} (Doc ID: ${newTeamId})`);
           
           // Also create an associated project record for the team
-          const newProjectId = await FirestoreService.create('projects', {
+          const newProjectId = await FirestoreService.set('projects', `PRJ-${teamId}`, {
             projectId: `PRJ-${teamId}`,
             teamId,
             projectTitle: `Project ${teamId}`,
@@ -137,7 +137,7 @@ export const syncService = {
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString()
           });
-          console.log(`[SYNC ENGINE] 8. Project created: PRJ-${teamId} (Doc ID: ${newProjectId})`);
+          console.log(`[SYNC ENGINE] 8. Project upserted: PRJ-${teamId} (Doc ID: ${newProjectId})`);
 
           currentTeam.projectId = newProjectId;
           await FirestoreService.update('teams', newTeamId, { projectId: newProjectId });

@@ -5,6 +5,7 @@ import {
   doc, 
   getDoc, 
   addDoc, 
+  setDoc,
   updateDoc, 
   deleteDoc,
   query,
@@ -44,6 +45,12 @@ export const FirestoreService = {
     const colRef = collection(db, collectionName);
     const docRef = await addDoc(colRef, data);
     return docRef.id;
+  },
+
+  async set(collectionName, id, data, options = { merge: true }) {
+    const docRef = doc(db, collectionName, id);
+    await setDoc(docRef, data, options);
+    return id;
   },
 
   async update(collectionName, id, data) {
