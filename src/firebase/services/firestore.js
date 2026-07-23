@@ -9,7 +9,8 @@ import {
   deleteDoc,
   query,
   where,
-  orderBy
+  orderBy,
+  onSnapshot
 } from 'firebase/firestore';
 
 export const FirestoreService = {
@@ -17,6 +18,15 @@ export const FirestoreService = {
     const colRef = collection(db, collectionName);
     const snapshot = await getDocs(colRef);
     return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+  },
+
+  subscribeAll(collectionName, callback) {
+    const colRef = collection(db, collectionName);
+    const { onSnapshot } = require('firebase/firestore');
+    return onSnapshot(colRef, (snapshot) => {
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      callback(data);
+    });
   },
 
   async getById(collectionName, id) {
@@ -54,5 +64,22 @@ export const FirestoreService = {
     });
     const snapshot = await getDocs(q);
     return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+  },
+
+  subscribeQuery(collectionName, conditions, callback) {
+    const colRef = collection(db, collectionName);
+    let q = colRef;
+    conditions.forEach(cond => {
+      if (cond.operator === 'in') {
+        q = query(q, where(cond.field, 'in', cond.value));
+      } else {
+        q = query(q, where(cond.field, cond.operator, cond.value));
+      }
+    });
+    
+    return onSnapshot(q, (snapshot) => {
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      callback(data);
+    });
   }
 };

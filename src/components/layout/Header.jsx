@@ -1,10 +1,22 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Bell, Menu, ChevronDown, Moon, CalendarDays, HelpCircle } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import GlobalSearch from '@/components/common/GlobalSearch';
+import { notificationService } from '@/firebase/services';
 
 const Header = ({ title = "Dashboard", setMobileMenuOpen }) => {
   const { currentUser, userRole } = useAuth();
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  useEffect(() => {
+    if (!currentUser || !userRole) return;
+    const unsubscribe = notificationService.subscribeToBroadcasts(userRole, (notifs) => {
+      // count unread
+      const unread = notifs.filter(n => !n.read).length;
+      setUnreadCount(unread);
+    });
+    return () => unsubscribe && unsubscribe();
+  }, [currentUser, userRole]);
 
   return (
     <header className="bg-white shadow-sm z-10 relative border-b border-gray-200/60 sticky top-0">
@@ -58,7 +70,9 @@ const Header = ({ title = "Dashboard", setMobileMenuOpen }) => {
             >
               <span className="sr-only">View notifications</span>
               <Bell className="h-5 w-5" aria-hidden="true" />
-              <span className="absolute top-1.5 right-1.5 block h-2 w-2 rounded-full bg-danger ring-2 ring-white" />
+              {unreadCount > 0 && (
+                <span className="absolute top-1.5 right-1.5 block h-2 w-2 rounded-full bg-danger ring-2 ring-white" />
+              )}
             </button>
           </div>
 

@@ -12,6 +12,7 @@ import { Users, ClipboardList, CheckCircle, Clock, Loader2, AlertCircle, Trendin
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, BarChart, Bar, Legend } from 'recharts';
 import { studentService } from '@/firebase/services/studentService';
 import { facultyService } from '@/firebase/services/facultyService';
+import { FirestoreService } from '@/firebase/services/firestore';
 
 const FacultyDashboard = () => {
   const { currentUser } = useAuth();
@@ -31,19 +32,26 @@ const FacultyDashboard = () => {
   const [performanceData, setPerformanceData] = useState([]);
 
   useEffect(() => {
-    if (currentUser?.uid) {
-      fetchDashboardData(currentUser.uid);
-    }
-  }, [currentUser]);
+    if (!currentUser?.uid) return;
+    const uid = currentUser.uid;
+    const unsubs = [];
+    
+    setLoading(true);
+    let loadedCount = 0;
+    const checkLoaded = () => {
+      loadedCount++;
+      if (loadedCount >= 2) setLoading(false);
+    };
 
-  const fetchDashboardData = async (uid) => {
-    try {
-      const faculty = await facultyService.getById(uid);
+    facultyService.getById(uid).then(faculty => {
       setFacultyData(faculty);
+      checkLoaded();
+    }).catch(err => {
+      console.error(err);
+      checkLoaded();
+    });
 
-      const allStudents = await studentService.getAll();
-      const myStudents = allStudents.filter(s => s.facultyId === uid);
-
+    unsubs.push(FirestoreService.subscribeQuery('students', [{ field: 'facultyId', operator: '==', value: uid }], (myStudents) => {
       let evaluated = 0;
       let pending = 0;
       
@@ -74,14 +82,11 @@ const FacultyDashboard = () => {
         { range: '61-80', count: Math.floor(Math.random() * 15) + 5 },
         { range: '81-100', count: Math.floor(Math.random() * 10) + 2 },
       ]);
-      
-    } catch (err) {
-      console.error("Error fetching faculty dashboard:", err);
-      setError("Failed to load dashboard data. Please try again.");
-    } finally {
-      setLoading(false);
-    }
-  };
+      checkLoaded();
+    }));
+
+    return () => unsubs.forEach(unsub => unsub && unsub());
+  }, [currentUser]);
 
   if (error) {
     return (

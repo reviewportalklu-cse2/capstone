@@ -10,5 +10,11 @@ export const notificationService = {
   delete: async (id) => FirestoreService.delete(COLLECTION_NAME, id),
   getByUserId: async (userId) => FirestoreService.query(COLLECTION_NAME, [
     { field: 'userId', operator: '==', value: userId }
-  ])
+  ]),
+  subscribeByUserId: (userId, callback) => FirestoreService.subscribeQuery(COLLECTION_NAME, [
+    { field: 'targetRole', operator: 'in', value: ['all', userId] } // Fallback for simple broadcast
+  ], callback),
+  subscribeToBroadcasts: (role, callback) => FirestoreService.subscribeQuery(COLLECTION_NAME, [
+    { field: 'targetRole', operator: 'in', value: ['all', role] }
+  ], callback)
 };

@@ -14,6 +14,7 @@ import { guideService } from '@/firebase/services/guideService';
 import { reviewerService } from '@/firebase/services/reviewerService';
 import { reviewService } from '@/firebase/services/reviewService';
 import { notificationService } from '@/firebase/services/notificationService';
+import { FirestoreService } from '@/firebase/services/firestore';
 import EmptyState from '@/components/common/EmptyState';
 import Button from '@/components/common/Button';
 
@@ -29,46 +30,52 @@ const StudentDashboard = () => {
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    if (currentUser?.uid) {
-      fetchDashboardData(currentUser.uid);
-    }
-  }, [currentUser]);
+    if (!currentUser?.uid) return;
+    const uid = currentUser.uid;
+    const unsubs = [];
+    
+    setLoading(true);
+    setError(null);
 
-  const fetchDashboardData = async (uid) => {
-    try {
-      setLoading(true);
-      setError(null);
+    let loadedCount = 0;
+    const checkLoaded = () => {
+      loadedCount++;
+      if (loadedCount >= 3) setLoading(false);
+    };
 
-      const student = await studentService.getById(uid);
-      setStudentData(student);
-
-      if (student) {
-        // Fetch relations via Promise.all
-        const promises = [
-          projectService.getByStudentId(uid),
-          reviewService.getByStudentId(uid),
-          notificationService.getByUserId(uid)
-        ];
-
-        if (student.guideId) promises.push(guideService.getById(student.guideId));
-        if (student.reviewerId) promises.push(reviewerService.getById(student.reviewerId));
-
-        const results = await Promise.all(promises);
-
-        setProjectData(results[0][0] || null);
-        setReviews(results[1] || []);
-        setNotifications(results[2] || []);
-
-        if (student.guideId) setGuideData(results[3]);
-        if (student.reviewerId) setReviewerData(results[4]);
+    unsubs.push(FirestoreService.subscribeQuery('students', [{ field: 'uid', operator: '==', value: uid }], (data) => {
+      if (data.length > 0) {
+        const student = data[0];
+        setStudentData(student);
+        
+        if (student.guideId) {
+          guideService.getById(student.guideId).then(g => setGuideData(g));
+        }
+        if (student.reviewerId) {
+          reviewerService.getById(student.reviewerId).then(r => setReviewerData(r));
+        }
       }
-    } catch (err) {
-      console.error("Error fetching dashboard:", err);
-      setError("Failed to load your academic dashboard.");
-    } finally {
-      setLoading(false);
-    }
-  };
+      checkLoaded();
+    }));
+
+    unsubs.push(FirestoreService.subscribeQuery('projects', [{ field: 'members', operator: 'array-contains', value: uid }], (data) => {
+      setProjectData(data[0] || null);
+      checkLoaded();
+    }));
+
+    // Subscribe to reviews by looking at team Id? Wait, review collection has studentId. We can fallback to studentId or teamId
+    unsubs.push(FirestoreService.subscribeQuery('reviews', [{ field: 'studentId', operator: '==', value: uid }], (data) => {
+      setReviews(data);
+      checkLoaded();
+    }));
+
+    unsubs.push(FirestoreService.subscribeQuery('notifications', [{ field: 'targetRole', operator: 'in', value: ['all', 'student', uid] }], (data) => {
+      // Filter for this user's notifications + global + role
+      setNotifications(data.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)));
+    }));
+
+    return () => unsubs.forEach(unsub => unsub && unsub());
+  }, [currentUser]);
 
   if (loading) {
     return (

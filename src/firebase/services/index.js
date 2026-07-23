@@ -16,3 +16,4 @@ export { studentService } from './studentService';
 export { submissionService } from './submissionService';
 export { userService } from './userService';
 export { evaluationCenterService } from './evaluationCenterService';
+export { syncService } from './syncService';

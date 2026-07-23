@@ -13,6 +13,7 @@ import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 import { studentService } from '@/firebase/services/studentService';
 import { reviewService } from '@/firebase/services/reviewService';
 import { scheduleService } from '@/firebase/services/scheduleService';
+import { FirestoreService } from '@/firebase/services/firestore';
 
 const ReviewerDashboard = () => {
   const { currentUser } = useAuth();
@@ -26,29 +27,25 @@ const ReviewerDashboard = () => {
   const [pendingRemarks, setPendingRemarks] = useState([]);
 
   useEffect(() => {
-    if (currentUser?.uid) {
-      fetchDashboardData(currentUser.uid);
-    }
-  }, [currentUser]);
+    if (!currentUser?.uid) return;
+    const uid = currentUser.uid;
+    const unsubs = [];
+    
+    setLoading(true);
+    let loadedCount = 0;
+    const checkLoaded = () => {
+      loadedCount++;
+      if (loadedCount >= 3) setLoading(false);
+    };
 
-  const fetchDashboardData = async (uid) => {
-    try {
-      setLoading(true);
-      setError(null);
-      
-      const [allStudents, allReviews, allSchedules] = await Promise.all([
-        studentService.getByReviewerId(uid),
-        reviewService.getByReviewerId(uid),
-        scheduleService.getByReviewerId(uid)
-      ]);
+    let localStudents = [];
+    let localReviews = [];
 
-      // Queue Processing: Find students needing review
-      const queueData = allStudents.map(s => {
-        // Simple logic for priority:
+    const calculateStats = (students, reviews) => {
+      const queueData = students.map(s => {
         let priority = 'Low';
         if (s.reviewStage === 'Review 1') priority = 'High';
         else if (s.reviewStage === 'Review 2') priority = 'Medium';
-        
         return {
           id: s.uid,
           name: s.name,
@@ -59,10 +56,10 @@ const ReviewerDashboard = () => {
           dueDate: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
         };
       });
-      setQueue(queueData.slice(0, 5)); // show top 5
+      setQueue(queueData.slice(0, 5));
 
-      const completed = allStudents.filter(s => s.status === 'Completed').length;
-      const total = allStudents.length;
+      const completed = students.filter(s => s.status === 'Completed').length;
+      const total = students.length;
       const pending = total - completed;
 
       setStats({ completed, total, pending });
@@ -72,9 +69,29 @@ const ReviewerDashboard = () => {
         { name: 'Pending', value: pending, color: '#f59e0b' },
       ]);
 
-      // Map Schedule
-      const enrichedSchedule = allSchedules.map(item => {
-        const s = allStudents.find(student => student.uid === item.studentId);
+      const drafts = reviews.filter(r => r.status === 'Draft');
+      setPendingRemarks(drafts.map(d => ({
+        id: d.id,
+        text: `Finalize marks for ${students.find(s => s.uid === d.studentId)?.name || 'Student'}`,
+        time: 'Pending'
+      })));
+    };
+
+    unsubs.push(FirestoreService.subscribeQuery('students', [{ field: 'reviewerId', operator: '==', value: uid }], (data) => {
+      localStudents = data;
+      calculateStats(localStudents, localReviews);
+      checkLoaded();
+    }));
+
+    unsubs.push(FirestoreService.subscribeQuery('reviews', [{ field: 'reviewerId', operator: '==', value: uid }], (data) => {
+      localReviews = data;
+      calculateStats(localStudents, localReviews);
+      checkLoaded();
+    }));
+
+    unsubs.push(FirestoreService.subscribeQuery('schedules', [{ field: 'reviewerId', operator: '==', value: uid }], (data) => {
+      const enrichedSchedule = data.map(item => {
+        const s = localStudents.find(student => student.uid === item.studentId);
         return {
           id: item.id,
           time: item.time || '10:00 AM',
@@ -84,22 +101,11 @@ const ReviewerDashboard = () => {
         };
       });
       setSchedule(enrichedSchedule);
-      
-      // Simulate Pending Remarks based on reviews needing finalization
-      const drafts = allReviews.filter(r => r.status === 'Draft');
-      setPendingRemarks(drafts.map(d => ({
-        id: d.id,
-        text: `Finalize marks for ${allStudents.find(s => s.uid === d.studentId)?.name || 'Student'}`,
-        time: 'Pending'
-      })));
+      checkLoaded();
+    }));
 
-    } catch (error) {
-      console.error("Error fetching reviewer dashboard:", error);
-      setError("Failed to load dashboard data");
-    } finally {
-      setLoading(false);
-    }
-  };
+    return () => unsubs.forEach(unsub => unsub && unsub());
+  }, [currentUser]);
 
   if (loading) {
     return (

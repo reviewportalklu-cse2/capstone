@@ -3,9 +3,10 @@ import DashboardLayout from '@/components/layout/DashboardLayout';
 import { adminNavigation } from '@/constants/navigation';
 import Card from '@/components/common/Card';
 import Table from '@/components/common/Table';
-import { Upload as UploadIcon, FileSpreadsheet, Loader2, CheckCircle, AlertTriangle } from 'lucide-react';
+import Button from '@/components/common/Button';
+import { Upload as UploadIcon, FileSpreadsheet, Loader2, CheckCircle, AlertTriangle, Trash2 } from 'lucide-react';
 import * as XLSX from 'xlsx';
-import { studentService, guideService, reviewerService, facultyService, auditService } from '@/firebase/services';
+import { studentService, guideService, reviewerService, facultyService, auditService, syncService } from '@/firebase/services';
 import { useAuth } from '@/contexts/AuthContext';
 
 const CsvSync = () => {
@@ -16,6 +17,7 @@ const CsvSync = () => {
   const [processing, setProcessing] = useState(false);
   const [syncStatus, setSyncStatus] = useState(null);
   const [errorMsg, setErrorMsg] = useState(null);
+  const [purgeStatus, setPurgeStatus] = useState('');
 
   const handleFileUpload = (e) => {
     const uploadedFile = e.target.files[0];
@@ -63,30 +65,42 @@ const CsvSync = () => {
       const records = previewData.records;
       const now = new Date().toISOString();
       
-      let service;
-      if (uploadType === 'student') service = studentService;
-      else if (uploadType === 'guide') service = guideService;
-      else if (uploadType === 'reviewer') service = reviewerService;
-      else if (uploadType === 'faculty') service = facultyService;
-      
-      // Batch processing sequentially for simplicity and stability in this enterprise demo
-      for (const record of records) {
-        await service.create({
-          ...record,
-          createdAt: now,
-          status: 'Active'
-        });
+      if (uploadType === 'assignments') {
+        const result = await syncService.syncAssignments(records);
+        await auditService.log(
+          currentUser.uid, 
+          'BULK_SYNC_ASSIGNMENTS', 
+          'BulkUpload', 
+          null, 
+          { count: records.length, teamsCreated: result.teamsCreated, studentsAssigned: result.studentsAssigned }
+        );
+        setSyncStatus(`Success! Created ${result.teamsCreated} Teams and assigned ${result.studentsAssigned} Students.`);
+      } else {
+        let service;
+        if (uploadType === 'student') service = studentService;
+        else if (uploadType === 'guide') service = guideService;
+        else if (uploadType === 'reviewer') service = reviewerService;
+        else if (uploadType === 'faculty') service = facultyService;
+        
+        // Batch processing sequentially
+        for (const record of records) {
+          await service.create({
+            ...record,
+            createdAt: now,
+            status: 'Active'
+          });
+        }
+
+        await auditService.log(
+          currentUser.uid, 
+          `BULK_IMPORT_${uploadType.toUpperCase()}`, 
+          'BulkUpload', 
+          null, 
+          { count: records.length, type: uploadType }
+        );
+        setSyncStatus(`success`);
       }
 
-      await auditService.log(
-        currentUser.uid, 
-        `BULK_IMPORT_${uploadType.toUpperCase()}`, 
-        'BulkUpload', 
-        null, 
-        { count: records.length, type: uploadType }
-      );
-
-      setSyncStatus('success');
       setPreviewData(null);
       setFile(null);
     } catch (err) {
@@ -97,12 +111,28 @@ const CsvSync = () => {
     }
   };
 
+  const handlePurge = async () => {
+    if (!window.confirm("WARNING: This will permanently delete all students, guides, faculty, reviewers, teams, and projects. Proceed?")) return;
+    setProcessing(true);
+    setPurgeStatus('Purging database...');
+    try {
+      await syncService.purgeDatabase();
+      await auditService.log(currentUser.uid, 'PURGE_DATABASE', 'System', null, {});
+      setPurgeStatus('Database purged successfully. Ready for fresh import.');
+    } catch (err) {
+      console.error("Error purging database:", err);
+      setPurgeStatus('Failed to purge database.');
+    } finally {
+      setProcessing(false);
+    }
+  };
+
   const renderPreviewTable = () => {
     if (!previewData || !previewData.records.length) return null;
     
     const records = previewData.records.slice(0, 10);
     const columns = Object.keys(records[0]).map(key => ({
-      header: key.charAt(0).toUpperCase() + key.slice(1),
+      header: key,
       accessor: key
     }));
 
@@ -122,12 +152,26 @@ const CsvSync = () => {
         
         {/* Upload Section */}
         <div className="lg:col-span-2 space-y-6">
-          <Card title="Bulk Upload">
+          
+          <Card className="p-4 bg-red-50 border-red-200">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-red-800 font-bold flex items-center gap-2"><Trash2 className="w-5 h-5"/> Data Cleanup</h3>
+                <p className="text-sm text-red-600">Delete all dummy records before fresh import.</p>
+              </div>
+              <Button variant="outline" size="sm" onClick={handlePurge} className="border-red-300 text-red-700 hover:bg-red-100">
+                Purge Database
+              </Button>
+            </div>
+            {purgeStatus && <div className="mt-2 text-sm font-bold text-red-800">{purgeStatus}</div>}
+          </Card>
+
+          <Card title="Bulk Upload & Synchronization">
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Entity Type</label>
                 <div className="flex flex-wrap gap-2">
-                  {['student', 'guide', 'reviewer', 'faculty'].map(type => (
+                  {['student', 'guide', 'reviewer', 'faculty', 'assignments'].map(type => (
                     <button
                       key={type}
                       onClick={() => {
@@ -143,7 +187,7 @@ const CsvSync = () => {
                           : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'
                       }`}
                     >
-                      {type.charAt(0).toUpperCase() + type.slice(1)} Data
+                      {type === 'assignments' ? 'Assignments ⭐' : type.charAt(0).toUpperCase() + type.slice(1) + ' Data'}
                     </button>
                   ))}
                 </div>
@@ -190,11 +234,11 @@ const CsvSync = () => {
         {/* Sync Summary Section */}
         <div className="lg:col-span-1">
           <Card title="Sync Summary" className="sticky top-6">
-            {syncStatus === 'success' ? (
+            {syncStatus ? (
               <div className="text-center py-6">
                 <CheckCircle className="mx-auto h-12 w-12 text-green-500 mb-3" />
                 <h4 className="text-lg font-medium text-gray-900">Import Complete!</h4>
-                <p className="text-sm text-gray-500 mt-1">Firestore has been updated successfully with {uploadType} data.</p>
+                <p className="text-sm text-gray-500 mt-1">{syncStatus === 'success' ? `Firestore has been updated successfully with ${uploadType} data.` : syncStatus}</p>
                 <button 
                   onClick={() => setSyncStatus(null)}
                   className="mt-4 w-full inline-flex justify-center items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700"
@@ -220,7 +264,7 @@ const CsvSync = () => {
                   className="w-full flex justify-center items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
                 >
                   <UploadIcon className="h-4 w-4 mr-2" />
-                  Start Import
+                  Start {uploadType === 'assignments' ? 'Synchronization' : 'Import'}
                 </button>
                 <div className="flex items-start mt-4 text-xs text-blue-600 bg-blue-50 p-3 rounded-md">
                   <AlertTriangle className="h-4 w-4 mr-1 flex-shrink-0 text-blue-500" />

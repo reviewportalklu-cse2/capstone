@@ -12,6 +12,7 @@ import {
   Server, Database, Book
 } from 'lucide-react';
 import { studentService, projectService, guideService, reviewerService, facultyService, reviewService } from '@/firebase/services';
+import { FirestoreService } from '@/firebase/services/firestore';
 
 const AdminDashboard = () => {
   const [loading, setLoading] = useState(true);
@@ -26,39 +27,45 @@ const AdminDashboard = () => {
   const [recentReviews, setRecentReviews] = useState([]);
 
   useEffect(() => {
-    fetchDashboardData();
+    // Unsubscribe functions
+    const unsubs = [];
+    
+    setLoading(true);
+    let loadedCount = 0;
+    const checkLoaded = () => {
+      loadedCount++;
+      if (loadedCount >= 6) setLoading(false);
+    };
+
+    unsubs.push(FirestoreService.subscribeAll('students', (data) => {
+      setStats(prev => ({...prev, students: data.length}));
+      checkLoaded();
+    }));
+    unsubs.push(FirestoreService.subscribeAll('projects', (data) => {
+      setStats(prev => ({...prev, projects: data.length}));
+      checkLoaded();
+    }));
+    unsubs.push(FirestoreService.subscribeAll('guides', (data) => {
+      setStats(prev => ({...prev, guides: data.length}));
+      checkLoaded();
+    }));
+    unsubs.push(FirestoreService.subscribeAll('reviewers', (data) => {
+      setStats(prev => ({...prev, reviewers: data.length}));
+      checkLoaded();
+    }));
+    unsubs.push(FirestoreService.subscribeAll('classroomFaculty', (data) => {
+      setStats(prev => ({...prev, faculty: data.length}));
+      checkLoaded();
+    }));
+    unsubs.push(FirestoreService.subscribeAll('reviews', (data) => {
+      setStats(prev => ({...prev, reviews: data.length}));
+      const sorted = [...data].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0, 5);
+      setRecentReviews(sorted);
+      checkLoaded();
+    }));
+
+    return () => unsubs.forEach(unsub => unsub && unsub());
   }, []);
-
-  const fetchDashboardData = async () => {
-    try {
-      setLoading(true);
-      const [st, pr, gu, re, fa, rvs] = await Promise.all([
-        studentService.getAll(),
-        projectService.getAll(),
-        guideService.getAll(),
-        reviewerService.getAll(),
-        facultyService.getAll(),
-        reviewService.getAll()
-      ]);
-
-      setStats({
-        students: st.length,
-        projects: pr.length,
-        guides: gu.length,
-        reviewers: re.length,
-        faculty: fa.length,
-        reviews: rvs.length
-      });
-      
-      const sortedReviews = [...rvs].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0, 5);
-      setRecentReviews(sortedReviews);
-      
-    } catch (error) {
-      console.error("Error fetching admin dashboard data:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const reviewColumns = [
     { header: 'Review Type', accessor: 'reviewType' },

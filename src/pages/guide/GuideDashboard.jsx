@@ -24,6 +24,7 @@ import { projectService } from '@/firebase/services/projectService';
 import { studentService } from '@/firebase/services/studentService';
 import { meetingService } from '@/firebase/services/meetingService';
 import { remarkService } from '@/firebase/services/remarkService';
+import { FirestoreService } from '@/firebase/services/firestore';
 
 const GuideDashboard = () => {
   const { currentUser } = useAuth();
@@ -37,39 +38,42 @@ const GuideDashboard = () => {
   const [pendingRemarks, setPendingRemarks] = useState([]);
 
   useEffect(() => {
-    if (currentUser?.uid) {
-      fetchDashboardData(currentUser.uid);
-    }
+    if (!currentUser?.uid) return;
+    const uid = currentUser.uid;
+    const unsubs = [];
+    
+    setLoading(true);
+    let loadedCount = 0;
+    const checkLoaded = () => {
+      loadedCount++;
+      if (loadedCount >= 4) setLoading(false);
+    };
+
+    unsubs.push(FirestoreService.subscribeQuery('projects', [{ field: 'guideId', operator: '==', value: uid }], (allProjects) => {
+      setProjects(allProjects);
+      checkLoaded();
+    }));
+
+    unsubs.push(FirestoreService.subscribeQuery('students', [{ field: 'guideId', operator: '==', value: uid }], (allStudents) => {
+      setStudents(allStudents);
+      checkLoaded();
+    }));
+
+    unsubs.push(FirestoreService.subscribeQuery('meetings', [{ field: 'guideId', operator: '==', value: uid }], (allMeetings) => {
+      const upcoming = allMeetings.filter(m => new Date(m.date) >= new Date(new Date().setHours(0,0,0,0)));
+      setMeetings(upcoming.slice(0, 3));
+      checkLoaded();
+    }));
+
+    unsubs.push(FirestoreService.subscribeQuery('remarks', [{ field: 'authorId', operator: '==', value: uid }], (allRemarks) => {
+      setPendingRemarks(allRemarks);
+      checkLoaded();
+    }));
+
+    return () => unsubs.forEach(unsub => unsub && unsub());
   }, [currentUser]);
 
-  const fetchDashboardData = async (uid) => {
-    try {
-      setLoading(true);
-      const [allProjects, allStudents, allMeetings, allRemarks] = await Promise.all([
-        projectService.getProjectsByGuide(uid),
-        studentService.getByGuideId(uid),
-        meetingService.getByGuideId(uid),
-        remarkService.getRemarksByAuthor(uid) // Wait, we need pending actions
-      ]);
-
-      setProjects(allProjects);
-      setStudents(allStudents);
-      
-      // Filter upcoming meetings (naive check based on date string)
-      const upcoming = allMeetings.filter(m => new Date(m.date) >= new Date(new Date().setHours(0,0,0,0)));
-      setMeetings(upcoming.slice(0, 3)); // Show top 3
-      
-      // Simulate pending guidance by looking at projects that haven't had a remark recently
-      const pending = allProjects.filter(p => !allRemarks.some(r => r.projectId === p.id)).slice(0, 3);
-      setPendingRemarks(pending);
-
-    } catch (error) {
-      console.error("Error fetching guide dashboard:", error);
-      setError("Failed to load dashboard data. Please try again.");
-    } finally {
-      setLoading(false);
-    }
-  };
+  const pendingGuidanceProjects = projects.filter(p => !pendingRemarks.some(r => r.projectId === p.id)).slice(0, 3);
 
   if (loading) {
     return (
@@ -144,7 +148,7 @@ const GuideDashboard = () => {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
           <StatCard 
             title="Pending Actions" 
-            value={pendingRemarks.length.toString()} 
+            value={pendingGuidanceProjects.length.toString()} 
             icon={AlertCircle} 
             colorClass="text-orange-600" 
             bgClass="bg-orange-50"
@@ -172,7 +176,7 @@ const GuideDashboard = () => {
             {/* Pending Guidance */}
             <Card title="Pending Guidance" className="shadow-sm border-gray-200/60">
               <div className="space-y-4 mt-2">
-                {pendingRemarks.length > 0 ? pendingRemarks.map((proj) => (
+                {pendingGuidanceProjects.length > 0 ? pendingGuidanceProjects.map((proj) => (
                   <div key={proj.id} className="flex items-start justify-between p-4 rounded-xl border border-gray-100 bg-gray-50/50 hover:bg-white hover:shadow-sm transition-all group">
                     <div className="flex items-start gap-4">
                       <div className="p-2 rounded-lg bg-orange-100 text-orange-600">
