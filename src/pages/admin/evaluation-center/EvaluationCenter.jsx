@@ -1,7 +1,7 @@
 import React from 'react';
 import { Routes, Route, NavLink, Navigate, useLocation } from 'react-router-dom';
 import DashboardLayout from '@/components/layout/DashboardLayout';
-import { adminNavigation } from '@/constants/navigation';
+import { useAdminNavigation } from '@/hooks/useAdminNavigation';
 import { 
   Users, 
   LayoutDashboard, 
@@ -36,10 +36,12 @@ const tabs = [
 ];
 
 const EvaluationCenter = () => {
+  const navigationItems = useAdminNavigation();
+
   const location = useLocation();
 
   return (
-    <DashboardLayout navigationItems={adminNavigation} title="KL CSE Capstone Portal - Evaluation Center">
+    <DashboardLayout navigationItems={navigationItems} title="KL CSE Capstone Portal - Evaluation Center">
       <div className="space-y-6 max-w-7xl mx-auto">
         
         {/* Module Header */}

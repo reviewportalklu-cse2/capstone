@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
-import { adminNavigation } from '@/constants/navigation';
+import { useAdminNavigation } from '@/hooks/useAdminNavigation';
 import Card from '@/components/common/Card';
 import Table from '@/components/common/Table';
 import Button from '@/components/common/Button';
@@ -10,6 +10,8 @@ import { studentService, guideService, reviewerService, facultyService, auditSer
 import { useAuth } from '@/contexts/AuthContext';
 
 const CsvSync = () => {
+  const navigationItems = useAdminNavigation();
+
   const { currentUser } = useAuth();
   const [file, setFile] = useState(null);
   const [uploadType, setUploadType] = useState('student');
@@ -147,7 +149,7 @@ const CsvSync = () => {
   };
 
   return (
-    <DashboardLayout navigationItems={adminNavigation} title="Enterprise Data Synchronization">
+    <DashboardLayout navigationItems={navigationItems} title="Enterprise Data Synchronization">
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 max-w-7xl mx-auto">
         
         {/* Upload Section */}

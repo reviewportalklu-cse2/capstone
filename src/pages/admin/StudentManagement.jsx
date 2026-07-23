@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
-import { adminNavigation } from '@/constants/navigation';
+import { useAdminNavigation } from '@/hooks/useAdminNavigation';
 import Card from '@/components/common/Card';
 import Table from '@/components/common/Table';
 import Badge from '@/components/common/Badge';
@@ -12,6 +12,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Plus, Search, Upload, Loader2, Download, Edit2, Trash2 } from 'lucide-react';
 
 const StudentManagement = () => {
+  const navigationItems = useAdminNavigation();
+
   const { currentUser } = useAuth();
   const [students, setStudents] = useState([]);
   const [guides, setGuides] = useState([]);
@@ -206,7 +208,7 @@ const StudentManagement = () => {
   ];
 
   return (
-    <DashboardLayout navigationItems={adminNavigation} title="KL CSE Capstone Portal - Student Administration">
+    <DashboardLayout navigationItems={navigationItems} title="KL CSE Capstone Portal - Student Administration">
       <div className="space-y-6">
         
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">

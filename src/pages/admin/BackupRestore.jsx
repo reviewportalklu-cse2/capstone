@@ -1,12 +1,14 @@
 import React, { useState } from 'react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
-import { adminNavigation } from '@/constants/navigation';
+import { useAdminNavigation } from '@/hooks/useAdminNavigation';
 import Card from '@/components/common/Card';
 import Button from '@/components/common/Button';
 import { Download, Upload, AlertTriangle, Shield, CheckCircle, Database } from 'lucide-react';
 import { studentService, guideService, reviewerService, facultyService, projectService } from '@/firebase/services';
 
 const BackupRestore = () => {
+  const navigationItems = useAdminNavigation();
+
   const [loading, setLoading] = useState(false);
   const [statusMsg, setStatusMsg] = useState(null);
 
@@ -80,7 +82,7 @@ const BackupRestore = () => {
   };
 
   return (
-    <DashboardLayout navigationItems={adminNavigation} title="System Backup & Restore">
+    <DashboardLayout navigationItems={navigationItems} title="System Backup & Restore">
       <div className="max-w-4xl mx-auto space-y-6">
         
         {statusMsg && (

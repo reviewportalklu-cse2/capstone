@@ -1,11 +1,13 @@
 import React from 'react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
-import { adminNavigation } from '@/constants/navigation';
+import { useAdminNavigation } from '@/hooks/useAdminNavigation';
 import SettingsProfile from '@/pages/shared/SettingsProfile';
 
 const AdminSettings = () => {
+  const navigationItems = useAdminNavigation();
+
   return (
-    <DashboardLayout navigationItems={adminNavigation} title="Admin Settings">
+    <DashboardLayout navigationItems={navigationItems} title="Admin Settings">
       <SettingsProfile />
     </DashboardLayout>
   );

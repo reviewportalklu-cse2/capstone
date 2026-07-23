@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
-import { adminNavigation } from '@/constants/navigation';
+import { useAdminNavigation } from '@/hooks/useAdminNavigation';
 import Card from '@/components/common/Card';
 import Button from '@/components/common/Button';
 import Input from '@/components/common/Input';
@@ -10,6 +10,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Send, Bell, Loader2, Users, AlertCircle } from 'lucide-react';
 
 const AdminNotifications = () => {
+  const navigationItems = useAdminNavigation();
+
   const { currentUser } = useAuth();
   const [loading, setLoading] = useState(false);
   const [history, setHistory] = useState([]);
@@ -79,7 +81,7 @@ const AdminNotifications = () => {
   };
 
   return (
-    <DashboardLayout navigationItems={adminNavigation} title="System Wide Announcements">
+    <DashboardLayout navigationItems={navigationItems} title="System Wide Announcements">
       <div className="max-w-5xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-6">
         
         <div className="lg:col-span-2 space-y-6">

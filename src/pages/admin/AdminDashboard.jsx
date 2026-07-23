@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
-import { adminNavigation } from '@/constants/navigation';
+import { useAdminNavigation } from '@/hooks/useAdminNavigation';
+import { useAdminStats } from '@/contexts/AdminStatsContext';
 import StatCard from '@/components/common/StatCard';
 import Card from '@/components/common/Card';
 import Table from '@/components/common/Table';
@@ -11,72 +12,10 @@ import {
   Activity, Clock, Calendar, CheckCircle, AlertTriangle, 
   Server, Database, Book
 } from 'lucide-react';
-import { studentService, projectService, guideService, reviewerService, facultyService, reviewService } from '@/firebase/services';
-import { FirestoreService } from '@/firebase/services/firestore';
 
 const AdminDashboard = () => {
-  const [loading, setLoading] = useState(true);
-  const [stats, setStats] = useState({
-    students: 0,
-    projects: 0,
-    guides: 0,
-    reviewers: 0,
-    faculty: 0,
-    reviews: 0,
-    teams: 0
-  });
-  const [recentReviews, setRecentReviews] = useState([]);
-
-  useEffect(() => {
-    // Unsubscribe functions
-    const unsubs = [];
-    
-    setLoading(true);
-    let loadedCount = 0;
-    const checkLoaded = () => {
-      loadedCount++;
-      if (loadedCount >= 7) setLoading(false);
-    };
-
-    unsubs.push(FirestoreService.subscribeAll('students', (data) => {
-      setStats(prev => ({...prev, students: data.length}));
-      checkLoaded();
-    }, () => checkLoaded()));
-    
-    unsubs.push(FirestoreService.subscribeAll('projects', (data) => {
-      setStats(prev => ({...prev, projects: data.length}));
-      checkLoaded();
-    }, () => checkLoaded()));
-    
-    unsubs.push(FirestoreService.subscribeAll('guides', (data) => {
-      setStats(prev => ({...prev, guides: data.length}));
-      checkLoaded();
-    }, () => checkLoaded()));
-    
-    unsubs.push(FirestoreService.subscribeAll('reviewers', (data) => {
-      setStats(prev => ({...prev, reviewers: data.length}));
-      checkLoaded();
-    }, () => checkLoaded()));
-    
-    unsubs.push(FirestoreService.subscribeAll('classroomFaculty', (data) => {
-      setStats(prev => ({...prev, faculty: data.length}));
-      checkLoaded();
-    }, () => checkLoaded()));
-
-    unsubs.push(FirestoreService.subscribeAll('teams', (data) => {
-      setStats(prev => ({...prev, teams: data.length}));
-      checkLoaded();
-    }, () => checkLoaded()));
-    
-    unsubs.push(FirestoreService.subscribeAll('reviews', (data) => {
-      setStats(prev => ({...prev, reviews: data.length}));
-      const sorted = [...data].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0, 5);
-      setRecentReviews(sorted);
-      checkLoaded();
-    }, () => checkLoaded()));
-
-    return () => unsubs.forEach(unsub => unsub && unsub());
-  }, []);
+  const { stats, loading, recentReviews } = useAdminStats();
+  const navigationItems = useAdminNavigation();
 
   const reviewColumns = [
     { header: 'Review Type', accessor: 'reviewType' },
@@ -92,7 +31,7 @@ const AdminDashboard = () => {
 
   if (loading) {
     return (
-      <DashboardLayout navigationItems={adminNavigation} title="KL CSE Capstone Portal Control Center">
+      <DashboardLayout navigationItems={navigationItems} title="KL CSE Capstone Portal Control Center">
         <div className="flex h-[calc(100vh-4rem)] items-center justify-center">
           <Loader2 className="h-8 w-8 animate-spin text-primary-600" />
         </div>
@@ -101,7 +40,7 @@ const AdminDashboard = () => {
   }
 
   return (
-    <DashboardLayout navigationItems={adminNavigation} title="KL CSE Capstone Portal Control Center">
+    <DashboardLayout navigationItems={navigationItems} title="KL CSE Capstone Portal Control Center">
       <div className="space-y-6 max-w-7xl mx-auto">
         
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -118,7 +57,7 @@ const AdminDashboard = () => {
             
             <Card title="Recent Evaluations" subtitle="Latest review submissions across all batches">
               <div className="overflow-x-auto">
-                {recentReviews.length > 0 ? (
+                {recentReviews && recentReviews.length > 0 ? (
                   <Table columns={reviewColumns} data={recentReviews} />
                 ) : (
                   <EmptyState 

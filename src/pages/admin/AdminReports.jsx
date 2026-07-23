@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
-import { adminNavigation } from '@/constants/navigation';
+import { useAdminNavigation } from '@/hooks/useAdminNavigation';
 import Card from '@/components/common/Card';
 import Table from '@/components/common/Table';
 import Button from '@/components/common/Button';
@@ -10,6 +10,8 @@ import { studentService, projectService, reviewService } from '@/firebase/servic
 import { exportToCsv } from '@/utils/csvExport';
 
 const AdminReports = () => {
+  const navigationItems = useAdminNavigation();
+
   const [loading, setLoading] = useState(true);
   const [reportData, setReportData] = useState([]);
 
@@ -85,7 +87,7 @@ const AdminReports = () => {
   ];
 
   return (
-    <DashboardLayout navigationItems={adminNavigation} title="University Performance Reports">
+    <DashboardLayout navigationItems={navigationItems} title="University Performance Reports">
       <div className="space-y-6 max-w-7xl mx-auto">
         
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">

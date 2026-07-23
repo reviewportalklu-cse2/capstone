@@ -50,8 +50,13 @@ const Sidebar = ({ navigationItems }) => {
                       }`}
                       aria-hidden="true"
                     />
-                    <span className="truncate">{item.name}</span>
-                    {isActive && (
+                    <span className="truncate flex-1">{item.name}</span>
+                    {item.count !== undefined && (
+                      <span className={`ml-auto inline-block py-0.5 px-2 text-xs font-semibold rounded-full ${isActive ? 'bg-primary-500/20 text-primary-300' : 'bg-gray-800 text-gray-300 group-hover:bg-gray-700'}`}>
+                        {item.count}
+                      </span>
+                    )}
+                    {isActive && item.count === undefined && (
                       <div className="ml-auto w-1.5 h-1.5 rounded-full bg-primary-400 shadow-[0_0_8px_rgba(37,99,235,0.6)]"></div>
                     )}
                   </>

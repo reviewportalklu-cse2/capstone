@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
-import { adminNavigation } from '@/constants/navigation';
+import { useAdminNavigation } from '@/hooks/useAdminNavigation';
 import Card from '@/components/common/Card';
 import Table from '@/components/common/Table';
 import Badge from '@/components/common/Badge';
@@ -11,6 +11,8 @@ import { exportToCsv } from '@/utils/csvExport';
 import { Search, Loader2, Download, CheckCircle, XCircle } from 'lucide-react';
 
 const SubmissionsManagement = () => {
+  const navigationItems = useAdminNavigation();
+
   const { currentUser } = useAuth();
   const [submissions, setSubmissions] = useState([]);
   const [students, setStudents] = useState([]);
@@ -136,7 +138,7 @@ const SubmissionsManagement = () => {
   ];
 
   return (
-    <DashboardLayout navigationItems={adminNavigation} title="KL CSE Capstone Portal - Submissions Management">
+    <DashboardLayout navigationItems={navigationItems} title="KL CSE Capstone Portal - Submissions Management">
       <div className="space-y-6">
         
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">

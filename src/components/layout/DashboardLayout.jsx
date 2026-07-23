@@ -62,7 +62,12 @@ const DashboardLayout = ({ children, navigationItems, title }) => {
                           }`}
                           aria-hidden="true"
                         />
-                        {item.name}
+                        <span className="flex-1">{item.name}</span>
+                        {item.count !== undefined && (
+                          <span className={`ml-auto inline-block py-0.5 px-2 text-xs font-semibold rounded-full ${isActive ? 'bg-primary-500/20 text-primary-300' : 'bg-gray-800 text-gray-300 group-hover:bg-gray-700'}`}>
+                            {item.count}
+                          </span>
+                        )}
                       </>
                     )}
                   </NavLink>
