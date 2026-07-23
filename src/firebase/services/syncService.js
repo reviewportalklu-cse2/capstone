@@ -55,128 +55,140 @@ export const syncService = {
     const teamMap = new Map(allTeams.map(t => [t.teamId, t])); // teamId -> team object
 
     for (const row of assignments) {
-      // Extract fields matching the Excel headers
-      const rollNumber = String(row['Roll Number'] || row.rollNumber || '').toLowerCase();
-      const teamId = String(row['Team ID'] || row.teamId || '');
-      const guideId = String(row['Guide Employee ID'] || row['Guide Email'] || row.guideEmail || '').toLowerCase();
-      const facultyId = String(row['Faculty Employee ID'] || row['Faculty Email'] || row.facultyEmail || '').toLowerCase();
-      const reviewerId = String(row['Reviewer Employee ID'] || row['Reviewer Email'] || row.reviewerEmail || '').toLowerCase();
-      const facultyPanel = row['Faculty Panel'] || row.facultyPanel || '';
-      const reviewSchedule = row['Review Schedule'] || row.reviewSchedule || '';
-      const room = row['Room'] || row.room || '';
-      const academicYear = row['Academic Year'] || row.academicYear || '2026-27';
-      const batch = row['Batch'] || row.batch || '2022-26';
-      const section = row['Section'] || row.section || 'A';
+      try {
+        // Extract fields matching the Excel headers
+        const rollNumber = String(row['Roll Number'] || row.rollNumber || '').toLowerCase();
+        const teamId = String(row['Team ID'] || row.teamId || '');
+        const guideId = String(row['Guide Employee ID'] || row['Guide Email'] || row.guideEmail || '').toLowerCase();
+        const facultyId = String(row['Faculty Employee ID'] || row['Faculty Email'] || row.facultyEmail || '').toLowerCase();
+        const reviewerId = String(row['Reviewer Employee ID'] || row['Reviewer Email'] || row.reviewerEmail || '').toLowerCase();
+        const facultyPanel = row['Faculty Panel'] || row.facultyPanel || '';
+        const reviewSchedule = row['Review Schedule'] || row.reviewSchedule || '';
+        const room = row['Room'] || row.room || '';
+        const academicYear = row['Academic Year'] || row.academicYear || '2026-27';
+        const batch = row['Batch'] || row.batch || '2022-26';
+        const section = row['Section'] || row.section || 'A';
 
-      if (!rollNumber || !teamId) continue;
+        if (!rollNumber || !teamId) continue;
 
-      const student = studentMap.get(rollNumber);
-      const guide = guideMap.get(guideId);
-      const faculty = facultyMap.get(facultyId);
-      const reviewer = reviewerMap.get(reviewerId);
+        const student = studentMap.get(rollNumber);
+        const guide = guideMap.get(guideId);
+        const faculty = facultyMap.get(facultyId);
+        const reviewer = reviewerMap.get(reviewerId);
 
-      if (!student) continue;
+        if (!student) continue;
 
-      // 5. Create Team if it does not exist
-      let currentTeam = teamMap.get(teamId);
-      if (!currentTeam) {
-        currentTeam = {
+        // 5. Create Team if it does not exist
+        let currentTeam = teamMap.get(teamId);
+        if (!currentTeam) {
+          currentTeam = {
+            teamId,
+            teamName: `Team ${teamId}`,
+            guideId: guide?.id || '',
+            facultyId: faculty?.id || '',
+            reviewerId: reviewer?.id || '',
+            facultyPanel,
+            reviewSchedule,
+            room,
+            academicYear,
+            batch,
+            section,
+            status: 'Active',
+            members: [], // Array of student IDs
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+          };
+          const newTeamId = await FirestoreService.create('teams', currentTeam);
+          currentTeam.id = newTeamId;
+          
+          // Also create an associated project record for the team
+          const newProjectId = await FirestoreService.create('projects', {
+            projectId: `PRJ-${teamId}`,
+            teamId,
+            projectTitle: `Project ${teamId}`,
+            status: 'In Progress',
+            guideId: guide?.id || '',
+            facultyId: faculty?.id || '',
+            reviewerId: reviewer?.id || '',
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+          });
+
+          currentTeam.projectId = newProjectId;
+          await FirestoreService.update('teams', newTeamId, { projectId: newProjectId });
+
+          teamMap.set(teamId, currentTeam);
+          teamsCreated++;
+        }
+
+        // Add student to team members if not already there
+        if (!currentTeam.members.includes(student.id)) {
+          currentTeam.members.push(student.id);
+          await FirestoreService.update('teams', currentTeam.id, { members: currentTeam.members });
+        }
+
+        // Update student document
+        await FirestoreService.update('students', student.id, {
           teamId,
-          teamName: `Team ${teamId}`,
+          projectId: currentTeam.projectId || '',
           guideId: guide?.id || '',
           facultyId: faculty?.id || '',
           reviewerId: reviewer?.id || '',
           facultyPanel,
           reviewSchedule,
           room,
-          academicYear,
-          batch,
-          section,
-          status: 'Active',
-          members: [] // Array of student IDs
+          status: 'Active'
+        });
+        studentsAssigned++;
+
+        // Update relationships for Guide, Faculty, Reviewer
+        const safeAdd = (arr, val) => {
+          if (!val) return arr || [];
+          const res = arr || [];
+          if (!res.includes(val)) res.push(val);
+          return res;
         };
-        const newTeamId = await FirestoreService.create('teams', currentTeam);
-        currentTeam.id = newTeamId;
-        
-        // Also create an associated project record for the team
-        await FirestoreService.create('projects', {
-          teamId,
-          title: `Project ${teamId}`,
-          status: 'In Progress',
-          approvalStage: 'Draft',
-          department: student.department || 'CSE',
-          academicYear,
-          batch,
-          section,
-          guideId: guide?.id || '',
-          reviewerId: reviewer?.id || '',
-          facultyPanel
-        });
 
-        teamMap.set(teamId, currentTeam);
-        teamsCreated++;
-      }
+        if (guide) {
+          guide.assignedStudents = safeAdd(guide.assignedStudents, student.id);
+          guide.assignedTeams = safeAdd(guide.assignedTeams, teamId);
+          guide.projectIds = safeAdd(guide.projectIds, currentTeam.projectId);
+          guide.studentCount = guide.assignedStudents.length;
+          await FirestoreService.update('guides', guide.id, {
+            assignedStudents: guide.assignedStudents,
+            assignedTeams: guide.assignedTeams,
+            projectIds: guide.projectIds,
+            studentCount: guide.studentCount
+          });
+        }
 
-      // Add student to team members if not already there
-      if (!currentTeam.members.includes(student.id)) {
-        currentTeam.members.push(student.id);
-        await FirestoreService.update('teams', currentTeam.id, { members: currentTeam.members });
-      }
+        if (faculty) {
+          faculty.assignedStudents = safeAdd(faculty.assignedStudents, student.id);
+          faculty.assignedTeams = safeAdd(faculty.assignedTeams, teamId);
+          faculty.projectIds = safeAdd(faculty.projectIds, currentTeam.projectId);
+          faculty.studentCount = faculty.assignedStudents.length;
+          await FirestoreService.update('classroomFaculty', faculty.id, {
+            assignedStudents: faculty.assignedStudents,
+            assignedTeams: faculty.assignedTeams,
+            projectIds: faculty.projectIds,
+            studentCount: faculty.studentCount
+          });
+        }
 
-      // Update student document
-      await FirestoreService.update('students', student.id, {
-        teamId,
-        teamDbId: currentTeam.id, // reference to team doc id
-        guideId: guide?.id || '',
-        facultyId: faculty?.id || '',
-        reviewerId: reviewer?.id || '',
-        facultyPanel,
-        reviewSchedule,
-        room
-      });
-      studentsAssigned++;
-
-      // Update relationships for Guide, Faculty, Reviewer
-      const safeAdd = (arr, val) => {
-        if (!val) return arr || [];
-        const res = arr || [];
-        if (!res.includes(val)) res.push(val);
-        return res;
-      };
-
-      if (guide) {
-        guide.assignedStudents = safeAdd(guide.assignedStudents, student.id);
-        guide.assignedTeams = safeAdd(guide.assignedTeams, teamId);
-        guide.studentCount = guide.assignedStudents.length;
-        await FirestoreService.update('guides', guide.id, {
-          assignedStudents: guide.assignedStudents,
-          assignedTeams: guide.assignedTeams,
-          studentCount: guide.studentCount
-        });
-      }
-
-      if (faculty) {
-        faculty.assignedStudents = safeAdd(faculty.assignedStudents, student.id);
-        faculty.assignedTeams = safeAdd(faculty.assignedTeams, teamId);
-        faculty.studentCount = faculty.assignedStudents.length;
-        faculty.assignedFacultyPanel = facultyPanel;
-        await FirestoreService.update('classroomFaculty', faculty.id, {
-          assignedStudents: faculty.assignedStudents,
-          assignedTeams: faculty.assignedTeams,
-          studentCount: faculty.studentCount,
-          assignedFacultyPanel: faculty.assignedFacultyPanel
-        });
-      }
-
-      if (reviewer) {
-        reviewer.assignedStudents = safeAdd(reviewer.assignedStudents, student.id);
-        reviewer.assignedTeams = safeAdd(reviewer.assignedTeams, teamId);
-        reviewer.studentCount = reviewer.assignedStudents.length;
-        await FirestoreService.update('reviewers', reviewer.id, {
-          assignedStudents: reviewer.assignedStudents,
-          assignedTeams: reviewer.assignedTeams,
-          studentCount: reviewer.studentCount
-        });
+        if (reviewer) {
+          reviewer.assignedStudents = safeAdd(reviewer.assignedStudents, student.id);
+          reviewer.assignedTeams = safeAdd(reviewer.assignedTeams, teamId);
+          reviewer.projectIds = safeAdd(reviewer.projectIds, currentTeam.projectId);
+          reviewer.studentCount = reviewer.assignedStudents.length;
+          await FirestoreService.update('reviewers', reviewer.id, {
+            assignedStudents: reviewer.assignedStudents,
+            assignedTeams: reviewer.assignedTeams,
+            projectIds: reviewer.projectIds,
+            studentCount: reviewer.studentCount
+          });
+        }
+      } catch (err) {
+        console.error(`Failed to process row for Roll Number: ${row['Roll Number'] || row.rollNumber}:`, err);
       }
     }
 
