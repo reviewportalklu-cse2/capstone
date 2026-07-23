@@ -83,7 +83,7 @@ const FacultyDashboard = () => {
         { range: '81-100', count: Math.floor(Math.random() * 10) + 2 },
       ]);
       checkLoaded();
-    }));
+    }, () => checkLoaded()));
 
     return () => unsubs.forEach(unsub => unsub && unsub());
   }, [currentUser]);

@@ -52,23 +52,23 @@ const GuideDashboard = () => {
     unsubs.push(FirestoreService.subscribeQuery('projects', [{ field: 'guideId', operator: '==', value: uid }], (allProjects) => {
       setProjects(allProjects);
       checkLoaded();
-    }));
+    }, () => checkLoaded()));
 
     unsubs.push(FirestoreService.subscribeQuery('students', [{ field: 'guideId', operator: '==', value: uid }], (allStudents) => {
       setStudents(allStudents);
       checkLoaded();
-    }));
+    }, () => checkLoaded()));
 
     unsubs.push(FirestoreService.subscribeQuery('meetings', [{ field: 'guideId', operator: '==', value: uid }], (allMeetings) => {
       const upcoming = allMeetings.filter(m => new Date(m.date) >= new Date(new Date().setHours(0,0,0,0)));
       setMeetings(upcoming.slice(0, 3));
       checkLoaded();
-    }));
+    }, () => checkLoaded()));
 
     unsubs.push(FirestoreService.subscribeQuery('remarks', [{ field: 'authorId', operator: '==', value: uid }], (allRemarks) => {
       setPendingRemarks(allRemarks);
       checkLoaded();
-    }));
+    }, () => checkLoaded()));
 
     return () => unsubs.forEach(unsub => unsub && unsub());
   }, [currentUser]);

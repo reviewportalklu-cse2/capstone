@@ -81,13 +81,13 @@ const ReviewerDashboard = () => {
       localStudents = data;
       calculateStats(localStudents, localReviews);
       checkLoaded();
-    }));
+    }, () => checkLoaded()));
 
     unsubs.push(FirestoreService.subscribeQuery('reviews', [{ field: 'reviewerId', operator: '==', value: uid }], (data) => {
       localReviews = data;
       calculateStats(localStudents, localReviews);
       checkLoaded();
-    }));
+    }, () => checkLoaded()));
 
     unsubs.push(FirestoreService.subscribeQuery('schedules', [{ field: 'reviewerId', operator: '==', value: uid }], (data) => {
       const enrichedSchedule = data.map(item => {
@@ -102,7 +102,7 @@ const ReviewerDashboard = () => {
       });
       setSchedule(enrichedSchedule);
       checkLoaded();
-    }));
+    }, () => checkLoaded()));
 
     return () => unsubs.forEach(unsub => unsub && unsub());
   }, [currentUser]);

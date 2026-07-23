@@ -40,29 +40,34 @@ const AdminDashboard = () => {
     unsubs.push(FirestoreService.subscribeAll('students', (data) => {
       setStats(prev => ({...prev, students: data.length}));
       checkLoaded();
-    }));
+    }, () => checkLoaded()));
+    
     unsubs.push(FirestoreService.subscribeAll('projects', (data) => {
       setStats(prev => ({...prev, projects: data.length}));
       checkLoaded();
-    }));
+    }, () => checkLoaded()));
+    
     unsubs.push(FirestoreService.subscribeAll('guides', (data) => {
       setStats(prev => ({...prev, guides: data.length}));
       checkLoaded();
-    }));
+    }, () => checkLoaded()));
+    
     unsubs.push(FirestoreService.subscribeAll('reviewers', (data) => {
       setStats(prev => ({...prev, reviewers: data.length}));
       checkLoaded();
-    }));
+    }, () => checkLoaded()));
+    
     unsubs.push(FirestoreService.subscribeAll('classroomFaculty', (data) => {
       setStats(prev => ({...prev, faculty: data.length}));
       checkLoaded();
-    }));
+    }, () => checkLoaded()));
+    
     unsubs.push(FirestoreService.subscribeAll('reviews', (data) => {
       setStats(prev => ({...prev, reviews: data.length}));
       const sorted = [...data].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0, 5);
       setRecentReviews(sorted);
       checkLoaded();
-    }));
+    }, () => checkLoaded()));
 
     return () => unsubs.forEach(unsub => unsub && unsub());
   }, []);

@@ -56,23 +56,23 @@ const StudentDashboard = () => {
         }
       }
       checkLoaded();
-    }));
+    }, () => checkLoaded()));
 
     unsubs.push(FirestoreService.subscribeQuery('projects', [{ field: 'members', operator: 'array-contains', value: uid }], (data) => {
       setProjectData(data[0] || null);
       checkLoaded();
-    }));
+    }, () => checkLoaded()));
 
     // Subscribe to reviews by looking at team Id? Wait, review collection has studentId. We can fallback to studentId or teamId
     unsubs.push(FirestoreService.subscribeQuery('reviews', [{ field: 'studentId', operator: '==', value: uid }], (data) => {
       setReviews(data);
       checkLoaded();
-    }));
+    }, () => checkLoaded()));
 
     unsubs.push(FirestoreService.subscribeQuery('notifications', [{ field: 'targetRole', operator: 'in', value: ['all', 'student', uid] }], (data) => {
       // Filter for this user's notifications + global + role
       setNotifications(data.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)));
-    }));
+    }, () => {}));
 
     return () => unsubs.forEach(unsub => unsub && unsub());
   }, [currentUser]);

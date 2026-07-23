@@ -20,12 +20,14 @@ export const FirestoreService = {
     return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
   },
 
-  subscribeAll(collectionName, callback) {
+  subscribeAll(collectionName, callback, onError) {
     const colRef = collection(db, collectionName);
-    const { onSnapshot } = require('firebase/firestore');
     return onSnapshot(colRef, (snapshot) => {
       const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       callback(data);
+    }, (error) => {
+      console.error(`Error subscribing to ${collectionName}:`, error);
+      if (onError) onError(error);
     });
   },
 
@@ -66,7 +68,7 @@ export const FirestoreService = {
     return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
   },
 
-  subscribeQuery(collectionName, conditions, callback) {
+  subscribeQuery(collectionName, conditions, callback, onError) {
     const colRef = collection(db, collectionName);
     let q = colRef;
     conditions.forEach(cond => {
@@ -80,6 +82,9 @@ export const FirestoreService = {
     return onSnapshot(q, (snapshot) => {
       const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       callback(data);
+    }, (error) => {
+      console.error(`Error in subscribeQuery on ${collectionName}:`, error);
+      if (onError) onError(error);
     });
   }
 };
