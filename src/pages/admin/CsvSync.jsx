@@ -121,72 +121,149 @@ const CsvSync = () => {
 
     try {
       if (previewData.isMaster) {
-        setProcessingState('Initializing Master Import...');
-        const { student, guide, faculty, reviewer, assignments } = previewData.sheets;
+        setProcessingState('Starting Master Workbook parsing...');
+        const { student, guide, faculty, reviewer, assignments } = previewData.extracted;
+        let failures = 0;
 
         // 1. Students
         if (student.length > 0) {
+          console.log(`[CSV_SYNC] Starting Students Import. Rows to parse: ${student.length}`);
+          console.log(`[CSV_SYNC] First parsed student row:`, student[0]);
           setProcessingState(`Importing ${student.length} Students...`);
           for (const row of student) {
             const id = getField(row, ['Roll Number', 'rollNumber']).toLowerCase() || `STD-${Date.now()}-${Math.random()}`;
-            await FirestoreService.set('students', id, { ...row, createdAt: now, status: 'Active' });
-            totalWrites++;
+            try {
+              console.log(`[CSV_SYNC] Writing to collection 'students', Doc ID: ${id}`);
+              await FirestoreService.set('students', id, { ...row, createdAt: now, status: 'Active' });
+              console.log(`[CSV_SYNC] SUCCESS - Doc ID: ${id}`);
+              totalWrites++;
+            } catch (err) {
+              console.error(`[CSV_SYNC] FAILED to write student Doc ID: ${id}. Reason:`, err);
+              failures++;
+            }
           }
         }
 
         // 2. Guides
         if (guide.length > 0) {
+          console.log(`[CSV_SYNC] Starting Guides Import. Rows to parse: ${guide.length}`);
+          console.log(`[CSV_SYNC] First parsed guide row:`, guide[0]);
           setProcessingState(`Importing ${guide.length} Guides...`);
           for (const row of guide) {
             const id = getField(row, ['Employee ID', 'employeeId', 'Email', 'email']).toLowerCase() || `GUI-${Date.now()}-${Math.random()}`;
-            await FirestoreService.set('guides', id, { ...row, createdAt: now, status: 'Active' });
-            totalWrites++;
+            try {
+              console.log(`[CSV_SYNC] Writing to collection 'guides', Doc ID: ${id}`);
+              await FirestoreService.set('guides', id, { ...row, createdAt: now, status: 'Active' });
+              console.log(`[CSV_SYNC] SUCCESS - Doc ID: ${id}`);
+              totalWrites++;
+            } catch (err) {
+              console.error(`[CSV_SYNC] FAILED to write guide Doc ID: ${id}. Reason:`, err);
+              failures++;
+            }
           }
         }
 
         // 3. Faculty
         if (faculty.length > 0) {
+          console.log(`[CSV_SYNC] Starting Faculty Import. Rows to parse: ${faculty.length}`);
+          console.log(`[CSV_SYNC] First parsed faculty row:`, faculty[0]);
           setProcessingState(`Importing ${faculty.length} Faculty...`);
           for (const row of faculty) {
             const id = getField(row, ['Employee ID', 'employeeId', 'Email', 'email']).toLowerCase() || `FAC-${Date.now()}-${Math.random()}`;
-            await FirestoreService.set('classroomFaculty', id, { ...row, createdAt: now, status: 'Active' });
-            totalWrites++;
+            try {
+              console.log(`[CSV_SYNC] Writing to collection 'classroomFaculty', Doc ID: ${id}`);
+              await FirestoreService.set('classroomFaculty', id, { ...row, createdAt: now, status: 'Active' });
+              console.log(`[CSV_SYNC] SUCCESS - Doc ID: ${id}`);
+              totalWrites++;
+            } catch (err) {
+              console.error(`[CSV_SYNC] FAILED to write faculty Doc ID: ${id}. Reason:`, err);
+              failures++;
+            }
           }
         }
 
         // 4. Reviewers
         if (reviewer.length > 0) {
+          console.log(`[CSV_SYNC] Starting Reviewers Import. Rows to parse: ${reviewer.length}`);
+          console.log(`[CSV_SYNC] First parsed reviewer row:`, reviewer[0]);
           setProcessingState(`Importing ${reviewer.length} Reviewers...`);
           for (const row of reviewer) {
             const id = getField(row, ['Employee ID', 'employeeId', 'Email', 'email']).toLowerCase() || `REV-${Date.now()}-${Math.random()}`;
-            await FirestoreService.set('reviewers', id, { ...row, createdAt: now, status: 'Active' });
-            totalWrites++;
+            try {
+              console.log(`[CSV_SYNC] Writing to collection 'reviewers', Doc ID: ${id}`);
+              await FirestoreService.set('reviewers', id, { ...row, createdAt: now, status: 'Active' });
+              console.log(`[CSV_SYNC] SUCCESS - Doc ID: ${id}`);
+              totalWrites++;
+            } catch (err) {
+              console.error(`[CSV_SYNC] FAILED to write reviewer Doc ID: ${id}. Reason:`, err);
+              failures++;
+            }
           }
         }
 
-        // 5. Assignments (Executes the engine)
         if (assignments.length > 0) {
           setProcessingState(`Running Assignment Engine on ${assignments.length} mappings...`);
           const result = await syncService.syncAssignments(assignments);
-          syncResultText = `Master Import Complete! Created ${result.teamsCreated} Teams and mapped ${result.studentsAssigned} Students.`;
-          totalWrites += (result.teamsCreated * 2) + result.studentsAssigned;
+          
+          let report = `Master Import Complete!\n\n`;
+          report += `Students linked: ${result.stats.studentsLinked}\n`;
+          report += `Teams created: ${result.stats.teamsCreated}\n`;
+          report += `Projects created: ${result.stats.projectsCreated}\n`;
+          report += `Guides updated: ${result.stats.guidesUpdated}\n`;
+          report += `Faculty updated: ${result.stats.facultyUpdated}\n`;
+          report += `Reviewers updated: ${result.stats.reviewersUpdated}\n`;
+          report += `Students updated: ${result.stats.studentsUpdated}\n`;
+          
+          if (result.warnings && result.warnings.length > 0) {
+            report += `\nWARNINGS:\n- ${result.warnings.join('\n- ')}`;
+          }
+
+          syncResultText = report;
+          totalWrites += (result.stats.teamsCreated * 2) + result.stats.studentsAssigned; // Just an approximation for audit logging
+          
+          if (result.warnings.length > 0) {
+             setErrorMsg(`There were ${result.warnings.length} relationship mapping issues. Check the import result log.`);
+          }
+          
         } else {
           syncResultText = `Master Import Complete! Updated ${totalWrites} base entity records.`;
         }
 
-        await auditService.log(currentUser.uid, 'MASTER_WORKBOOK_IMPORT', 'BulkUpload', importId, { 
-          totalWrites, 
-          sheetsProcessed: previewData.summary.sheetsFound 
-        });
+        if (failures > 0) {
+          throw new Error(`${failures} base entities failed to write to Firestore. Check the console logs for details.`);
+        }
+
+        await auditService.log(currentUser.uid, 'MASTER_IMPORT', 'BulkUpload', importId, { totalWrites });
 
       } else {
         // Fallback Single Mode
         setProcessingState(`Importing ${previewData.summary.total} records...`);
         const records = previewData.records;
         
+        console.log(`[CSV_SYNC] Starting Legacy Import. Type: ${uploadType}, Rows to parse: ${records.length}`);
+        if (records.length > 0) console.log(`[CSV_SYNC] First parsed row:`, records[0]);
+
         if (uploadType === 'assignments') {
           const result = await syncService.syncAssignments(records);
-          syncResultText = `Success! Created ${result.teamsCreated} Teams and assigned ${result.studentsAssigned} Students.`;
+          let report = `Assignments Import Complete!\n\n`;
+          report += `Students linked: ${result.stats.studentsLinked}\n`;
+          report += `Teams created: ${result.stats.teamsCreated}\n`;
+          report += `Projects created: ${result.stats.projectsCreated}\n`;
+          report += `Guides updated: ${result.stats.guidesUpdated}\n`;
+          report += `Faculty updated: ${result.stats.facultyUpdated}\n`;
+          report += `Reviewers updated: ${result.stats.reviewersUpdated}\n`;
+          report += `Students updated: ${result.stats.studentsUpdated}\n`;
+          
+          if (result.warnings && result.warnings.length > 0) {
+            report += `\nWARNINGS:\n- ${result.warnings.join('\n- ')}`;
+          }
+
+          syncResultText = report;
+          totalWrites += (result.stats.teamsCreated * 2) + result.stats.studentsAssigned; // Approximation
+          
+          if (result.warnings.length > 0) {
+             setErrorMsg(`There were ${result.warnings.length} relationship mapping issues. Check the import result log.`);
+          }
         } else {
           let colName = '';
           if (uploadType === 'student') colName = 'students';
@@ -194,13 +271,25 @@ const CsvSync = () => {
           else if (uploadType === 'reviewer') colName = 'reviewers';
           else if (uploadType === 'faculty') colName = 'classroomFaculty';
           
+          let failures = 0;
           for (const row of records) {
             let id = getField(row, ['Roll Number', 'rollNumber', 'Employee ID', 'employeeId', 'Email', 'email']).toLowerCase();
             if (!id) id = `REC-${Date.now()}-${Math.random()}`;
-            await FirestoreService.set(colName, id, { ...row, createdAt: now, status: 'Active' });
-            totalWrites++;
+            try {
+              console.log(`[CSV_SYNC] Writing to collection '${colName}', Doc ID: ${id}`);
+              await FirestoreService.set(colName, id, { ...row, createdAt: now, status: 'Active' });
+              console.log(`[CSV_SYNC] SUCCESS - Doc ID: ${id}`);
+              totalWrites++;
+            } catch (err) {
+              console.error(`[CSV_SYNC] FAILED to write Doc ID: ${id} to ${colName}. Reason:`, err);
+              failures++;
+            }
           }
-          syncResultText = `Success! Processed ${records.length} ${uploadType} records.`;
+          console.log(`[CSV_SYNC] Legacy import completed. Total written: ${totalWrites}, Failures: ${failures}`);
+          if (failures > 0) {
+            setErrorMsg(`Warning: ${failures} records failed to write. Check browser console for details.`);
+          }
+          syncResultText = `Success! Processed ${records.length} ${uploadType} records. (${totalWrites} written)`;
         }
         
         await auditService.log(currentUser.uid, `SINGLE_IMPORT_${uploadType.toUpperCase()}`, 'BulkUpload', importId, { count: records.length });
@@ -344,10 +433,17 @@ const CsvSync = () => {
                 </div>
               </div>
 
+              {syncStatus && (
+                <div className="mt-6 p-4 bg-green-50 text-green-700 rounded-lg border border-green-200 flex items-start">
+                  <CheckCircle className="w-5 h-5 mr-3 mt-0.5 flex-shrink-0" />
+                  <div className="text-sm whitespace-pre-wrap">{syncStatus}</div>
+                </div>
+              )}
+
               {errorMsg && (
                 <div className="p-4 rounded-md bg-red-50 flex items-center text-red-600">
-                  <AlertTriangle className="w-5 h-5 mr-2" />
-                  {errorMsg}
+                  <AlertTriangle className="w-5 h-5 mr-2 flex-shrink-0" />
+                  <div className="text-sm whitespace-pre-wrap">{errorMsg}</div>
                 </div>
               )}
             </div>

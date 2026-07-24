@@ -60,8 +60,24 @@ export const syncService = {
     const facultyMap = new Map(allFaculty.map(f => [getField(f, ['employeeId', 'Employee ID', 'email', 'Email']).toLowerCase(), f]));
     const reviewerMap = new Map(allReviewers.map(r => [getField(r, ['employeeId', 'Employee ID', 'email', 'Email']).toLowerCase(), r]));
 
-    let teamsCreated = 0;
-    let studentsAssigned = 0;
+    let stats = {
+      studentsLinked: 0,
+      teamsCreated: 0,
+      projectsCreated: 0,
+      guidesUpdated: 0,
+      facultyUpdated: 0,
+      reviewersUpdated: 0,
+      studentsUpdated: 0,
+    };
+    let warnings = [];
+    let failures = 0;
+    
+    // Sets to track unique updates
+    const updatedGuides = new Set();
+    const updatedFaculty = new Set();
+    const updatedReviewers = new Set();
+    const updatedStudents = new Set();
+
     const teamMap = new Map(allTeams.map(t => [t.teamId, t])); // teamId -> team object
 
     for (let i = 0; i < assignments.length; i++) {
@@ -82,7 +98,9 @@ export const syncService = {
         const section = getField(row, ['Section', 'section']) || 'A';
 
         if (!rollNumber || !teamId) {
-          console.warn(`[SYNC ENGINE] Row ${i + 1}: Missing Roll Number or Team ID. Skipping.`);
+          const msg = `Row ${i + 1}: Missing Roll Number or Team ID.`;
+          console.warn(`[SYNC ENGINE] ${msg} Skipping.`);
+          warnings.push(msg);
           continue;
         }
 
@@ -91,15 +109,16 @@ export const syncService = {
         const faculty = facultyMap.get(facultyId);
         const reviewer = reviewerMap.get(reviewerId);
 
-        console.log(`[SYNC ENGINE] 3. Student lookup for ${rollNumber}: ${student ? 'Found' : 'Not Found'}`);
-        console.log(`[SYNC ENGINE] 4. Guide lookup for ${guideId}: ${guide ? 'Found' : 'Not Found'}`);
-        console.log(`[SYNC ENGINE] 5. Faculty lookup for ${facultyId}: ${faculty ? 'Found' : 'Not Found'}`);
-        console.log(`[SYNC ENGINE] 6. Reviewer lookup for ${reviewerId}: ${reviewer ? 'Found' : 'Not Found'}`);
-
         if (!student) {
-          console.warn(`[SYNC ENGINE] Row ${i + 1}: Cannot map student ${rollNumber}. Skipping.`);
+          const msg = `Row ${i + 1}: Cannot map student using Roll Number '${rollNumber}'. Student not found in database.`;
+          console.warn(`[SYNC ENGINE] ${msg} Skipping.`);
+          warnings.push(msg);
           continue;
         }
+        
+        if (guideId && !guide) warnings.push(`Row ${i + 1}: Guide ID '${guideId}' not found.`);
+        if (facultyId && !faculty) warnings.push(`Row ${i + 1}: Faculty ID '${facultyId}' not found.`);
+        if (reviewerId && !reviewer) warnings.push(`Row ${i + 1}: Reviewer ID '${reviewerId}' not found.`);
 
         // 5. Create Team if it does not exist
         let currentTeam = teamMap.get(teamId);
@@ -143,10 +162,10 @@ export const syncService = {
           await FirestoreService.update('teams', newTeamId, { projectId: newProjectId });
 
           teamMap.set(teamId, currentTeam);
-          teamsCreated++;
+          stats.teamsCreated++;
+          stats.projectsCreated++;
         } else {
           console.log(`[SYNC ENGINE] 7. Team found: ${teamId}`);
-          console.log(`[SYNC ENGINE] 8. Project found: ${currentTeam.projectId || 'None'}`);
         }
 
         // Add student to team members if not already there
@@ -168,7 +187,11 @@ export const syncService = {
           status: 'Active'
         });
         console.log(`[SYNC ENGINE] 9. Student updated: ${student.id}`);
-        studentsAssigned++;
+        stats.studentsLinked++;
+        if (!updatedStudents.has(student.id)) {
+          updatedStudents.add(student.id);
+          stats.studentsUpdated++;
+        }
 
         // Update relationships for Guide, Faculty, Reviewer
         const safeAdd = (arr, val) => {
@@ -190,6 +213,10 @@ export const syncService = {
             studentCount: guide.studentCount
           });
           console.log(`[SYNC ENGINE] 10. Guide updated: ${guide.id}`);
+          if (!updatedGuides.has(guide.id)) {
+            updatedGuides.add(guide.id);
+            stats.guidesUpdated++;
+          }
         } else {
           console.log(`[SYNC ENGINE] 10. Guide update skipped (none matched).`);
         }
@@ -206,6 +233,10 @@ export const syncService = {
             studentCount: faculty.studentCount
           });
           console.log(`[SYNC ENGINE] 11. Faculty updated: ${faculty.id}`);
+          if (!updatedFaculty.has(faculty.id)) {
+            updatedFaculty.add(faculty.id);
+            stats.facultyUpdated++;
+          }
         } else {
           console.log(`[SYNC ENGINE] 11. Faculty update skipped (none matched).`);
         }
@@ -222,6 +253,10 @@ export const syncService = {
             studentCount: reviewer.studentCount
           });
           console.log(`[SYNC ENGINE] 12. Reviewer updated: ${reviewer.id}`);
+          if (!updatedReviewers.has(reviewer.id)) {
+            updatedReviewers.add(reviewer.id);
+            stats.reviewersUpdated++;
+          }
         } else {
           console.log(`[SYNC ENGINE] 12. Reviewer update skipped (none matched).`);
         }
@@ -229,11 +264,15 @@ export const syncService = {
         console.log(`[SYNC ENGINE] 13. Sequential writes for Row ${i + 1} completed successfully.`);
 
       } catch (err) {
-        console.error(`[SYNC ENGINE] ERROR on row ${i + 1}: ${err.message}`, err);
+        const msg = `Row ${i + 1}: Unexpected error - ${err.message}`;
+        console.error(`[SYNC ENGINE] ${msg}`, err);
+        warnings.push(msg);
+        failures++;
       }
     }
     
-    console.log(`[SYNC ENGINE] 14. Synchronization completed.`);
-    return { teamsCreated, studentsAssigned };
+    console.log(`[SYNC ENGINE] Synchronization completed.`);
+    
+    return { stats, warnings, failures };
   }
 };
