@@ -42,8 +42,16 @@ export const AdminStatsProvider = ({ children }) => {
     };
 
     unsubs.push(FirestoreService.subscribeAll('students', (res) => {
-      setData(prev => ({...prev, students: res}));
-      setStats(prev => ({...prev, students: res.length}));
+      const normalized = res.map(doc => ({
+        ...doc,
+        name: doc.name || doc.Name || '',
+        email: doc.email || doc.Email || '',
+        rollNo: doc.rollNo || doc.rollNumber || doc['Roll Number'] || doc['Roll No'] || '',
+        department: doc.department || doc.Department || '',
+        batch: doc.batch || doc.Batch || ''
+      }));
+      setData(prev => ({...prev, students: normalized}));
+      setStats(prev => ({...prev, students: normalized.length}));
       checkLoaded();
     }, () => checkLoaded()));
     
@@ -54,20 +62,40 @@ export const AdminStatsProvider = ({ children }) => {
     }, () => checkLoaded()));
     
     unsubs.push(FirestoreService.subscribeAll('guides', (res) => {
-      setData(prev => ({...prev, guides: res}));
-      setStats(prev => ({...prev, guides: res.length}));
+      const normalized = res.map(doc => ({
+        ...doc,
+        name: doc.name || doc.Name || '',
+        email: doc.email || doc.Email || '',
+        department: doc.department || doc.Department || '',
+        designation: doc.designation || doc.Designation || ''
+      }));
+      setData(prev => ({...prev, guides: normalized}));
+      setStats(prev => ({...prev, guides: normalized.length}));
       checkLoaded();
     }, () => checkLoaded()));
     
     unsubs.push(FirestoreService.subscribeAll('reviewers', (res) => {
-      setData(prev => ({...prev, reviewers: res}));
-      setStats(prev => ({...prev, reviewers: res.length}));
+      const normalized = res.map(doc => ({
+        ...doc,
+        name: doc.name || doc.Name || '',
+        email: doc.email || doc.Email || '',
+        department: doc.department || doc.Department || '',
+        assignedBatch: doc.assignedBatch || doc['Assigned Batch'] || doc.Batch || ''
+      }));
+      setData(prev => ({...prev, reviewers: normalized}));
+      setStats(prev => ({...prev, reviewers: normalized.length}));
       checkLoaded();
     }, () => checkLoaded()));
     
     unsubs.push(FirestoreService.subscribeAll('classroomFaculty', (res) => {
-      setData(prev => ({...prev, faculty: res}));
-      setStats(prev => ({...prev, faculty: res.length}));
+      const normalized = res.map(doc => ({
+        ...doc,
+        name: doc.name || doc.Name || '',
+        email: doc.email || doc.Email || '',
+        department: doc.department || doc.Department || ''
+      }));
+      setData(prev => ({...prev, faculty: normalized}));
+      setStats(prev => ({...prev, faculty: normalized.length}));
       checkLoaded();
     }, () => checkLoaded()));
 

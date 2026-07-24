@@ -119,24 +119,34 @@ const GuideManagement = () => {
     exportToCsv('capstoneflow_guides.csv', dataToExport);
   };
 
-  const filteredGuides = guides.filter(guide => 
-    guide.name?.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    guide.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    guide.department?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredGuides = guides.filter(guide => {
+    if (!searchTerm) return true;
+    const term = searchTerm.toLowerCase();
+    return (
+      (guide.name || guide.Name || '').toLowerCase().includes(term) || 
+      (guide.email || guide.Email || '').toLowerCase().includes(term) ||
+      (guide.department || guide.Department || '').toLowerCase().includes(term)
+    );
+  });
 
   const columns = [
     { 
       header: 'Guide', 
       render: (row) => (
         <div>
-          <p className="font-semibold text-gray-900">{row.name}</p>
-          <p className="text-xs text-gray-500">{row.email}</p>
+          <p className="font-semibold text-gray-900">{row.name || row.Name || 'Unknown'}</p>
+          <p className="text-xs text-gray-500">{row.email || row.Email || 'No Email'}</p>
         </div>
       ) 
     },
-    { header: 'Department', accessor: 'department' },
-    { header: 'Designation', accessor: 'designation' },
+    { 
+      header: 'Department', 
+      render: (row) => row.department || row.Department || 'N/A' 
+    },
+    { 
+      header: 'Designation', 
+      render: (row) => row.designation || row.Designation || 'N/A' 
+    },
     { 
       header: 'Assigned Students', 
       render: (row) => {

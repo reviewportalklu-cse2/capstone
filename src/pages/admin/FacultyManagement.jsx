@@ -115,23 +115,30 @@ const FacultyManagement = () => {
     exportToCsv('capstoneflow_faculty.csv', dataToExport);
   };
 
-  const filteredFaculty = faculty.filter(f => 
-    f.name?.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    f.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    f.department?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredFaculty = faculty.filter(f => {
+    if (!searchTerm) return true;
+    const term = searchTerm.toLowerCase();
+    return (
+      (f.name || f.Name || '').toLowerCase().includes(term) || 
+      (f.email || f.Email || '').toLowerCase().includes(term) ||
+      (f.department || f.Department || '').toLowerCase().includes(term)
+    );
+  });
 
   const columns = [
     { 
       header: 'Faculty', 
       render: (row) => (
         <div>
-          <p className="font-semibold text-gray-900">{row.name}</p>
-          <p className="text-xs text-gray-500">{row.email}</p>
+          <p className="font-semibold text-gray-900">{row.name || row.Name || 'Unknown'}</p>
+          <p className="text-xs text-gray-500">{row.email || row.Email || 'No Email'}</p>
         </div>
       ) 
     },
-    { header: 'Department', accessor: 'department' },
+    { 
+      header: 'Department', 
+      render: (row) => row.department || row.Department || 'N/A' 
+    },
     { 
       header: 'Assigned Students', 
       render: (row) => {

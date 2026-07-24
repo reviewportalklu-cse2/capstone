@@ -124,32 +124,42 @@ const StudentManagement = () => {
     }
   };
 
-  const filteredStudents = students.filter(student => 
-    student.name?.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    student.rollNo?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    student.email?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredStudents = students.filter(student => {
+    if (!searchTerm) return true;
+    const term = searchTerm.toLowerCase();
+    return (
+      (student.name || '').toLowerCase().includes(term) || 
+      (student.rollNo || student.rollNumber || student['Roll Number'] || '').toLowerCase().includes(term) ||
+      (student.email || '').toLowerCase().includes(term)
+    );
+  });
 
   const getGuideName = (id) => guides.find(g => g.id === id)?.name || 'Unassigned';
   const getReviewerName = (id) => reviewers.find(r => r.id === id)?.name || 'Unassigned';
 
   const columns = [
-    { header: 'Roll No.', accessor: 'rollNo' },
+    { 
+      header: 'Roll No.', 
+      render: (row) => row.rollNo || row.rollNumber || row['Roll Number'] || row['Roll No'] || 'N/A'
+    },
     { 
       header: 'Student', 
       render: (row) => (
         <div>
-          <p className="font-semibold text-gray-900">{row.name}</p>
-          <p className="text-xs text-gray-500">{row.email}</p>
+          <p className="font-semibold text-gray-900">{row.name || row.Name || 'Unknown'}</p>
+          <p className="text-xs text-gray-500">{row.email || row.Email || 'No Email'}</p>
         </div>
       ) 
     },
-    { header: 'Batch', accessor: 'batch' },
+    { 
+      header: 'Batch', 
+      render: (row) => row.batch || row.Batch || 'N/A' 
+    },
     { 
       header: 'Assigned Guide', 
       render: (row) => (
         <span className={row.guideId ? 'text-gray-900' : 'text-gray-400 italic'}>
-          {getGuideName(row.guideId)}
+          {getGuideName(row.guideId || row.GuideId)}
         </span>
       )
     },
@@ -157,7 +167,7 @@ const StudentManagement = () => {
       header: 'Assigned Reviewer', 
       render: (row) => (
         <span className={row.reviewerId ? 'text-gray-900' : 'text-gray-400 italic'}>
-          {getReviewerName(row.reviewerId)}
+          {getReviewerName(row.reviewerId || row.ReviewerId)}
         </span>
       )
     },

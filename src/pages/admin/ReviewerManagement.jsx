@@ -118,24 +118,34 @@ const ReviewerManagement = () => {
     exportToCsv('capstoneflow_reviewers.csv', dataToExport);
   };
 
-  const filteredReviewers = reviewers.filter(reviewer => 
-    reviewer.name?.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    reviewer.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    reviewer.department?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredReviewers = reviewers.filter(reviewer => {
+    if (!searchTerm) return true;
+    const term = searchTerm.toLowerCase();
+    return (
+      (reviewer.name || reviewer.Name || '').toLowerCase().includes(term) || 
+      (reviewer.email || reviewer.Email || '').toLowerCase().includes(term) ||
+      (reviewer.department || reviewer.Department || '').toLowerCase().includes(term)
+    );
+  });
 
   const columns = [
     { 
       header: 'Reviewer', 
       render: (row) => (
         <div>
-          <p className="font-semibold text-gray-900">{row.name}</p>
-          <p className="text-xs text-gray-500">{row.email}</p>
+          <p className="font-semibold text-gray-900">{row.name || row.Name || 'Unknown'}</p>
+          <p className="text-xs text-gray-500">{row.email || row.Email || 'No Email'}</p>
         </div>
       ) 
     },
-    { header: 'Department', accessor: 'department' },
-    { header: 'Batch', accessor: 'assignedBatch' },
+    { 
+      header: 'Department', 
+      render: (row) => row.department || row.Department || 'N/A' 
+    },
+    { 
+      header: 'Batch', 
+      render: (row) => row.assignedBatch || row['Assigned Batch'] || row.Batch || 'N/A' 
+    },
     { 
       header: 'Assigned Students', 
       render: (row) => {
