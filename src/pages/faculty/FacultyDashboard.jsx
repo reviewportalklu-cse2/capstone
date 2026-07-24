@@ -15,10 +15,9 @@ import { facultyService } from '@/firebase/services/facultyService';
 import { FirestoreService } from '@/firebase/services/firestore';
 
 const FacultyDashboard = () => {
-  const { currentUser } = useAuth();
+  const { domainUser } = useAuth();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [facultyData, setFacultyData] = useState(null);
   const [students, setStudents] = useState([]);
   
   // Custom workload state
@@ -32,26 +31,18 @@ const FacultyDashboard = () => {
   const [performanceData, setPerformanceData] = useState([]);
 
   useEffect(() => {
-    if (!currentUser?.uid) return;
-    const uid = currentUser.uid;
+    if (!domainUser) return;
+    const { domainId } = domainUser;
     const unsubs = [];
     
     setLoading(true);
     let loadedCount = 0;
     const checkLoaded = () => {
       loadedCount++;
-      if (loadedCount >= 2) setLoading(false);
+      if (loadedCount >= 1) setLoading(false);
     };
 
-    facultyService.getById(uid).then(faculty => {
-      setFacultyData(faculty);
-      checkLoaded();
-    }).catch(err => {
-      console.error(err);
-      checkLoaded();
-    });
-
-    unsubs.push(FirestoreService.subscribeQuery('students', [{ field: 'facultyId', operator: '==', value: uid }], (myStudents) => {
+    unsubs.push(FirestoreService.subscribeQuery('students', [{ field: 'facultyId', operator: '==', value: domainId }], (myStudents) => {
       let evaluated = 0;
       let pending = 0;
       
@@ -86,7 +77,7 @@ const FacultyDashboard = () => {
     }, () => checkLoaded()));
 
     return () => unsubs.forEach(unsub => unsub && unsub());
-  }, [currentUser]);
+  }, [domainUser]);
 
   if (error) {
     return (
@@ -154,7 +145,7 @@ const FacultyDashboard = () => {
             <div>
               <h1 className="text-3xl font-bold mb-2">Academic Evaluation Workspace</h1>
               <p className="text-primary-100 text-lg">
-                Welcome back, Dr. {facultyData?.name?.split(' ')[0] || 'Faculty'}. Here is your evaluation workload for today.
+                Welcome back, {domainUser?.name || 'Faculty'}. Here is your evaluation workload for today.
               </p>
             </div>
             <div className="bg-white/10 p-4 rounded-lg backdrop-blur-sm border border-white/20 text-right">

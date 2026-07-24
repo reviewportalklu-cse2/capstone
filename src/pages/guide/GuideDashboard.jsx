@@ -27,7 +27,7 @@ import { remarkService } from '@/firebase/services/remarkService';
 import { FirestoreService } from '@/firebase/services/firestore';
 
 const GuideDashboard = () => {
-  const { currentUser } = useAuth();
+  const { domainUser } = useAuth();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -38,8 +38,8 @@ const GuideDashboard = () => {
   const [pendingRemarks, setPendingRemarks] = useState([]);
 
   useEffect(() => {
-    if (!currentUser?.uid) return;
-    const uid = currentUser.uid;
+    if (!domainUser) return;
+    const { domainId } = domainUser;
     const unsubs = [];
     
     setLoading(true);
@@ -49,29 +49,29 @@ const GuideDashboard = () => {
       if (loadedCount >= 4) setLoading(false);
     };
 
-    unsubs.push(FirestoreService.subscribeQuery('projects', [{ field: 'guideId', operator: '==', value: uid }], (allProjects) => {
+    unsubs.push(FirestoreService.subscribeQuery('projects', [{ field: 'guideId', operator: '==', value: domainId }], (allProjects) => {
       setProjects(allProjects);
       checkLoaded();
     }, () => checkLoaded()));
 
-    unsubs.push(FirestoreService.subscribeQuery('students', [{ field: 'guideId', operator: '==', value: uid }], (allStudents) => {
+    unsubs.push(FirestoreService.subscribeQuery('students', [{ field: 'guideId', operator: '==', value: domainId }], (allStudents) => {
       setStudents(allStudents);
       checkLoaded();
     }, () => checkLoaded()));
 
-    unsubs.push(FirestoreService.subscribeQuery('meetings', [{ field: 'guideId', operator: '==', value: uid }], (allMeetings) => {
+    unsubs.push(FirestoreService.subscribeQuery('meetings', [{ field: 'guideId', operator: '==', value: domainId }], (allMeetings) => {
       const upcoming = allMeetings.filter(m => new Date(m.date) >= new Date(new Date().setHours(0,0,0,0)));
       setMeetings(upcoming.slice(0, 3));
       checkLoaded();
     }, () => checkLoaded()));
 
-    unsubs.push(FirestoreService.subscribeQuery('remarks', [{ field: 'authorId', operator: '==', value: uid }], (allRemarks) => {
+    unsubs.push(FirestoreService.subscribeQuery('remarks', [{ field: 'authorId', operator: '==', value: domainId }], (allRemarks) => {
       setPendingRemarks(allRemarks);
       checkLoaded();
     }, () => checkLoaded()));
 
     return () => unsubs.forEach(unsub => unsub && unsub());
-  }, [currentUser]);
+  }, [domainUser]);
 
   const pendingGuidanceProjects = projects.filter(p => !pendingRemarks.some(r => r.projectId === p.id)).slice(0, 3);
 

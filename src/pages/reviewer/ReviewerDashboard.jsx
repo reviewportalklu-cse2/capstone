@@ -16,7 +16,7 @@ import { scheduleService } from '@/firebase/services/scheduleService';
 import { FirestoreService } from '@/firebase/services/firestore';
 
 const ReviewerDashboard = () => {
-  const { currentUser } = useAuth();
+  const { domainUser } = useAuth();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -27,8 +27,8 @@ const ReviewerDashboard = () => {
   const [pendingRemarks, setPendingRemarks] = useState([]);
 
   useEffect(() => {
-    if (!currentUser?.uid) return;
-    const uid = currentUser.uid;
+    if (!domainUser) return;
+    const { domainId } = domainUser;
     const unsubs = [];
     
     setLoading(true);
@@ -47,8 +47,8 @@ const ReviewerDashboard = () => {
         if (s.reviewStage === 'Review 1') priority = 'High';
         else if (s.reviewStage === 'Review 2') priority = 'Medium';
         return {
-          id: s.uid,
-          name: s.name,
+          id: s.uid || s.id,
+          name: s.name || s['Student Name'],
           project: s.projectTitle || 'Capstone Project',
           batch: s.batch || 'N/A',
           reviewStage: s.reviewStage || 'Review 1',
@@ -72,30 +72,30 @@ const ReviewerDashboard = () => {
       const drafts = reviews.filter(r => r.status === 'Draft');
       setPendingRemarks(drafts.map(d => ({
         id: d.id,
-        text: `Finalize marks for ${students.find(s => s.uid === d.studentId)?.name || 'Student'}`,
+        text: `Finalize marks for ${students.find(s => (s.uid || s.id) === d.studentId)?.name || students.find(s => (s.uid || s.id) === d.studentId)?.['Student Name'] || 'Student'}`,
         time: 'Pending'
       })));
     };
 
-    unsubs.push(FirestoreService.subscribeQuery('students', [{ field: 'reviewerId', operator: '==', value: uid }], (data) => {
+    unsubs.push(FirestoreService.subscribeQuery('students', [{ field: 'reviewerId', operator: '==', value: domainId }], (data) => {
       localStudents = data;
       calculateStats(localStudents, localReviews);
       checkLoaded();
     }, () => checkLoaded()));
 
-    unsubs.push(FirestoreService.subscribeQuery('reviews', [{ field: 'reviewerId', operator: '==', value: uid }], (data) => {
+    unsubs.push(FirestoreService.subscribeQuery('reviews', [{ field: 'reviewerId', operator: '==', value: domainId }], (data) => {
       localReviews = data;
       calculateStats(localStudents, localReviews);
       checkLoaded();
     }, () => checkLoaded()));
 
-    unsubs.push(FirestoreService.subscribeQuery('schedules', [{ field: 'reviewerId', operator: '==', value: uid }], (data) => {
+    unsubs.push(FirestoreService.subscribeQuery('schedules', [{ field: 'reviewerId', operator: '==', value: domainId }], (data) => {
       const enrichedSchedule = data.map(item => {
-        const s = localStudents.find(student => student.uid === item.studentId);
+        const s = localStudents.find(student => (student.uid || student.id) === item.studentId);
         return {
           id: item.id,
           time: item.time || '10:00 AM',
-          student: s?.name || 'Unknown Student',
+          student: s?.name || s?.['Student Name'] || 'Unknown Student',
           project: s?.projectTitle || 'Unknown Project',
           type: item.type || 'Review Meeting'
         };
@@ -105,7 +105,7 @@ const ReviewerDashboard = () => {
     }, () => checkLoaded()));
 
     return () => unsubs.forEach(unsub => unsub && unsub());
-  }, [currentUser]);
+  }, [domainUser]);
 
   if (loading) {
     return (

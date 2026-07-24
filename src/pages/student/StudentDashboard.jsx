@@ -19,7 +19,7 @@ import EmptyState from '@/components/common/EmptyState';
 import Button from '@/components/common/Button';
 
 const StudentDashboard = () => {
-  const { currentUser } = useAuth();
+  const { domainUser } = useAuth();
   const [loading, setLoading] = useState(true);
   const [studentData, setStudentData] = useState(null);
   const [projectData, setProjectData] = useState(null);
@@ -30,12 +30,21 @@ const StudentDashboard = () => {
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    if (!currentUser?.uid) return;
-    const uid = currentUser.uid;
+    if (!domainUser) return;
+    const { domainId, profile, rollNumber } = domainUser;
     const unsubs = [];
     
     setLoading(true);
     setError(null);
+
+    setStudentData(profile);
+    
+    if (profile.guideId) {
+      guideService.getById(profile.guideId).then(g => setGuideData(g));
+    }
+    if (profile.reviewerId) {
+      reviewerService.getById(profile.reviewerId).then(r => setReviewerData(r));
+    }
 
     let loadedCount = 0;
     const checkLoaded = () => {
@@ -43,39 +52,23 @@ const StudentDashboard = () => {
       if (loadedCount >= 3) setLoading(false);
     };
 
-    unsubs.push(FirestoreService.subscribeQuery('students', [{ field: 'uid', operator: '==', value: uid }], (data) => {
-      if (data.length > 0) {
-        const student = data[0];
-        setStudentData(student);
-        
-        if (student.guideId) {
-          guideService.getById(student.guideId).then(g => setGuideData(g));
-        }
-        if (student.reviewerId) {
-          reviewerService.getById(student.reviewerId).then(r => setReviewerData(r));
-        }
-      }
-      checkLoaded();
-    }, () => checkLoaded()));
-
-    unsubs.push(FirestoreService.subscribeQuery('projects', [{ field: 'members', operator: 'array-contains', value: uid }], (data) => {
+    unsubs.push(FirestoreService.subscribeQuery('projects', [{ field: 'members', operator: 'array-contains', value: domainId }], (data) => {
       setProjectData(data[0] || null);
       checkLoaded();
     }, () => checkLoaded()));
 
-    // Subscribe to reviews by looking at team Id? Wait, review collection has studentId. We can fallback to studentId or teamId
-    unsubs.push(FirestoreService.subscribeQuery('reviews', [{ field: 'studentId', operator: '==', value: uid }], (data) => {
+    unsubs.push(FirestoreService.subscribeQuery('reviews', [{ field: 'studentId', operator: '==', value: domainId }], (data) => {
       setReviews(data);
       checkLoaded();
     }, () => checkLoaded()));
 
-    unsubs.push(FirestoreService.subscribeQuery('notifications', [{ field: 'targetRole', operator: 'in', value: ['all', 'student', uid] }], (data) => {
-      // Filter for this user's notifications + global + role
+    unsubs.push(FirestoreService.subscribeQuery('notifications', [{ field: 'targetRole', operator: 'in', value: ['all', 'student', domainId] }], (data) => {
       setNotifications(data.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)));
-    }, () => {}));
+      checkLoaded();
+    }, () => checkLoaded()));
 
     return () => unsubs.forEach(unsub => unsub && unsub());
-  }, [currentUser]);
+  }, [domainUser]);
 
   if (loading) {
     return (
@@ -118,7 +111,7 @@ const StudentDashboard = () => {
             <h1 className="text-3xl font-bold text-white tracking-tight mb-2">Student Workspace</h1>
             <p className="text-slate-300 text-lg flex items-center gap-2">
               <User className="h-5 w-5" /> 
-              {studentData?.name || currentUser?.email} <span className="text-slate-500">|</span> Roll: {studentData?.rollNumber || 'N/A'}
+              {domainUser?.name || 'Student'} <span className="text-slate-500">|</span> Roll: {domainUser?.rollNumber || 'N/A'}
             </p>
           </div>
           <div className="flex flex-col items-start md:items-end w-full md:w-auto">

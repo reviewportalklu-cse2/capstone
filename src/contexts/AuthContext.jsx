@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { authService } from '@/firebase/services/authService';
 import { userService } from '@/firebase/services/userService';
+import { userResolver } from '@/firebase/services/userResolver';
 import { Loader2 } from 'lucide-react';
 
 const AuthContext = createContext();
@@ -12,6 +13,7 @@ export const useAuth = () => {
 export const AuthProvider = ({ children }) => {
   const [currentUser, setCurrentUser] = useState(null);
   const [userRole, setUserRole] = useState(null);
+  const [domainUser, setDomainUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -20,14 +22,23 @@ export const AuthProvider = ({ children }) => {
         try {
           const role = await userService.getUserRole(user.uid);
           setUserRole(role);
+          
+          if (role) {
+            const resolvedUser = await userResolver.resolveCurrentUser(user, role);
+            setDomainUser(resolvedUser);
+          } else {
+            setDomainUser(null);
+          }
         } catch (error) {
-          console.error("Error fetching user role:", error);
+          console.error("Error fetching user role or domain user:", error);
           setUserRole(null);
+          setDomainUser(null);
         }
         setCurrentUser(user);
       } else {
         setCurrentUser(null);
         setUserRole(null);
+        setDomainUser(null);
       }
       setLoading(false);
     });
@@ -42,6 +53,7 @@ export const AuthProvider = ({ children }) => {
   const value = {
     currentUser,
     userRole,
+    domainUser,
     logout,
   };
 
