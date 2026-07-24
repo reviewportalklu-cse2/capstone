@@ -45,9 +45,35 @@ export const syncService = {
     };
 
     const studentMap = new Map(allStudents.map(s => [getField(s, ['rollNumber', 'Roll Number', 'employeeId', 'Employee ID', 'Email', 'email']).toLowerCase(), s]));
-    const guideMap = new Map(allGuides.map(g => [getField(g, ['employeeId', 'Employee ID', 'email', 'Email']).toLowerCase(), g]));
-    const facultyMap = new Map(allFaculty.map(f => [getField(f, ['employeeId', 'Employee ID', 'email', 'Email']).toLowerCase(), f]));
-    const reviewerMap = new Map(allReviewers.map(r => [getField(r, ['employeeId', 'Employee ID', 'email', 'Email']).toLowerCase(), r]));
+    
+    // Support lookup by Employee ID or Email
+    const guideMap = new Map();
+    allGuides.forEach(g => {
+      const emp = getField(g, ['employeeId', 'Employee ID']).toLowerCase();
+      const em = getField(g, ['email', 'Email']).toLowerCase();
+      if (emp) guideMap.set(emp, g);
+      if (em) guideMap.set(em, g);
+      guideMap.set(g.id.toLowerCase(), g);
+    });
+
+    const facultyMap = new Map();
+    allFaculty.forEach(f => {
+      const emp = getField(f, ['employeeId', 'Employee ID']).toLowerCase();
+      const em = getField(f, ['email', 'Email']).toLowerCase();
+      if (emp) facultyMap.set(emp, f);
+      if (em) facultyMap.set(em, f);
+      facultyMap.set(f.id.toLowerCase(), f);
+    });
+
+    const reviewerMap = new Map();
+    allReviewers.forEach(r => {
+      const emp = getField(r, ['employeeId', 'Employee ID']).toLowerCase();
+      const em = getField(r, ['email', 'Email']).toLowerCase();
+      if (emp) reviewerMap.set(emp, r);
+      if (em) reviewerMap.set(em, r);
+      reviewerMap.set(r.id.toLowerCase(), r);
+    });
+
     const teamMap = new Map(allTeams.map(t => [t.teamId, t]));
 
     let stats = {
@@ -71,9 +97,27 @@ export const syncService = {
 
     const safeAdd = (arr, val) => {
       if (!val) return arr || [];
-      const res = arr || [];
+      const res = arr ? [...arr] : [];
       if (!res.includes(val)) res.push(val);
       return res;
+    };
+
+    const safeRemove = (arr, val) => {
+      if (!arr || !val) return arr || [];
+      return arr.filter(item => item !== val);
+    };
+
+    // Helper to get or init cache
+    const getEntityCache = (map, originalEntity) => {
+      if (!originalEntity) return null;
+      if (!map.has(originalEntity.id)) {
+        map.set(originalEntity.id, {
+          assignedStudents: originalEntity.assignedStudents || [],
+          assignedTeams: originalEntity.assignedTeams || [],
+          projectIds: originalEntity.projectIds || []
+        });
+      }
+      return map.get(originalEntity.id);
     };
 
     for (let i = 0; i < assignments.length; i++) {
@@ -91,19 +135,8 @@ export const syncService = {
       const batch = getField(row, ['Batch', 'batch']) || 'CSE-2';
       const section = getField(row, ['Section', 'section']) || 'A';
 
-      if (i < 5) {
-        console.log(`\n--- PARSED ROW ${i + 1} ---`);
-        console.log("Raw row object:", row);
-        console.log("Parsed IDs:", { rollNumber, teamId, guideId, facultyId, reviewerId });
-        if (!guideId || !facultyId || !reviewerId) {
-          console.warn("Missing ID(s) detected. Available columns in Excel row:", Object.keys(row));
-        }
-      }
-
       if (!rollNumber || !teamId) {
-        const msg = `Row ${i + 1}: Missing Roll Number or Team ID.`;
-        console.warn(`[SYNC ENGINE] ${msg} Skipping.`);
-        warnings.push(msg);
+        warnings.push(`Row ${i + 1}: Missing Roll Number or Team ID.`);
         continue;
       }
 
@@ -113,9 +146,7 @@ export const syncService = {
       const reviewer = reviewerMap.get(reviewerId);
 
       if (!student) {
-        const msg = `Row ${i + 1}: Cannot map student using Roll Number '${rollNumber}'. Student not found in database.`;
-        console.warn(`[SYNC ENGINE] ${msg} Skipping.`);
-        warnings.push(msg);
+        warnings.push(`Row ${i + 1}: Cannot map student using Roll Number '${rollNumber}'. Student not found in database.`);
         continue;
       }
       
@@ -123,7 +154,46 @@ export const syncService = {
       if (facultyId && !faculty) warnings.push(`Row ${i + 1}: Faculty ID '${facultyId}' not found.`);
       if (reviewerId && !reviewer) warnings.push(`Row ${i + 1}: Reviewer ID '${reviewerId}' not found.`);
 
+      // DELTA SYNCHRONIZATION: Remove student from old entities if they changed
+      const oldGuideId = student.guideId;
+      const oldFacultyId = student.facultyId;
+      const oldReviewerId = student.reviewerId;
+      const oldTeamId = student.teamId;
+
+      if (oldGuideId && guide && oldGuideId !== guide.id) {
+        const oldGuide = allGuides.find(g => g.id === oldGuideId);
+        if (oldGuide) {
+          const oldCache = getEntityCache(guidesToUpdate, oldGuide);
+          oldCache.assignedStudents = safeRemove(oldCache.assignedStudents, student.id);
+        }
+      }
+
+      if (oldFacultyId && faculty && oldFacultyId !== faculty.id) {
+        const oldFac = allFaculty.find(f => f.id === oldFacultyId);
+        if (oldFac) {
+          const oldCache = getEntityCache(facultyToUpdate, oldFac);
+          oldCache.assignedStudents = safeRemove(oldCache.assignedStudents, student.id);
+        }
+      }
+
+      if (oldReviewerId && reviewer && oldReviewerId !== reviewer.id) {
+        const oldRev = allReviewers.find(r => r.id === oldReviewerId);
+        if (oldRev) {
+          const oldCache = getEntityCache(reviewersToUpdate, oldRev);
+          oldCache.assignedStudents = safeRemove(oldCache.assignedStudents, student.id);
+        }
+      }
+
+      if (oldTeamId && oldTeamId !== teamId) {
+        let oldTeam = teamsToUpdate.get(oldTeamId) || teamMap.get(oldTeamId);
+        if (oldTeam) {
+          oldTeam = { ...oldTeam, members: safeRemove(oldTeam.members || [], student.id) };
+          teamsToUpdate.set(oldTeamId, oldTeam);
+        }
+      }
+
       // 1. Team & Project Logic
+      const projectId = `PRJ-${teamId}`;
       let currentTeam = teamsToUpdate.get(teamId) || teamMap.get(teamId);
       if (!currentTeam) {
         currentTeam = {
@@ -140,15 +210,15 @@ export const syncService = {
           section,
           status: 'Active',
           members: [],
-          projectId: `PRJ-${teamId}`,
+          projectId: projectId,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString()
         };
         stats.teamsCreated++;
         stats.projectsCreated++;
         
-        projectsToUpdate.set(`PRJ-${teamId}`, {
-          projectId: `PRJ-${teamId}`,
+        projectsToUpdate.set(projectId, {
+          projectId: projectId,
           teamId,
           projectTitle: `Project ${teamId}`,
           status: 'In Progress',
@@ -158,6 +228,11 @@ export const syncService = {
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString()
         });
+      } else {
+        // Update team metadata if it exists
+        currentTeam.guideId = guide?.id || currentTeam.guideId;
+        currentTeam.facultyId = faculty?.id || currentTeam.facultyId;
+        currentTeam.reviewerId = reviewer?.id || currentTeam.reviewerId;
       }
       
       currentTeam.members = safeAdd(currentTeam.members, student.id);
@@ -166,7 +241,7 @@ export const syncService = {
       // 2. Student Update
       studentsToUpdate.set(student.id, {
         teamId,
-        projectId: currentTeam.projectId,
+        projectId: projectId,
         guideId: guide?.id || '',
         facultyId: faculty?.id || '',
         reviewerId: reviewer?.id || '',
@@ -179,51 +254,34 @@ export const syncService = {
       stats.studentsLinked++;
       stats.studentsUpdated++;
 
-      // 3. Relationships Update
+      // 3. Add to New Relationships
       if (guide) {
-        const guideCache = guidesToUpdate.get(guide.id) || { 
-          assignedStudents: guide.assignedStudents || [], 
-          assignedTeams: guide.assignedTeams || [],
-          projectIds: guide.projectIds || []
-        };
+        const guideCache = getEntityCache(guidesToUpdate, guide);
         guideCache.assignedStudents = safeAdd(guideCache.assignedStudents, student.id);
         guideCache.assignedTeams = safeAdd(guideCache.assignedTeams, teamId);
-        guideCache.projectIds = safeAdd(guideCache.projectIds, currentTeam.projectId);
-        guideCache.studentCount = guideCache.assignedStudents.length;
-        guidesToUpdate.set(guide.id, guideCache);
-        stats.guidesUpdated++;
+        guideCache.projectIds = safeAdd(guideCache.projectIds, projectId);
       }
 
       if (faculty) {
-        const facultyCache = facultyToUpdate.get(faculty.id) || {
-          assignedStudents: faculty.assignedStudents || [],
-          assignedTeams: faculty.assignedTeams || [],
-          projectIds: faculty.projectIds || []
-        };
+        const facultyCache = getEntityCache(facultyToUpdate, faculty);
         facultyCache.assignedStudents = safeAdd(facultyCache.assignedStudents, student.id);
         facultyCache.assignedTeams = safeAdd(facultyCache.assignedTeams, teamId);
-        facultyCache.projectIds = safeAdd(facultyCache.projectIds, currentTeam.projectId);
-        facultyCache.studentCount = facultyCache.assignedStudents.length;
-        facultyToUpdate.set(faculty.id, facultyCache);
-        stats.facultyUpdated++;
+        facultyCache.projectIds = safeAdd(facultyCache.projectIds, projectId);
       }
 
       if (reviewer) {
-        const reviewerCache = reviewersToUpdate.get(reviewer.id) || {
-          assignedStudents: reviewer.assignedStudents || [],
-          assignedTeams: reviewer.assignedTeams || [],
-          projectIds: reviewer.projectIds || []
-        };
+        const reviewerCache = getEntityCache(reviewersToUpdate, reviewer);
         reviewerCache.assignedStudents = safeAdd(reviewerCache.assignedStudents, student.id);
         reviewerCache.assignedTeams = safeAdd(reviewerCache.assignedTeams, teamId);
-        reviewerCache.projectIds = safeAdd(reviewerCache.projectIds, currentTeam.projectId);
-        reviewerCache.studentCount = reviewerCache.assignedStudents.length;
-        reviewersToUpdate.set(reviewer.id, reviewerCache);
-        stats.reviewersUpdated++;
+        reviewerCache.projectIds = safeAdd(reviewerCache.projectIds, projectId);
       }
     }
 
-    // 4. Batch Execution
+    // 4. Batch Execution - Compute student counts correctly
+    guidesToUpdate.forEach(g => g.studentCount = g.assignedStudents.length);
+    facultyToUpdate.forEach(f => f.studentCount = f.assignedStudents.length);
+    reviewersToUpdate.forEach(r => r.studentCount = r.assignedStudents.length);
+
     console.log(`[SYNC ENGINE] Preparing Batches. Teams: ${teamsToUpdate.size}, Students: ${studentsToUpdate.size}, Guides: ${guidesToUpdate.size}`);
     
     let currentBatch = writeBatch(db);
