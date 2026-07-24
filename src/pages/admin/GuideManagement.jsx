@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { useAdminNavigation } from '@/hooks/useAdminNavigation';
+import { useAdminStats } from '@/contexts/AdminStatsContext';
 import Card from '@/components/common/Card';
 import Table from '@/components/common/Table';
 import Badge from '@/components/common/Badge';
@@ -16,9 +17,9 @@ const GuideManagement = () => {
   const navigationItems = useAdminNavigation();
 
   const { currentUser } = useAuth();
-  const [guides, setGuides] = useState([]);
-  const [students, setStudents] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const { data, loading: contextLoading } = useAdminStats();
+  const { guides, students } = data;
+  
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEdit, setIsEdit] = useState(false);
@@ -31,26 +32,6 @@ const GuideManagement = () => {
     department: '',
     designation: ''
   });
-
-  useEffect(() => {
-    fetchData();
-  }, []);
-
-  const fetchData = async () => {
-    setLoading(true);
-    try {
-      const [guData, stData] = await Promise.all([
-        guideService.getAll(),
-        studentService.getAll()
-      ]);
-      setGuides(guData || []);
-      setStudents(stData || []);
-    } catch (error) {
-      console.error("Error fetching data:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleOpenEdit = (guide) => {
     setIsEdit(true);
@@ -98,7 +79,6 @@ const GuideManagement = () => {
       );
 
       setIsModalOpen(false);
-      fetchData();
     } catch (error) {
       console.error("Error saving guide:", error);
       alert("Error saving guide. Please try again.");
@@ -119,7 +99,6 @@ const GuideManagement = () => {
       try {
         await guideService.delete(guide.id);
         await auditService.log(currentUser.uid, 'DELETE_GUIDE', 'Guide', guide, null);
-        fetchData();
       } catch (err) {
         console.error("Error deleting guide:", err);
       }
@@ -212,7 +191,7 @@ const GuideManagement = () => {
         </div>
 
         <Card className="overflow-hidden p-0">
-          {loading ? (
+          {contextLoading ? (
             <div className="flex justify-center items-center h-64">
               <Loader2 className="h-8 w-8 text-primary-500 animate-spin" />
             </div>

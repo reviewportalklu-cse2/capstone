@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { useAdminNavigation } from '@/hooks/useAdminNavigation';
+import { useAdminStats } from '@/contexts/AdminStatsContext';
 import Card from '@/components/common/Card';
 import Table from '@/components/common/Table';
 import Badge from '@/components/common/Badge';
@@ -16,9 +17,9 @@ const ReviewerManagement = () => {
   const navigationItems = useAdminNavigation();
 
   const { currentUser } = useAuth();
-  const [reviewers, setReviewers] = useState([]);
-  const [students, setStudents] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const { data, loading: contextLoading } = useAdminStats();
+  const { reviewers, students } = data;
+  
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEdit, setIsEdit] = useState(false);
@@ -31,26 +32,6 @@ const ReviewerManagement = () => {
     department: '',
     assignedBatch: ''
   });
-
-  useEffect(() => {
-    fetchData();
-  }, []);
-
-  const fetchData = async () => {
-    setLoading(true);
-    try {
-      const [reData, stData] = await Promise.all([
-        reviewerService.getAll(),
-        studentService.getAll()
-      ]);
-      setReviewers(reData || []);
-      setStudents(stData || []);
-    } catch (error) {
-      console.error("Error fetching data:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleOpenEdit = (reviewer) => {
     setIsEdit(true);
@@ -98,7 +79,6 @@ const ReviewerManagement = () => {
       );
 
       setIsModalOpen(false);
-      fetchData();
     } catch (error) {
       console.error("Error saving reviewer:", error);
       alert("Error saving reviewer. Please try again.");
@@ -118,7 +98,6 @@ const ReviewerManagement = () => {
       try {
         await reviewerService.delete(reviewer.id);
         await auditService.log(currentUser.uid, 'DELETE_REVIEWER', 'Reviewer', reviewer, null);
-        fetchData();
       } catch (err) {
         console.error("Error deleting reviewer:", err);
       }
@@ -211,7 +190,7 @@ const ReviewerManagement = () => {
         </div>
 
         <Card className="overflow-hidden p-0">
-          {loading ? (
+          {contextLoading ? (
             <div className="flex justify-center items-center h-64">
               <Loader2 className="h-8 w-8 text-primary-500 animate-spin" />
             </div>

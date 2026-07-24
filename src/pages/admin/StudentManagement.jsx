@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { useAdminNavigation } from '@/hooks/useAdminNavigation';
+import { useAdminStats } from '@/contexts/AdminStatsContext';
 import Card from '@/components/common/Card';
 import Table from '@/components/common/Table';
 import Badge from '@/components/common/Badge';
@@ -15,13 +16,9 @@ const StudentManagement = () => {
   const navigationItems = useAdminNavigation();
 
   const { currentUser } = useAuth();
-  const [students, setStudents] = useState([]);
-  const [guides, setGuides] = useState([]);
-  const [reviewers, setReviewers] = useState([]);
-  const [faculty, setFaculty] = useState([]);
-  const [projects, setProjects] = useState([]);
+  const { data, loading: contextLoading } = useAdminStats();
+  const { students, guides, reviewers, faculty, projects } = data;
   
-  const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEdit, setIsEdit] = useState(false);
@@ -39,32 +36,6 @@ const StudentManagement = () => {
     facultyId: '',
     projectId: ''
   });
-
-  useEffect(() => {
-    fetchData();
-  }, []);
-
-  const fetchData = async () => {
-    setLoading(true);
-    try {
-      const [stData, guData, reData, faData, prData] = await Promise.all([
-        studentService.getAll(),
-        guideService.getAll(),
-        reviewerService.getAll(),
-        facultyService.getAll(),
-        projectService.getAll()
-      ]);
-      setStudents(stData || []);
-      setGuides(guData || []);
-      setReviewers(reData || []);
-      setFaculty(faData || []);
-      setProjects(prData || []);
-    } catch (error) {
-      console.error("Error fetching data:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleOpenEdit = (student) => {
     setIsEdit(true);
@@ -134,7 +105,6 @@ const StudentManagement = () => {
       );
 
       setIsModalOpen(false);
-      fetchData();
     } catch (error) {
       console.error("Error saving student:", error);
       alert("Error saving student. Please try again.");
@@ -148,7 +118,6 @@ const StudentManagement = () => {
       try {
         await studentService.delete(student.id);
         await auditService.log(currentUser.uid, 'DELETE_STUDENT', 'Student', student, null);
-        fetchData();
       } catch (err) {
         console.error("Error deleting student:", err);
       }
@@ -235,7 +204,7 @@ const StudentManagement = () => {
         </div>
 
         <Card className="overflow-hidden p-0">
-          {loading ? (
+          {contextLoading ? (
             <div className="flex justify-center items-center h-64">
               <Loader2 className="h-8 w-8 text-primary-500 animate-spin" />
             </div>

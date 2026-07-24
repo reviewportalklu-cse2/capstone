@@ -15,11 +15,21 @@ export const AdminStatsProvider = ({ children }) => {
     projects: 0,
     reviews: 0
   });
+  const [data, setData] = useState({
+    students: [],
+    guides: [],
+    faculty: [],
+    reviewers: [],
+    teams: [],
+    projects: [],
+    reviews: []
+  });
+  
   const [loading, setLoading] = useState(true);
   const [recentReviews, setRecentReviews] = useState([]);
 
   useEffect(() => {
-    // Only fetch if admin is logged in (or we assume this context is only used in AdminRoutes)
+    // Only fetch if admin is logged in
     if (!currentUser) return;
     
     setLoading(true);
@@ -31,39 +41,46 @@ export const AdminStatsProvider = ({ children }) => {
       if (loadedCount >= 7) setLoading(false);
     };
 
-    unsubs.push(FirestoreService.subscribeAll('students', (data) => {
-      setStats(prev => ({...prev, students: data.length}));
+    unsubs.push(FirestoreService.subscribeAll('students', (res) => {
+      setData(prev => ({...prev, students: res}));
+      setStats(prev => ({...prev, students: res.length}));
       checkLoaded();
     }, () => checkLoaded()));
     
-    unsubs.push(FirestoreService.subscribeAll('projects', (data) => {
-      setStats(prev => ({...prev, projects: data.length}));
+    unsubs.push(FirestoreService.subscribeAll('projects', (res) => {
+      setData(prev => ({...prev, projects: res}));
+      setStats(prev => ({...prev, projects: res.length}));
       checkLoaded();
     }, () => checkLoaded()));
     
-    unsubs.push(FirestoreService.subscribeAll('guides', (data) => {
-      setStats(prev => ({...prev, guides: data.length}));
+    unsubs.push(FirestoreService.subscribeAll('guides', (res) => {
+      setData(prev => ({...prev, guides: res}));
+      setStats(prev => ({...prev, guides: res.length}));
       checkLoaded();
     }, () => checkLoaded()));
     
-    unsubs.push(FirestoreService.subscribeAll('reviewers', (data) => {
-      setStats(prev => ({...prev, reviewers: data.length}));
+    unsubs.push(FirestoreService.subscribeAll('reviewers', (res) => {
+      setData(prev => ({...prev, reviewers: res}));
+      setStats(prev => ({...prev, reviewers: res.length}));
       checkLoaded();
     }, () => checkLoaded()));
     
-    unsubs.push(FirestoreService.subscribeAll('classroomFaculty', (data) => {
-      setStats(prev => ({...prev, faculty: data.length}));
+    unsubs.push(FirestoreService.subscribeAll('classroomFaculty', (res) => {
+      setData(prev => ({...prev, faculty: res}));
+      setStats(prev => ({...prev, faculty: res.length}));
       checkLoaded();
     }, () => checkLoaded()));
 
-    unsubs.push(FirestoreService.subscribeAll('teams', (data) => {
-      setStats(prev => ({...prev, teams: data.length}));
+    unsubs.push(FirestoreService.subscribeAll('teams', (res) => {
+      setData(prev => ({...prev, teams: res}));
+      setStats(prev => ({...prev, teams: res.length}));
       checkLoaded();
     }, () => checkLoaded()));
     
-    unsubs.push(FirestoreService.subscribeAll('reviews', (data) => {
-      setStats(prev => ({...prev, reviews: data.length}));
-      const sorted = [...data].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0, 5);
+    unsubs.push(FirestoreService.subscribeAll('reviews', (res) => {
+      setData(prev => ({...prev, reviews: res}));
+      setStats(prev => ({...prev, reviews: res.length}));
+      const sorted = [...res].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0, 5);
       setRecentReviews(sorted);
       checkLoaded();
     }, () => checkLoaded()));
@@ -72,7 +89,7 @@ export const AdminStatsProvider = ({ children }) => {
   }, [currentUser]);
 
   return (
-    <AdminStatsContext.Provider value={{ stats, loading, recentReviews }}>
+    <AdminStatsContext.Provider value={{ stats, data, loading, recentReviews }}>
       {children}
     </AdminStatsContext.Provider>
   );
