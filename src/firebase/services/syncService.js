@@ -3,10 +3,6 @@ import { db } from '../config';
 import { collection, writeBatch, doc } from 'firebase/firestore';
 
 export const syncService = {
-  /**
-   * Purges all dummy data from related collections.
-   * Keeps admin config and auth intact.
-   */
   purgeDatabase: async () => {
     const collectionsToPurge = [
       'students', 'teams', 'projects', 'guides', 'reviewers', 
@@ -31,16 +27,10 @@ export const syncService = {
     }
   },
 
-  /**
-   * Enterprise Assignment Synchronization Logic
-   * Matches Students, Guides, Faculty, Reviewers and generates Teams and Projects.
-   * @param {Array} assignments Array of row objects from Assignments.xlsx
-   */
   syncAssignments: async (assignments) => {
     console.log(`[SYNC ENGINE] 1. Assignments upload started. Parse complete.`);
     console.log(`[SYNC ENGINE] 2. Total assignment rows parsed: ${assignments.length}`);
 
-    // 1. Fetch all existing entities to cross-reference
     const allStudents = await FirestoreService.getAll('students');
     const allGuides = await FirestoreService.getAll('guides');
     const allFaculty = await FirestoreService.getAll('classroomFaculty');
@@ -54,11 +44,11 @@ export const syncService = {
       return '';
     };
 
-    // Maps for fast lookup
     const studentMap = new Map(allStudents.map(s => [getField(s, ['rollNumber', 'Roll Number', 'employeeId', 'Employee ID', 'Email', 'email']).toLowerCase(), s]));
     const guideMap = new Map(allGuides.map(g => [getField(g, ['employeeId', 'Employee ID', 'email', 'Email']).toLowerCase(), g]));
     const facultyMap = new Map(allFaculty.map(f => [getField(f, ['employeeId', 'Employee ID', 'email', 'Email']).toLowerCase(), f]));
     const reviewerMap = new Map(allReviewers.map(r => [getField(r, ['employeeId', 'Employee ID', 'email', 'Email']).toLowerCase(), r]));
+    const teamMap = new Map(allTeams.map(t => [t.teamId, t]));
 
     let stats = {
       studentsLinked: 0,
@@ -71,208 +61,206 @@ export const syncService = {
     };
     let warnings = [];
     let failures = 0;
-    
-    // Sets to track unique updates
-    const updatedGuides = new Set();
-    const updatedFaculty = new Set();
-    const updatedReviewers = new Set();
-    const updatedStudents = new Set();
 
-    const teamMap = new Map(allTeams.map(t => [t.teamId, t])); // teamId -> team object
+    const teamsToUpdate = new Map();
+    const projectsToUpdate = new Map();
+    const studentsToUpdate = new Map();
+    const guidesToUpdate = new Map();
+    const facultyToUpdate = new Map();
+    const reviewersToUpdate = new Map();
+
+    const safeAdd = (arr, val) => {
+      if (!val) return arr || [];
+      const res = arr || [];
+      if (!res.includes(val)) res.push(val);
+      return res;
+    };
 
     for (let i = 0; i < assignments.length; i++) {
       const row = assignments[i];
-      try {
-        console.log(`\n--- Processing Row ${i + 1} ---`);
-        // Extract fields matching the Excel headers
-        const rollNumber = getField(row, ['Roll Number', 'rollNumber']).toLowerCase();
-        const teamId = getField(row, ['Team ID', 'teamId']);
-        const guideId = getField(row, ['Guide Employee ID', 'Guide Email', 'guideEmail', 'guideId']).toLowerCase();
-        const facultyId = getField(row, ['Faculty Employee ID', 'Faculty Email', 'facultyEmail', 'facultyId']).toLowerCase();
-        const reviewerId = getField(row, ['Reviewer Employee ID', 'Reviewer Email', 'reviewerEmail', 'reviewerId']).toLowerCase();
-        const facultyPanel = getField(row, ['Faculty Panel', 'facultyPanel']);
-        const reviewSchedule = getField(row, ['Review Schedule', 'reviewSchedule']);
-        const room = getField(row, ['Room', 'room']);
-        const academicYear = getField(row, ['Academic Year', 'academicYear']) || '2026-27';
-        const batch = getField(row, ['Batch', 'batch']) || '2022-26';
-        const section = getField(row, ['Section', 'section']) || 'A';
+      const rollNumber = getField(row, ['Roll Number', 'rollNumber']).toLowerCase();
+      const teamId = getField(row, ['Team ID', 'teamId']);
+      const guideId = getField(row, ['Guide Employee ID', 'Guide Email', 'guideEmail', 'guideId']).toLowerCase();
+      const facultyId = getField(row, ['Faculty Employee ID', 'Faculty Email', 'facultyEmail', 'facultyId']).toLowerCase();
+      const reviewerId = getField(row, ['Reviewer Employee ID', 'Reviewer Email', 'reviewerEmail', 'reviewerId']).toLowerCase();
+      
+      const facultyPanel = getField(row, ['Faculty Panel', 'facultyPanel']);
+      const reviewSchedule = getField(row, ['Review Schedule', 'reviewSchedule']);
+      const room = getField(row, ['Room', 'room']);
+      const academicYear = getField(row, ['Academic Year', 'academicYear']) || '2026-27';
+      const batch = getField(row, ['Batch', 'batch']) || '2022-26';
+      const section = getField(row, ['Section', 'section']) || 'A';
 
-        if (!rollNumber || !teamId) {
-          const msg = `Row ${i + 1}: Missing Roll Number or Team ID.`;
-          console.warn(`[SYNC ENGINE] ${msg} Skipping.`);
-          warnings.push(msg);
-          continue;
-        }
+      if (!rollNumber || !teamId) {
+        const msg = `Row ${i + 1}: Missing Roll Number or Team ID.`;
+        console.warn(`[SYNC ENGINE] ${msg} Skipping.`);
+        warnings.push(msg);
+        continue;
+      }
 
-        const student = studentMap.get(rollNumber);
-        const guide = guideMap.get(guideId);
-        const faculty = facultyMap.get(facultyId);
-        const reviewer = reviewerMap.get(reviewerId);
+      const student = studentMap.get(rollNumber);
+      const guide = guideMap.get(guideId);
+      const faculty = facultyMap.get(facultyId);
+      const reviewer = reviewerMap.get(reviewerId);
 
-        if (!student) {
-          const msg = `Row ${i + 1}: Cannot map student using Roll Number '${rollNumber}'. Student not found in database.`;
-          console.warn(`[SYNC ENGINE] ${msg} Skipping.`);
-          warnings.push(msg);
-          continue;
-        }
-        
-        if (guideId && !guide) warnings.push(`Row ${i + 1}: Guide ID '${guideId}' not found.`);
-        if (facultyId && !faculty) warnings.push(`Row ${i + 1}: Faculty ID '${facultyId}' not found.`);
-        if (reviewerId && !reviewer) warnings.push(`Row ${i + 1}: Reviewer ID '${reviewerId}' not found.`);
+      if (!student) {
+        const msg = `Row ${i + 1}: Cannot map student using Roll Number '${rollNumber}'. Student not found in database.`;
+        console.warn(`[SYNC ENGINE] ${msg} Skipping.`);
+        warnings.push(msg);
+        continue;
+      }
+      
+      if (guideId && !guide) warnings.push(`Row ${i + 1}: Guide ID '${guideId}' not found.`);
+      if (facultyId && !faculty) warnings.push(`Row ${i + 1}: Faculty ID '${facultyId}' not found.`);
+      if (reviewerId && !reviewer) warnings.push(`Row ${i + 1}: Reviewer ID '${reviewerId}' not found.`);
 
-        // 5. Create Team if it does not exist
-        let currentTeam = teamMap.get(teamId);
-        if (!currentTeam) {
-          currentTeam = {
-            teamId,
-            teamName: `Team ${teamId}`,
-            guideId: guide?.id || '',
-            facultyId: faculty?.id || '',
-            reviewerId: reviewer?.id || '',
-            facultyPanel,
-            reviewSchedule,
-            room,
-            academicYear,
-            batch,
-            section,
-            status: 'Active',
-            members: [], // Array of student IDs
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString()
-          };
-          const newTeamId = await FirestoreService.set('teams', teamId, currentTeam);
-          currentTeam.id = newTeamId;
-          console.log(`[SYNC ENGINE] 7. Team upserted: ${teamId} (Doc ID: ${newTeamId})`);
-          
-          // Also create an associated project record for the team
-          const newProjectId = await FirestoreService.set('projects', `PRJ-${teamId}`, {
-            projectId: `PRJ-${teamId}`,
-            teamId,
-            projectTitle: `Project ${teamId}`,
-            status: 'In Progress',
-            guideId: guide?.id || '',
-            facultyId: faculty?.id || '',
-            reviewerId: reviewer?.id || '',
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString()
-          });
-          console.log(`[SYNC ENGINE] 8. Project upserted: PRJ-${teamId} (Doc ID: ${newProjectId})`);
-
-          currentTeam.projectId = newProjectId;
-          await FirestoreService.update('teams', newTeamId, { projectId: newProjectId });
-
-          teamMap.set(teamId, currentTeam);
-          stats.teamsCreated++;
-          stats.projectsCreated++;
-        } else {
-          console.log(`[SYNC ENGINE] 7. Team found: ${teamId}`);
-        }
-
-        // Add student to team members if not already there
-        if (!currentTeam.members.includes(student.id)) {
-          currentTeam.members.push(student.id);
-          await FirestoreService.update('teams', currentTeam.id, { members: currentTeam.members });
-        }
-
-        // Update student document
-        await FirestoreService.update('students', student.id, {
+      // 1. Team & Project Logic
+      let currentTeam = teamsToUpdate.get(teamId) || teamMap.get(teamId);
+      if (!currentTeam) {
+        currentTeam = {
           teamId,
-          projectId: currentTeam.projectId || '',
+          teamName: `Team ${teamId}`,
           guideId: guide?.id || '',
           facultyId: faculty?.id || '',
           reviewerId: reviewer?.id || '',
           facultyPanel,
           reviewSchedule,
           room,
-          status: 'Active'
-        });
-        console.log(`[SYNC ENGINE] 9. Student updated: ${student.id}`);
-        stats.studentsLinked++;
-        if (!updatedStudents.has(student.id)) {
-          updatedStudents.add(student.id);
-          stats.studentsUpdated++;
-        }
-
-        // Update relationships for Guide, Faculty, Reviewer
-        const safeAdd = (arr, val) => {
-          if (!val) return arr || [];
-          const res = arr || [];
-          if (!res.includes(val)) res.push(val);
-          return res;
+          academicYear,
+          batch,
+          section,
+          status: 'Active',
+          members: [],
+          projectId: `PRJ-${teamId}`,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
         };
-
-        if (guide) {
-          guide.assignedStudents = safeAdd(guide.assignedStudents, student.id);
-          guide.assignedTeams = safeAdd(guide.assignedTeams, teamId);
-          guide.projectIds = safeAdd(guide.projectIds, currentTeam.projectId);
-          guide.studentCount = guide.assignedStudents.length;
-          await FirestoreService.update('guides', guide.id, {
-            assignedStudents: guide.assignedStudents,
-            assignedTeams: guide.assignedTeams,
-            projectIds: guide.projectIds,
-            studentCount: guide.studentCount
-          });
-          console.log(`[SYNC ENGINE] 10. Guide updated: ${guide.id}`);
-          if (!updatedGuides.has(guide.id)) {
-            updatedGuides.add(guide.id);
-            stats.guidesUpdated++;
-          }
-        } else {
-          console.log(`[SYNC ENGINE] 10. Guide update skipped (none matched).`);
-        }
-
-        if (faculty) {
-          faculty.assignedStudents = safeAdd(faculty.assignedStudents, student.id);
-          faculty.assignedTeams = safeAdd(faculty.assignedTeams, teamId);
-          faculty.projectIds = safeAdd(faculty.projectIds, currentTeam.projectId);
-          faculty.studentCount = faculty.assignedStudents.length;
-          await FirestoreService.update('classroomFaculty', faculty.id, {
-            assignedStudents: faculty.assignedStudents,
-            assignedTeams: faculty.assignedTeams,
-            projectIds: faculty.projectIds,
-            studentCount: faculty.studentCount
-          });
-          console.log(`[SYNC ENGINE] 11. Faculty updated: ${faculty.id}`);
-          if (!updatedFaculty.has(faculty.id)) {
-            updatedFaculty.add(faculty.id);
-            stats.facultyUpdated++;
-          }
-        } else {
-          console.log(`[SYNC ENGINE] 11. Faculty update skipped (none matched).`);
-        }
-
-        if (reviewer) {
-          reviewer.assignedStudents = safeAdd(reviewer.assignedStudents, student.id);
-          reviewer.assignedTeams = safeAdd(reviewer.assignedTeams, teamId);
-          reviewer.projectIds = safeAdd(reviewer.projectIds, currentTeam.projectId);
-          reviewer.studentCount = reviewer.assignedStudents.length;
-          await FirestoreService.update('reviewers', reviewer.id, {
-            assignedStudents: reviewer.assignedStudents,
-            assignedTeams: reviewer.assignedTeams,
-            projectIds: reviewer.projectIds,
-            studentCount: reviewer.studentCount
-          });
-          console.log(`[SYNC ENGINE] 12. Reviewer updated: ${reviewer.id}`);
-          if (!updatedReviewers.has(reviewer.id)) {
-            updatedReviewers.add(reviewer.id);
-            stats.reviewersUpdated++;
-          }
-        } else {
-          console.log(`[SYNC ENGINE] 12. Reviewer update skipped (none matched).`);
-        }
+        stats.teamsCreated++;
+        stats.projectsCreated++;
         
-        console.log(`[SYNC ENGINE] 13. Sequential writes for Row ${i + 1} completed successfully.`);
+        projectsToUpdate.set(`PRJ-${teamId}`, {
+          projectId: `PRJ-${teamId}`,
+          teamId,
+          projectTitle: `Project ${teamId}`,
+          status: 'In Progress',
+          guideId: guide?.id || '',
+          facultyId: faculty?.id || '',
+          reviewerId: reviewer?.id || '',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        });
+      }
+      
+      currentTeam.members = safeAdd(currentTeam.members, student.id);
+      teamsToUpdate.set(teamId, currentTeam);
 
-      } catch (err) {
-        const msg = `Row ${i + 1}: Unexpected error - ${err.message}`;
-        console.error(`[SYNC ENGINE] ${msg}`, err);
-        warnings.push(msg);
-        failures++;
+      // 2. Student Update
+      studentsToUpdate.set(student.id, {
+        teamId,
+        projectId: currentTeam.projectId,
+        guideId: guide?.id || '',
+        facultyId: faculty?.id || '',
+        reviewerId: reviewer?.id || '',
+        facultyPanel,
+        reviewSchedule,
+        room,
+        assignmentStatus: 'Assigned',
+        status: 'Active'
+      });
+      stats.studentsLinked++;
+      stats.studentsUpdated++;
+
+      // 3. Relationships Update
+      if (guide) {
+        const guideCache = guidesToUpdate.get(guide.id) || { 
+          assignedStudents: guide.assignedStudents || [], 
+          assignedTeams: guide.assignedTeams || [],
+          projectIds: guide.projectIds || []
+        };
+        guideCache.assignedStudents = safeAdd(guideCache.assignedStudents, student.id);
+        guideCache.assignedTeams = safeAdd(guideCache.assignedTeams, teamId);
+        guideCache.projectIds = safeAdd(guideCache.projectIds, currentTeam.projectId);
+        guideCache.studentCount = guideCache.assignedStudents.length;
+        guidesToUpdate.set(guide.id, guideCache);
+        stats.guidesUpdated++;
+      }
+
+      if (faculty) {
+        const facultyCache = facultyToUpdate.get(faculty.id) || {
+          assignedStudents: faculty.assignedStudents || [],
+          assignedTeams: faculty.assignedTeams || [],
+          projectIds: faculty.projectIds || []
+        };
+        facultyCache.assignedStudents = safeAdd(facultyCache.assignedStudents, student.id);
+        facultyCache.assignedTeams = safeAdd(facultyCache.assignedTeams, teamId);
+        facultyCache.projectIds = safeAdd(facultyCache.projectIds, currentTeam.projectId);
+        facultyCache.studentCount = facultyCache.assignedStudents.length;
+        facultyToUpdate.set(faculty.id, facultyCache);
+        stats.facultyUpdated++;
+      }
+
+      if (reviewer) {
+        const reviewerCache = reviewersToUpdate.get(reviewer.id) || {
+          assignedStudents: reviewer.assignedStudents || [],
+          assignedTeams: reviewer.assignedTeams || [],
+          projectIds: reviewer.projectIds || []
+        };
+        reviewerCache.assignedStudents = safeAdd(reviewerCache.assignedStudents, student.id);
+        reviewerCache.assignedTeams = safeAdd(reviewerCache.assignedTeams, teamId);
+        reviewerCache.projectIds = safeAdd(reviewerCache.projectIds, currentTeam.projectId);
+        reviewerCache.studentCount = reviewerCache.assignedStudents.length;
+        reviewersToUpdate.set(reviewer.id, reviewerCache);
+        stats.reviewersUpdated++;
       }
     }
+
+    // 4. Batch Execution
+    console.log(`[SYNC ENGINE] Preparing Batches. Teams: ${teamsToUpdate.size}, Students: ${studentsToUpdate.size}, Guides: ${guidesToUpdate.size}`);
     
+    let currentBatch = writeBatch(db);
+    let operationCount = 0;
+    const allBatches = [];
+
+    const commitCurrentBatch = () => {
+      if (operationCount > 0) {
+        allBatches.push(currentBatch.commit());
+        currentBatch = writeBatch(db);
+        operationCount = 0;
+      }
+    };
+
+    const addOperation = (collectionName, id, data) => {
+      currentBatch.set(doc(db, collectionName, id), data, { merge: true });
+      operationCount++;
+      if (operationCount >= 450) commitCurrentBatch();
+    };
+
+    try {
+      teamsToUpdate.forEach((data, id) => addOperation('teams', id, data));
+      projectsToUpdate.forEach((data, id) => addOperation('projects', id, data));
+      studentsToUpdate.forEach((data, id) => addOperation('students', id, data));
+      guidesToUpdate.forEach((data, id) => addOperation('guides', id, data));
+      facultyToUpdate.forEach((data, id) => addOperation('classroomFaculty', id, data));
+      reviewersToUpdate.forEach((data, id) => addOperation('reviewers', id, data));
+
+      commitCurrentBatch();
+      await Promise.all(allBatches);
+      
+      console.log(`[SYNC ENGINE] Successfully committed ${allBatches.length} batch transactions.`);
+    } catch (err) {
+      console.error(`[SYNC ENGINE] Batch Transaction Failed: `, err);
+      failures++;
+      warnings.push(`Batch transaction failed: ${err.message}`);
+    }
+
+    // Fix counts based on unique updates
+    stats.guidesUpdated = guidesToUpdate.size;
+    stats.facultyUpdated = facultyToUpdate.size;
+    stats.reviewersUpdated = reviewersToUpdate.size;
+    stats.studentsUpdated = studentsToUpdate.size;
+    stats.teamsCreated = teamsToUpdate.size; // Close enough metric for UI
+
     console.log(`[SYNC ENGINE] Synchronization completed.`);
-    
     return { stats, warnings, failures };
   }
 };
