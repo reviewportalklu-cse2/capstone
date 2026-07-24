@@ -85,7 +85,7 @@ const StudentEvaluationDetails = () => {
                 <Badge variant="primary">Roll: {student.rollNumber || student.id}</Badge>
               </div>
               <p className="text-xs text-gray-500 mt-1">
-                {student.email} • Dept: {student.department || 'CSE'} • Sec: {student.section || 'A'} • Batch: {student.batch || '2022-26'}
+                {student.email} • Dept: {student.department || 'CSE'} • Sec: {student.section || 'A'} • Batch: {student.batch || 'CSE-2'}
               </p>
             </div>
           </div>

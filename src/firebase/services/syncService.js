@@ -88,7 +88,7 @@ export const syncService = {
       const reviewSchedule = getField(row, ['Review Schedule', 'reviewSchedule']);
       const room = getField(row, ['Room', 'room']);
       const academicYear = getField(row, ['Academic Year', 'academicYear']) || '2026-27';
-      const batch = getField(row, ['Batch', 'batch']) || '2022-26';
+      const batch = getField(row, ['Batch', 'batch']) || 'CSE-2';
       const section = getField(row, ['Section', 'section']) || 'A';
 
       if (i < 5) {
