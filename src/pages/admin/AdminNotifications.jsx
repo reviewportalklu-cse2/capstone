@@ -24,20 +24,16 @@ const AdminNotifications = () => {
   const [success, setSuccess] = useState(false);
 
   useEffect(() => {
-    fetchHistory();
-  }, []);
-
-  const fetchHistory = async () => {
-    try {
-      // For this demo we'll fetch all notifications and just filter to those sent by Admin
-      // In production we'd use a query. We'll simulate this by showing all for now.
-      const notifs = await notificationService.getAll();
-      // Sort by date desc
+    const unsub = FirestoreService.subscribeAll('notifications', (notifs) => {
       setHistory(notifs.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0, 10));
-    } catch (err) {
+    }, (err) => {
       console.error(err);
-    }
-  };
+    });
+
+    return () => {
+      if (unsub) unsub();
+    };
+  }, []);
 
   const handleSend = async (e) => {
     e.preventDefault();
@@ -70,7 +66,6 @@ const AdminNotifications = () => {
 
       setSuccess(true);
       setFormData({ title: '', message: '', targetRole: 'all', priority: 'normal' });
-      fetchHistory();
       
       setTimeout(() => setSuccess(false), 3000);
     } catch (err) {

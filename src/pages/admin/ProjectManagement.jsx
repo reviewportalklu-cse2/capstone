@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { useAdminNavigation } from '@/hooks/useAdminNavigation';
+import { useAdminStats } from '@/contexts/AdminStatsContext';
 import Card from '@/components/common/Card';
 import Table from '@/components/common/Table';
 import Badge from '@/components/common/Badge';
@@ -16,10 +17,9 @@ const ProjectManagement = () => {
   const navigationItems = useAdminNavigation();
 
   const { currentUser } = useAuth();
-  const [projects, setProjects] = useState([]);
-  const [students, setStudents] = useState([]);
-  const [guides, setGuides] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const { data, loading: contextLoading } = useAdminStats();
+  const { projects, students, guides } = data;
+  
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEdit, setIsEdit] = useState(false);
@@ -33,28 +33,6 @@ const ProjectManagement = () => {
     teamName: '',
     status: 'Active'
   });
-
-  useEffect(() => {
-    fetchData();
-  }, []);
-
-  const fetchData = async () => {
-    setLoading(true);
-    try {
-      const [prData, stData, guData] = await Promise.all([
-        projectService.getAll(),
-        studentService.getAll(),
-        guideService.getAll()
-      ]);
-      setProjects(prData || []);
-      setStudents(stData || []);
-      setGuides(guData || []);
-    } catch (error) {
-      console.error("Error fetching data:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleOpenEdit = (project) => {
     setIsEdit(true);
@@ -103,7 +81,6 @@ const ProjectManagement = () => {
       );
 
       setIsModalOpen(false);
-      fetchData();
     } catch (error) {
       console.error("Error saving project:", error);
       alert("Error saving project. Please try again.");
@@ -123,7 +100,6 @@ const ProjectManagement = () => {
       try {
         await projectService.delete(project.id);
         await auditService.log(currentUser.uid, 'DELETE_PROJECT', 'Project', project, null);
-        fetchData();
       } catch (err) {
         console.error("Error deleting project:", err);
       }
@@ -144,11 +120,15 @@ const ProjectManagement = () => {
     exportToCsv('capstoneflow_projects.csv', dataToExport);
   };
 
-  const filteredProjects = projects.filter(p => 
-    p.title?.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    p.teamName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    p.domain?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredProjects = projects.filter(p => {
+    if (!searchTerm) return true;
+    const term = searchTerm.toLowerCase();
+    return (
+      (p.title || '').toLowerCase().includes(term) || 
+      (p.teamName || '').toLowerCase().includes(term) ||
+      (p.domain || '').toLowerCase().includes(term)
+    );
+  });
 
   const columns = [
     { 
@@ -220,7 +200,7 @@ const ProjectManagement = () => {
         </div>
 
         <Card className="overflow-hidden p-0">
-          {loading ? (
+          {contextLoading ? (
             <div className="flex justify-center items-center h-64">
               <Loader2 className="h-8 w-8 text-primary-500 animate-spin" />
             </div>

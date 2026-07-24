@@ -12,20 +12,19 @@ const Reports = () => {
   const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
-    fetchReports();
-  }, []);
-
-  const fetchReports = async () => {
-    try {
-      setIsLoading(true);
-      const data = await reportService.getAll();
-      setReports(data);
-    } catch (error) {
-      console.error('Error fetching reports:', error);
-    } finally {
+    setIsLoading(true);
+    const unsub = FirestoreService.subscribeAll('reports', (data) => {
+      setReports(data || []);
       setIsLoading(false);
-    }
-  };
+    }, (error) => {
+      console.error('Error fetching reports:', error);
+      setIsLoading(false);
+    });
+    
+    return () => {
+      if (unsub) unsub();
+    };
+  }, []);
 
   const filteredReports = reports.filter(report => 
     report.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
