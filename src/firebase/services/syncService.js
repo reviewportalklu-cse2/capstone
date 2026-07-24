@@ -78,11 +78,11 @@ export const syncService = {
 
     for (let i = 0; i < assignments.length; i++) {
       const row = assignments[i];
-      const rollNumber = getField(row, ['Roll Number', 'rollNumber']).toLowerCase();
-      const teamId = getField(row, ['Team ID', 'teamId']);
-      const guideId = getField(row, ['Guide Employee ID', 'Guide Email', 'guideEmail', 'guideId']).toLowerCase();
-      const facultyId = getField(row, ['Faculty Employee ID', 'Faculty Email', 'facultyEmail', 'facultyId']).toLowerCase();
-      const reviewerId = getField(row, ['Reviewer Employee ID', 'Reviewer Email', 'reviewerEmail', 'reviewerId']).toLowerCase();
+      const rollNumber = getField(row, ['Roll Number', 'rollNumber', 'Student Roll Number', 'roll No', 'roll_number']).toLowerCase();
+      const teamId = getField(row, ['Team ID', 'teamId', 'Team No', 'team', 'team_id']);
+      const guideId = getField(row, ['Guide Employee ID', 'Guide Email', 'guideEmail', 'guideId', 'Guide ID', 'guide_id']).toLowerCase();
+      const facultyId = getField(row, ['Faculty Employee ID', 'Faculty Email', 'facultyEmail', 'facultyId', 'Faculty ID', 'faculty_id']).toLowerCase();
+      const reviewerId = getField(row, ['Reviewer Employee ID', 'Reviewer Email', 'reviewerEmail', 'reviewerId', 'Reviewer ID', 'reviewer_id']).toLowerCase();
       
       const facultyPanel = getField(row, ['Faculty Panel', 'facultyPanel']);
       const reviewSchedule = getField(row, ['Review Schedule', 'reviewSchedule']);
@@ -90,6 +90,15 @@ export const syncService = {
       const academicYear = getField(row, ['Academic Year', 'academicYear']) || '2026-27';
       const batch = getField(row, ['Batch', 'batch']) || '2022-26';
       const section = getField(row, ['Section', 'section']) || 'A';
+
+      if (i < 5) {
+        console.log(`\n--- PARSED ROW ${i + 1} ---`);
+        console.log("Raw row object:", row);
+        console.log("Parsed IDs:", { rollNumber, teamId, guideId, facultyId, reviewerId });
+        if (!guideId || !facultyId || !reviewerId) {
+          console.warn("Missing ID(s) detected. Available columns in Excel row:", Object.keys(row));
+        }
+      }
 
       if (!rollNumber || !teamId) {
         const msg = `Row ${i + 1}: Missing Roll Number or Team ID.`;
