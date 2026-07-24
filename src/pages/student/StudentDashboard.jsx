@@ -30,6 +30,12 @@ const StudentDashboard = () => {
   const [error, setError] = useState(null);
 
   useEffect(() => {
+    if (domainUser === null) {
+      setLoading(false);
+      setError("No student profile found for this account.");
+      console.error("No domain record found for the authenticated email in students collection.");
+      return;
+    }
     if (!domainUser) return;
     const { domainId, profile, rollNumber } = domainUser;
     const unsubs = [];

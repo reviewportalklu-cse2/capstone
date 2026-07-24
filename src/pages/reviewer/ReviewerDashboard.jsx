@@ -27,6 +27,12 @@ const ReviewerDashboard = () => {
   const [pendingRemarks, setPendingRemarks] = useState([]);
 
   useEffect(() => {
+    if (domainUser === null) {
+      setLoading(false);
+      setError("No reviewer profile found for this account.");
+      console.error("No domain record found for the authenticated email in reviewers collection.");
+      return;
+    }
     if (!domainUser) return;
     const { domainId } = domainUser;
     const unsubs = [];
