@@ -134,8 +134,18 @@ const StudentManagement = () => {
     );
   });
 
-  const getGuideName = (id) => guides.find(g => g.id === id)?.name || 'Unassigned';
-  const getReviewerName = (id) => reviewers.find(r => r.id === id)?.name || 'Unassigned';
+  const getGuideName = (id) => {
+    const g = guides.find(g => g.id === id);
+    return g?.name || g?.['Guide Name'] || 'Unassigned';
+  };
+  const getReviewerName = (id) => {
+    const r = reviewers.find(r => r.id === id);
+    return r?.name || r?.['Reviewer Name'] || 'Unassigned';
+  };
+  const getFacultyName = (id) => {
+    const f = faculty.find(f => f.id === id);
+    return f?.name || f?.['Faculty Name'] || 'Unassigned';
+  };
 
   const columns = [
     { 
@@ -146,7 +156,7 @@ const StudentManagement = () => {
       header: 'Student', 
       render: (row) => (
         <div>
-          <p className="font-semibold text-gray-900">{row.name || row.Name || 'Unknown'}</p>
+          <p className="font-semibold text-gray-900">{row.name || row['Student Name'] || row.Name || 'Unknown'}</p>
           <p className="text-xs text-gray-500">{row.email || row.Email || 'No Email'}</p>
         </div>
       ) 
@@ -164,10 +174,34 @@ const StudentManagement = () => {
       )
     },
     { 
+      header: 'Assigned Faculty', 
+      render: (row) => (
+        <span className={row.facultyId ? 'text-gray-900' : 'text-gray-400 italic'}>
+          {getFacultyName(row.facultyId || row.FacultyId)}
+        </span>
+      )
+    },
+    { 
       header: 'Assigned Reviewer', 
       render: (row) => (
         <span className={row.reviewerId ? 'text-gray-900' : 'text-gray-400 italic'}>
           {getReviewerName(row.reviewerId || row.ReviewerId)}
+        </span>
+      )
+    },
+    { 
+      header: 'Team', 
+      render: (row) => (
+        <span className={row.teamId ? 'text-gray-900 font-medium' : 'text-gray-400 italic'}>
+          {row.teamId || 'Unassigned'}
+        </span>
+      )
+    },
+    { 
+      header: 'Project', 
+      render: (row) => (
+        <span className={row.projectId ? 'text-gray-900 font-medium' : 'text-gray-400 italic'}>
+          {row.projectId || 'Unassigned'}
         </span>
       )
     },

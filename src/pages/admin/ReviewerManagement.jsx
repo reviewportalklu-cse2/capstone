@@ -122,7 +122,7 @@ const ReviewerManagement = () => {
     if (!searchTerm) return true;
     const term = searchTerm.toLowerCase();
     return (
-      (reviewer.name || reviewer.Name || '').toLowerCase().includes(term) || 
+      (reviewer.name || reviewer['Reviewer Name'] || reviewer.Name || '').toLowerCase().includes(term) || 
       (reviewer.email || reviewer.Email || '').toLowerCase().includes(term) ||
       (reviewer.department || reviewer.Department || '').toLowerCase().includes(term)
     );
@@ -133,7 +133,7 @@ const ReviewerManagement = () => {
       header: 'Reviewer', 
       render: (row) => (
         <div>
-          <p className="font-semibold text-gray-900">{row.name || row.Name || 'Unknown'}</p>
+          <p className="font-semibold text-gray-900">{row.name || row['Reviewer Name'] || row.Name || 'Unknown'}</p>
           <p className="text-xs text-gray-500">{row.email || row.Email || 'No Email'}</p>
         </div>
       ) 

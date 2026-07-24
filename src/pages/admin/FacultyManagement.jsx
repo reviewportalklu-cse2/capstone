@@ -119,7 +119,7 @@ const FacultyManagement = () => {
     if (!searchTerm) return true;
     const term = searchTerm.toLowerCase();
     return (
-      (f.name || f.Name || '').toLowerCase().includes(term) || 
+      (f.name || f['Faculty Name'] || f.Name || '').toLowerCase().includes(term) || 
       (f.email || f.Email || '').toLowerCase().includes(term) ||
       (f.department || f.Department || '').toLowerCase().includes(term)
     );
@@ -130,7 +130,7 @@ const FacultyManagement = () => {
       header: 'Faculty', 
       render: (row) => (
         <div>
-          <p className="font-semibold text-gray-900">{row.name || row.Name || 'Unknown'}</p>
+          <p className="font-semibold text-gray-900">{row.name || row['Faculty Name'] || row.Name || 'Unknown'}</p>
           <p className="text-xs text-gray-500">{row.email || row.Email || 'No Email'}</p>
         </div>
       ) 

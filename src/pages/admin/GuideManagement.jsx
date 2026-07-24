@@ -123,7 +123,7 @@ const GuideManagement = () => {
     if (!searchTerm) return true;
     const term = searchTerm.toLowerCase();
     return (
-      (guide.name || guide.Name || '').toLowerCase().includes(term) || 
+      (guide.name || guide['Guide Name'] || guide.Name || '').toLowerCase().includes(term) || 
       (guide.email || guide.Email || '').toLowerCase().includes(term) ||
       (guide.department || guide.Department || '').toLowerCase().includes(term)
     );
@@ -134,7 +134,7 @@ const GuideManagement = () => {
       header: 'Guide', 
       render: (row) => (
         <div>
-          <p className="font-semibold text-gray-900">{row.name || row.Name || 'Unknown'}</p>
+          <p className="font-semibold text-gray-900">{row.name || row['Guide Name'] || row.Name || 'Unknown'}</p>
           <p className="text-xs text-gray-500">{row.email || row.Email || 'No Email'}</p>
         </div>
       ) 
