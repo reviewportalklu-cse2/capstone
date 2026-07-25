@@ -46,6 +46,7 @@ const CsvSync = () => {
       case 'guide': return normalized.includes('guide');
       case 'faculty': return normalized.includes('faculty');
       case 'reviewer': return normalized.includes('reviewer');
+      case 'teams': return normalized.includes('team');
       case 'assignments': return normalized.includes('assignment');
       default: return false;
     }
@@ -61,7 +62,7 @@ const CsvSync = () => {
         const workbook = XLSX.read(data, { type: 'binary' });
         
         if (type === 'master') {
-          const extracted = { student: [], guide: [], faculty: [], reviewer: [], assignments: [] };
+          const extracted = { student: [], guide: [], faculty: [], reviewer: [], teams: [], assignments: [] };
           let totalRows = 0;
           let sheetsFound = 0;
 
@@ -73,6 +74,7 @@ const CsvSync = () => {
             else if (matchSheetName(sheetName, 'guide')) { extracted.guide = json; totalRows += json.length; sheetsFound++; }
             else if (matchSheetName(sheetName, 'faculty')) { extracted.faculty = json; totalRows += json.length; sheetsFound++; }
             else if (matchSheetName(sheetName, 'reviewer')) { extracted.reviewer = json; totalRows += json.length; sheetsFound++; }
+            else if (matchSheetName(sheetName, 'teams')) { extracted.teams = json; totalRows += json.length; sheetsFound++; }
             else if (matchSheetName(sheetName, 'assignments')) { extracted.assignments = json; totalRows += json.length; sheetsFound++; }
           });
 
@@ -122,7 +124,7 @@ const CsvSync = () => {
     try {
       if (previewData.isMaster) {
         setProcessingState('Starting Master Workbook parsing...');
-        const { student, guide, faculty, reviewer, assignments } = previewData.extracted;
+        const { student, guide, faculty, reviewer, teams, assignments } = previewData.sheets;
         let failures = 0;
 
         // 1. Students
@@ -201,11 +203,30 @@ const CsvSync = () => {
           }
         }
 
+        let teamReport = '';
+        if (teams && teams.length > 0) {
+          setProcessingState(`Running Teams Engine on ${teams.length} teams...`);
+          const result = await syncService.syncTeams(teams);
+          
+          teamReport += `Teams created: ${result.created}\n`;
+          teamReport += `Teams updated: ${result.updated}\n`;
+          teamReport += `Teams skipped: ${result.skipped}\n`;
+          
+          if (result.warnings && result.warnings.length > 0) {
+            teamReport += `\nTEAMS WARNINGS:\n- ${result.warnings.join('\n- ')}\n`;
+          }
+          if (result.errors && result.errors.length > 0) {
+            teamReport += `\nTEAMS ERRORS:\n- ${result.errors.join('\n- ')}\n`;
+            failures += result.errors.length;
+          }
+          totalWrites += result.created + result.updated;
+        }
+
         if (assignments.length > 0) {
           setProcessingState(`Running Assignment Engine on ${assignments.length} mappings...`);
           const result = await syncService.syncAssignments(assignments);
-          
           let report = `Master Import Complete!\n\n`;
+          if (teamReport) report += teamReport + `\n`;
           report += `Students linked: ${result.stats.studentsLinked}\n`;
           report += `Teams created: ${result.stats.teamsCreated}\n`;
           report += `Projects created: ${result.stats.projectsCreated}\n`;
@@ -263,6 +284,26 @@ const CsvSync = () => {
           
           if (result.warnings.length > 0) {
              setErrorMsg(`There were ${result.warnings.length} relationship mapping issues. Check the import result log.`);
+          }
+        } else if (uploadType === 'teams') {
+          const result = await syncService.syncTeams(records);
+          let report = `Teams Import Complete!\n\n`;
+          report += `Teams created: ${result.created}\n`;
+          report += `Teams updated: ${result.updated}\n`;
+          report += `Teams skipped: ${result.skipped}\n`;
+          
+          if (result.warnings && result.warnings.length > 0) {
+            report += `\nWARNINGS:\n- ${result.warnings.join('\n- ')}`;
+          }
+          if (result.errors && result.errors.length > 0) {
+            report += `\nERRORS:\n- ${result.errors.join('\n- ')}`;
+          }
+          
+          syncResultText = report;
+          totalWrites += result.created + result.updated;
+          
+          if (result.errors.length > 0) {
+             setErrorMsg(`There were ${result.errors.length} failed teams imports.`);
           }
         } else {
           let colName = '';
@@ -327,29 +368,33 @@ const CsvSync = () => {
     if (!previewData) return null;
     
     if (previewData.isMaster) {
-      const { student, guide, faculty, reviewer, assignments } = previewData.sheets;
+      const { student, guide, faculty, reviewer, teams, assignments } = previewData.sheets;
       return (
         <div className="mt-6 space-y-4">
           <h4 className="text-lg font-medium text-gray-900 mb-2">Master Workbook Detected Sheets</h4>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
             <div className="bg-white border p-4 rounded-lg shadow-sm text-center">
-              <div className="text-2xl font-bold text-blue-600">{student.length}</div>
+              <div className="text-2xl font-bold text-blue-600">{student?.length || 0}</div>
               <div className="text-xs text-gray-500 uppercase tracking-wide font-medium mt-1">Students</div>
             </div>
             <div className="bg-white border p-4 rounded-lg shadow-sm text-center">
-              <div className="text-2xl font-bold text-emerald-600">{guide.length}</div>
+              <div className="text-2xl font-bold text-emerald-600">{guide?.length || 0}</div>
               <div className="text-xs text-gray-500 uppercase tracking-wide font-medium mt-1">Guides</div>
             </div>
             <div className="bg-white border p-4 rounded-lg shadow-sm text-center">
-              <div className="text-2xl font-bold text-purple-600">{faculty.length}</div>
+              <div className="text-2xl font-bold text-purple-600">{faculty?.length || 0}</div>
               <div className="text-xs text-gray-500 uppercase tracking-wide font-medium mt-1">Faculty</div>
             </div>
             <div className="bg-white border p-4 rounded-lg shadow-sm text-center">
-              <div className="text-2xl font-bold text-orange-600">{reviewer.length}</div>
+              <div className="text-2xl font-bold text-orange-600">{reviewer?.length || 0}</div>
               <div className="text-xs text-gray-500 uppercase tracking-wide font-medium mt-1">Reviewers</div>
             </div>
             <div className="bg-white border p-4 rounded-lg shadow-sm text-center">
-              <div className="text-2xl font-bold text-teal-600">{assignments.length}</div>
+              <div className="text-2xl font-bold text-indigo-600">{teams?.length || 0}</div>
+              <div className="text-xs text-gray-500 uppercase tracking-wide font-medium mt-1">Teams</div>
+            </div>
+            <div className="bg-white border p-4 rounded-lg shadow-sm text-center">
+              <div className="text-2xl font-bold text-teal-600">{assignments?.length || 0}</div>
               <div className="text-xs text-gray-500 uppercase tracking-wide font-medium mt-1">Assignments</div>
             </div>
           </div>
@@ -394,7 +439,7 @@ const CsvSync = () => {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Upload Mode</label>
                 <div className="flex flex-wrap gap-2">
-                  {['master', 'student', 'guide', 'reviewer', 'faculty', 'assignments'].map(type => (
+                  {['master', 'student', 'guide', 'reviewer', 'faculty', 'teams', 'assignments'].map(type => (
                     <button
                       key={type}
                       onClick={() => {
