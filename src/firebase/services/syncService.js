@@ -305,8 +305,34 @@ export const syncService = {
       return '';
     };
 
-    const studentMap = new Map(allStudents.map(s => [getValue(s, ['rollNumber', 'Roll Number', 'employeeId', 'Employee ID', 'Email', 'email']).toLowerCase(), s]));
-    
+    const findStudent = (rollNumber) => {
+      const fields = [
+        "rollNumber",
+        "studentId",
+        "studentID",
+        "registrationNumber",
+        "regNo",
+        "Roll Number",
+        "employeeId",
+        "Employee ID",
+        "Email",
+        "email"
+      ];
+      const target = String(rollNumber).trim().toLowerCase();
+      
+      for (const student of allStudents) {
+        for (const field of fields) {
+          if (student[field] && String(student[field]).trim().toLowerCase() === target) {
+            return student;
+          }
+        }
+        if (student.id && String(student.id).trim().toLowerCase() === target) {
+          return student;
+        }
+      }
+      return null;
+    };
+
     // Support lookup by Employee ID or Email
     const guideMap = new Map();
     allGuides.forEach(g => {
@@ -405,7 +431,7 @@ export const syncService = {
         projectId = `PRJ-${teamId}`;
       }
 
-      const student = studentMap.get(rollNumber);
+      const student = findStudent(rollNumber);
       const guide = guideMap.get(guideId);
       const faculty = facultyMap.get(facultyId);
       const reviewer = reviewerMap.get(reviewerId);
