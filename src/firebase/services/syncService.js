@@ -37,17 +37,23 @@ export const syncService = {
     const allTeams = await FirestoreService.getAll('teams');
     const allProjects = await FirestoreService.getAll('projects');
 
-    const getField = (obj, keys) => {
-      for (const key of keys) {
-        if (obj[key] !== undefined && obj[key] !== null) return String(obj[key]).trim();
+    const getValue = (row, aliases) => {
+      for (const key of aliases) {
+        if (
+          row[key] !== undefined &&
+          row[key] !== null &&
+          String(row[key]).trim() !== ""
+        ) {
+          return String(row[key]).trim();
+        }
       }
       return '';
     };
 
     const guideMap = new Map();
     allGuides.forEach(g => {
-      const emp = getField(g, ['employeeId', 'Employee ID']).toLowerCase();
-      const em = getField(g, ['email', 'Email']).toLowerCase();
+      const emp = getValue(g, ['employeeId', 'Employee ID']).toLowerCase();
+      const em = getValue(g, ['email', 'Email']).toLowerCase();
       if (emp) guideMap.set(emp, g);
       if (em) guideMap.set(em, g);
       guideMap.set(g.id.toLowerCase(), g);
@@ -55,8 +61,8 @@ export const syncService = {
 
     const facultyMap = new Map();
     allFaculty.forEach(f => {
-      const emp = getField(f, ['employeeId', 'Employee ID']).toLowerCase();
-      const em = getField(f, ['email', 'Email']).toLowerCase();
+      const emp = getValue(f, ['employeeId', 'Employee ID']).toLowerCase();
+      const em = getValue(f, ['email', 'Email']).toLowerCase();
       if (emp) facultyMap.set(emp, f);
       if (em) facultyMap.set(em, f);
       facultyMap.set(f.id.toLowerCase(), f);
@@ -64,8 +70,8 @@ export const syncService = {
 
     const reviewerMap = new Map();
     allReviewers.forEach(r => {
-      const emp = getField(r, ['employeeId', 'Employee ID']).toLowerCase();
-      const em = getField(r, ['email', 'Email']).toLowerCase();
+      const emp = getValue(r, ['employeeId', 'Employee ID']).toLowerCase();
+      const em = getValue(r, ['email', 'Email']).toLowerCase();
       if (emp) reviewerMap.set(emp, r);
       if (em) reviewerMap.set(em, r);
       reviewerMap.set(r.id.toLowerCase(), r);
@@ -114,12 +120,12 @@ export const syncService = {
 
     for (let i = 0; i < teams.length; i++) {
       const row = teams[i];
-      const teamId = getField(row, ['Team ID', 'teamId', 'Team No', 'team', 'team_id']);
-      const teamName = getField(row, ['Team Name', 'teamName', 'team_name']) || `Team ${teamId}`;
-      const guideId = getField(row, ['Guide Employee ID', 'Guide Email', 'guideEmail', 'guideId', 'Guide ID', 'guide_id']).toLowerCase();
-      const facultyId = getField(row, ['Faculty Employee ID', 'Faculty Email', 'facultyEmail', 'facultyId', 'Faculty ID', 'faculty_id']).toLowerCase();
-      const reviewerId = getField(row, ['Reviewer Employee ID', 'Reviewer Email', 'reviewerEmail', 'reviewerId', 'Reviewer ID', 'reviewer_id']).toLowerCase();
-      let projectId = getField(row, ['Project ID', 'projectId', 'project_id']);
+      const teamId = getValue(row, ['Team ID', 'TeamID', 'Team Id', 'teamId', 'Team No', 'team', 'team_id']);
+      const teamName = getValue(row, ['Team Name', 'teamName', 'team_name']) || `Team ${teamId}`;
+      const guideId = getValue(row, ['Guide ID', 'GuideID', 'Guide Id', 'Guide Employee ID', 'Guide Email', 'guideEmail', 'guideId', 'guide_id']).toLowerCase();
+      const facultyId = getValue(row, ['Faculty ID', 'FacultyID', 'Faculty Id', 'Faculty Employee ID', 'Faculty Email', 'facultyEmail', 'facultyId', 'faculty_id']).toLowerCase();
+      const reviewerId = getValue(row, ['Reviewer ID', 'ReviewerID', 'Reviewer Id', 'Reviewer Employee ID', 'Reviewer Email', 'reviewerEmail', 'reviewerId', 'reviewer_id']).toLowerCase();
+      let projectId = getValue(row, ['Project ID', 'ProjectID', 'Project Id', 'projectId', 'project_id']);
       
       if (!teamId) {
         errors.push(`Row ${i + 1}: Missing required Team ID.`);
@@ -286,20 +292,26 @@ export const syncService = {
     const allTeams = await FirestoreService.getAll('teams');
     const allProjects = await FirestoreService.getAll('projects');
 
-    const getField = (obj, keys) => {
-      for (const key of keys) {
-        if (obj[key] !== undefined && obj[key] !== null) return String(obj[key]).trim();
+    const getValue = (row, aliases) => {
+      for (const key of aliases) {
+        if (
+          row[key] !== undefined &&
+          row[key] !== null &&
+          String(row[key]).trim() !== ""
+        ) {
+          return String(row[key]).trim();
+        }
       }
       return '';
     };
 
-    const studentMap = new Map(allStudents.map(s => [getField(s, ['rollNumber', 'Roll Number', 'employeeId', 'Employee ID', 'Email', 'email']).toLowerCase(), s]));
+    const studentMap = new Map(allStudents.map(s => [getValue(s, ['rollNumber', 'Roll Number', 'employeeId', 'Employee ID', 'Email', 'email']).toLowerCase(), s]));
     
     // Support lookup by Employee ID or Email
     const guideMap = new Map();
     allGuides.forEach(g => {
-      const emp = getField(g, ['employeeId', 'Employee ID']).toLowerCase();
-      const em = getField(g, ['email', 'Email']).toLowerCase();
+      const emp = getValue(g, ['employeeId', 'Employee ID']).toLowerCase();
+      const em = getValue(g, ['email', 'Email']).toLowerCase();
       if (emp) guideMap.set(emp, g);
       if (em) guideMap.set(em, g);
       guideMap.set(g.id.toLowerCase(), g);
@@ -307,8 +319,8 @@ export const syncService = {
 
     const facultyMap = new Map();
     allFaculty.forEach(f => {
-      const emp = getField(f, ['employeeId', 'Employee ID']).toLowerCase();
-      const em = getField(f, ['email', 'Email']).toLowerCase();
+      const emp = getValue(f, ['employeeId', 'Employee ID']).toLowerCase();
+      const em = getValue(f, ['email', 'Email']).toLowerCase();
       if (emp) facultyMap.set(emp, f);
       if (em) facultyMap.set(em, f);
       facultyMap.set(f.id.toLowerCase(), f);
@@ -316,8 +328,8 @@ export const syncService = {
 
     const reviewerMap = new Map();
     allReviewers.forEach(r => {
-      const emp = getField(r, ['employeeId', 'Employee ID']).toLowerCase();
-      const em = getField(r, ['email', 'Email']).toLowerCase();
+      const emp = getValue(r, ['employeeId', 'Employee ID']).toLowerCase();
+      const em = getValue(r, ['email', 'Email']).toLowerCase();
       if (emp) reviewerMap.set(emp, r);
       if (em) reviewerMap.set(em, r);
       reviewerMap.set(r.id.toLowerCase(), r);
@@ -371,19 +383,19 @@ export const syncService = {
 
     for (let i = 0; i < assignments.length; i++) {
       const row = assignments[i];
-      const rollNumber = getField(row, ['Roll Number', 'rollNumber', 'Student Roll Number', 'roll No', 'roll_number']).toLowerCase();
-      const teamId = getField(row, ['Team ID', 'teamId', 'Team No', 'team', 'team_id']);
-      let projectId = getField(row, ['Project ID', 'projectId', 'project_id']);
-      const guideId = getField(row, ['Guide Employee ID', 'Guide Email', 'guideEmail', 'guideId', 'Guide ID', 'guide_id']).toLowerCase();
-      const facultyId = getField(row, ['Faculty Employee ID', 'Faculty Email', 'facultyEmail', 'facultyId', 'Faculty ID', 'faculty_id']).toLowerCase();
-      const reviewerId = getField(row, ['Reviewer Employee ID', 'Reviewer Email', 'reviewerEmail', 'reviewerId', 'Reviewer ID', 'reviewer_id']).toLowerCase();
+      const rollNumber = getValue(row, ['Roll Number', 'RollNo', 'Roll No', 'Student ID', 'StudentID', 'Student Id', 'Registration Number', 'Reg No', 'rollNumber', 'Student Roll Number', 'roll_number']).toLowerCase();
+      const teamId = getValue(row, ['Team ID', 'TeamID', 'Team Id', 'teamId', 'Team No', 'team', 'team_id']);
+      let projectId = getValue(row, ['Project ID', 'ProjectID', 'Project Id', 'projectId', 'project_id']);
+      const guideId = getValue(row, ['Guide ID', 'GuideID', 'Guide Id', 'Guide Employee ID', 'Guide Email', 'guideEmail', 'guideId', 'guide_id']).toLowerCase();
+      const facultyId = getValue(row, ['Faculty ID', 'FacultyID', 'Faculty Id', 'Faculty Employee ID', 'Faculty Email', 'facultyEmail', 'facultyId', 'faculty_id']).toLowerCase();
+      const reviewerId = getValue(row, ['Reviewer ID', 'ReviewerID', 'Reviewer Id', 'Reviewer Employee ID', 'Reviewer Email', 'reviewerEmail', 'reviewerId', 'reviewer_id']).toLowerCase();
       
-      const facultyPanel = getField(row, ['Faculty Panel', 'facultyPanel']);
-      const reviewSchedule = getField(row, ['Review Schedule', 'reviewSchedule']);
-      const room = getField(row, ['Room', 'room']);
-      const academicYear = getField(row, ['Academic Year', 'academicYear']) || '2026-27';
-      const batch = getField(row, ['Batch', 'batch']) || 'CSE-2';
-      const section = getField(row, ['Section', 'section']) || 'A';
+      const facultyPanel = getValue(row, ['Faculty Panel', 'facultyPanel']);
+      const reviewSchedule = getValue(row, ['Review Schedule', 'reviewSchedule']);
+      const room = getValue(row, ['Room', 'room']);
+      const academicYear = getValue(row, ['Academic Year', 'academicYear']) || '2026-27';
+      const batch = getValue(row, ['Batch', 'batch']) || 'CSE-2';
+      const section = getValue(row, ['Section', 'section']) || 'A';
 
       if (!rollNumber || !teamId) {
         warnings.push(`Row ${i + 1}: Missing Roll Number or Team ID.`);
