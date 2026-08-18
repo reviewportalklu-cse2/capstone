@@ -1,7 +1,7 @@
+import { useData } from '@/contexts/DataContext';
 import React, { useState, useEffect } from 'react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { useAdminNavigation } from '@/hooks/useAdminNavigation';
-import { useAdminStats } from '@/contexts/AdminStatsContext';
 import Card from '@/components/common/Card';
 import Table from '@/components/common/Table';
 import Badge from '@/components/common/Badge';
@@ -12,14 +12,26 @@ import { facultyService, auditService, studentService } from '@/firebase/service
 import { exportToCsv } from '@/utils/csvExport';
 import { useAuth } from '@/contexts/AuthContext';
 import { Plus, Search, Loader2, Download, Edit2, Trash2 } from 'lucide-react';
+import { resolveStudentRelations, resolveTeamRelations, resolveFacultyRelationships, getEntityKeys } from '@/utils/relationshipResolver';
 
 const FacultyManagement = () => {
   const navigationItems = useAdminNavigation();
 
   const { currentUser } = useAuth();
-  const { data, loading: contextLoading } = useAdminStats();
-  const { faculty, students } = data;
-  
+  const dataContext = useData() || {};
+  const { 
+    faculty = [], 
+    students = [], 
+    teams = [], 
+    projects = [], 
+    guides = [], 
+    reviewers = [], 
+    reviewCycles = [], 
+    facultyAssignments = [],
+    reviewerAssignments = [], 
+    dataLoading 
+  } = dataContext;
+    
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEdit, setIsEdit] = useState(false);
@@ -29,7 +41,8 @@ const FacultyManagement = () => {
     id: '',
     name: '',
     email: '',
-    department: ''
+    department: '',
+    designation: ''
   });
 
   const handleOpenEdit = (fac) => {
@@ -38,14 +51,15 @@ const FacultyManagement = () => {
       id: fac.id,
       name: fac.name || '',
       email: fac.email || '',
-      department: fac.department || ''
+      department: fac.department || '',
+      designation: fac.designation || ''
     });
     setIsModalOpen(true);
   };
 
   const handleOpenAdd = () => {
     setIsEdit(false);
-    setFormData({ id: '', name: '', email: '', department: '' });
+    setFormData({ id: '', name: '', email: '', department: '', designation: '' });
     setIsModalOpen(true);
   };
 
@@ -69,7 +83,7 @@ const FacultyManagement = () => {
       }
 
       await auditService.log(
-        currentUser.uid, 
+        currentUser?.uid || 'admin', 
         isEdit ? 'UPDATE_FACULTY' : 'CREATE_FACULTY', 
         'Faculty', 
         prevData, 
@@ -95,7 +109,7 @@ const FacultyManagement = () => {
     if (window.confirm(`Are you sure you want to delete ${fac.name}?`)) {
       try {
         await facultyService.delete(fac.id);
-        await auditService.log(currentUser.uid, 'DELETE_FACULTY', 'Faculty', fac, null);
+        await auditService.log(currentUser?.uid || 'admin', 'DELETE_FACULTY', 'Faculty', fac, null);
       } catch (err) {
         console.error("Error deleting faculty:", err);
       }
@@ -104,15 +118,25 @@ const FacultyManagement = () => {
 
   const handleExport = () => {
     const dataToExport = faculty.map(f => {
-      const assignedCount = students.filter(s => s.facultyId === f.id).length;
+      const { studentsCount } = resolveFacultyMetrics(f);
       return {
-        'Name': f.name,
-        'Email': f.email,
-        'Department': f.department,
-        'Assigned Students': assignedCount
+        'Name': f.name || f['Faculty Name'] || '',
+        'Email': f.email || f.Email || '',
+        'Department': f.department || f.Department || '',
+        'Designation': f.designation || f.Designation || '',
+        'Assigned Students': studentsCount
       };
     });
     exportToCsv('capstoneflow_faculty.csv', dataToExport);
+  };
+
+  const resolveFacultyMetrics = (row) => {
+    const res = resolveFacultyRelationships(row, dataContext);
+    return {
+      teamsCount: res.teamCount,
+      studentsCount: res.studentCount,
+      projectsCount: res.projectCount
+    };
   };
 
   const filteredFaculty = faculty.filter(f => {
@@ -140,12 +164,34 @@ const FacultyManagement = () => {
       render: (row) => row.department || row.Department || 'N/A' 
     },
     { 
+      header: 'Assigned Teams', 
+      render: (row) => {
+        const { teamsCount } = resolveFacultyMetrics(row);
+        return (
+          <Badge variant={teamsCount > 0 ? 'primary' : 'default'}>
+            {teamsCount} Team{teamsCount !== 1 ? 's' : ''}
+          </Badge>
+        );
+      }
+    },
+    { 
       header: 'Assigned Students', 
       render: (row) => {
-        const count = students.filter(s => s.facultyId === row.id).length;
+        const { studentsCount } = resolveFacultyMetrics(row);
         return (
-          <Badge variant={count > 0 ? 'primary' : 'default'}>
-            {count} Student{count !== 1 ? 's' : ''}
+          <Badge variant={studentsCount > 0 ? 'success' : 'default'}>
+            {studentsCount} Student{studentsCount !== 1 ? 's' : ''}
+          </Badge>
+        );
+      }
+    },
+    { 
+      header: 'Assigned Projects', 
+      render: (row) => {
+        const { projectsCount } = resolveFacultyMetrics(row);
+        return (
+          <Badge variant={projectsCount > 0 ? 'warning' : 'default'}>
+            {projectsCount} Project{projectsCount !== 1 ? 's' : ''}
           </Badge>
         );
       }
@@ -164,6 +210,16 @@ const FacultyManagement = () => {
       ) 
     },
   ];
+
+  if (dataLoading) {
+    return (
+      <DashboardLayout navigationItems={navigationItems} title="KL CSE Capstone Portal - Classroom Faculty Administration">
+        <div className="flex h-64 items-center justify-center">
+          <Loader2 className="h-8 w-8 animate-spin text-primary-600" />
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout navigationItems={navigationItems} title="KL CSE Capstone Portal - Classroom Faculty Administration">
@@ -193,7 +249,7 @@ const FacultyManagement = () => {
         </div>
 
         <Card className="overflow-hidden p-0">
-          {contextLoading ? (
+          {dataLoading ? (
             <div className="flex justify-center items-center h-64">
               <Loader2 className="h-8 w-8 text-primary-500 animate-spin" />
             </div>

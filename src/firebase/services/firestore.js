@@ -47,6 +47,15 @@ export const FirestoreService = {
     return docRef.id;
   },
 
+  // Aliases for compatibility
+  async createDocument(collectionName, data) {
+    return this.create(collectionName, data);
+  },
+
+  async addDocument(collectionName, data) {
+    return this.create(collectionName, data);
+  },
+
   async set(collectionName, id, data, options = { merge: true }) {
     const docRef = doc(db, collectionName, id);
     await setDoc(docRef, data, options);
@@ -58,9 +67,17 @@ export const FirestoreService = {
     await updateDoc(docRef, data);
   },
 
+  async updateDocument(collectionName, id, data) {
+    return this.update(collectionName, id, data);
+  },
+
   async delete(collectionName, id) {
     const docRef = doc(db, collectionName, id);
     await deleteDoc(docRef);
+  },
+
+  async deleteDocument(collectionName, id) {
+    return this.delete(collectionName, id);
   },
 
   async query(collectionName, conditions) {

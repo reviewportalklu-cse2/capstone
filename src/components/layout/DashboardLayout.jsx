@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import Logo from '@/components/common/Logo';
 import Sidebar from './Sidebar';
 import Header from './Header';
 import { X } from 'lucide-react';
@@ -32,7 +33,7 @@ const DashboardLayout = ({ children, navigationItems, title }) => {
             </div>
             
             <div className="flex-shrink-0 flex items-center px-4 gap-3">
-              <img src="/logo.png" alt="KL CSE Logo" className="h-8 w-auto bg-white p-1 rounded" />
+              <Logo size="sm" bgVariant="white" />
               <div className="flex flex-col">
                 <span className="text-white font-bold text-sm leading-tight tracking-tight">KL CSE Capstone Portal</span>
                 <span className="text-gray-400 text-[9px] uppercase font-medium">Official Capstone Project Management Portal</span>

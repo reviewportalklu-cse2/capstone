@@ -1,49 +1,67 @@
 import React, { useState, useEffect } from 'react';
-import { useForm } from 'react-hook-form';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '@/contexts/AuthContext';
 import { authService } from '@/firebase/services/authService';
 import { userService } from '@/firebase/services/userService';
-import { useNavigate } from 'react-router-dom';
-import { Lock, Mail } from 'lucide-react';
+import { Lock, Mail, AlertCircle } from 'lucide-react';
 import Button from '@/components/common/Button';
 import Input from '@/components/common/Input';
 
+import Logo from '@/components/common/Logo';
+
+const ROLE_ROUTES = {
+  admin: '/admin',
+  guide: '/guide',
+  reviewer: '/reviewer',
+  classroom_faculty: '/faculty',
+  faculty: '/faculty',
+  student: '/student'
+};
+
 const Login = () => {
-  const { register, handleSubmit, formState: { errors } } = useForm();
-  const [loading, setLoading] = useState(false);
-  const [errorMsg, setErrorMsg] = useState('');
+  const { currentUser, activeRole, mfaRequired, mfaVerified, loading: authLoading } = useAuth();
   const navigate = useNavigate();
 
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [rememberMe, setRememberMe] = useState(false);
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
+
   useEffect(() => {
-    document.title = "KL CSE Capstone Portal";
+    document.title = "KL CSE Capstone Portal - Login";
   }, []);
 
-  const onSubmit = async (data) => {
-    setLoading(true);
-    setErrorMsg('');
-    try {
-      const user = await authService.login(data.email, data.password);
-      
-      const role = await userService.getUserRole(user.uid);
-      
-      if (role) {
-        if (role === 'admin') navigate('/admin');
-        else if (role === 'guide') navigate('/guide');
-        else if (role === 'reviewer') navigate('/reviewer');
-        else if (role === 'classroom_faculty') navigate('/faculty');
-        else if (role === 'student') navigate('/student');
-        else {
-          setErrorMsg('Invalid user role assigned.');
-          await authService.logout();
-        }
-      } else {
-        setErrorMsg('User profile not found in database.');
-        await authService.logout();
+  // Redirect if user is already authenticated
+  useEffect(() => {
+    if (!authLoading && currentUser) {
+      if (mfaRequired && !mfaVerified) {
+        navigate('/mfa-verification');
+      } else if (activeRole && ROLE_ROUTES[activeRole]) {
+        navigate(ROLE_ROUTES[activeRole]);
       }
+    }
+  }, [currentUser, activeRole, mfaRequired, mfaVerified, authLoading, navigate]);
+
+  const handleFormSubmit = async (e) => {
+    if (e) e.preventDefault();
+    if (isLoggingIn) return;
+
+    if (!email || !password) {
+      setErrorMsg('Please enter both email and password.');
+      return;
+    }
+
+    setIsLoggingIn(true);
+    setErrorMsg('');
+
+    try {
+      console.log("[AUTH_RUNTIME] Submitting login credentials for:", email.trim());
+      await authService.login(email.trim(), password);
     } catch (error) {
-      console.error("Login Error:", error);
-      setErrorMsg('Invalid email or password.');
-    } finally {
-      setLoading(false);
+      console.error("[AUTH_RUNTIME] Login Error:", error);
+      setErrorMsg('Invalid email or password. Please check your credentials.');
+      setIsLoggingIn(false);
     }
   };
 
@@ -51,7 +69,7 @@ const Login = () => {
     <div className="min-h-screen bg-surface-dim flex flex-col justify-center py-12 sm:px-6 lg:px-8 font-sans">
       <div className="sm:mx-auto sm:w-full sm:max-w-md animate-fade-in">
         <div className="flex justify-center">
-          <img src="/logo.png" alt="KL CSE Logo" className="h-16 w-auto object-contain" />
+          <Logo size="lg" bgVariant="white" />
         </div>
         <h2 className="mt-6 text-center text-3xl font-extrabold tracking-tight text-gray-900">
           KL CSE Capstone Portal
@@ -63,10 +81,12 @@ const Login = () => {
 
       <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md animate-slide-up">
         <div className="bg-white py-8 px-4 shadow-card hover:shadow-card-hover transition-shadow duration-300 sm:rounded-xl sm:px-10 border border-gray-100">
-          <form className="space-y-6" onSubmit={handleSubmit(onSubmit)}>
+          
+          <form className="space-y-6" onSubmit={handleFormSubmit} noValidate>
             
             {errorMsg && (
-              <div className="bg-red-50 border border-red-200 text-red-600 text-sm p-3 rounded-lg flex items-center">
+              <div className="bg-red-50 border border-red-200 text-red-600 text-sm p-3 rounded-lg flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-red-500 shrink-0" />
                 <span className="font-semibold">{errorMsg}</span>
               </div>
             )}
@@ -77,8 +97,10 @@ const Login = () => {
               label="Email address"
               icon={Mail}
               placeholder="name@university.edu"
-              error={errors.email?.message}
-              {...register("email", { required: "Email is required" })}
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              disabled={isLoggingIn}
+              required
             />
 
             <Input
@@ -87,8 +109,10 @@ const Login = () => {
               label="Password"
               icon={Lock}
               placeholder="••••••••"
-              error={errors.password?.message}
-              {...register("password", { required: "Password is required" })}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              disabled={isLoggingIn}
+              required
             />
 
             <div className="flex items-center justify-between">
@@ -97,6 +121,9 @@ const Login = () => {
                   id="remember-me"
                   name="remember-me"
                   type="checkbox"
+                  checked={rememberMe}
+                  onChange={(e) => setRememberMe(e.target.checked)}
+                  disabled={isLoggingIn}
                   className="h-4 w-4 text-primary-600 focus:ring-2 focus:ring-primary-500 focus:outline-none border-gray-300 rounded transition-colors cursor-pointer"
                 />
                 <label htmlFor="remember-me" className="ml-2 block text-sm text-gray-700 font-medium cursor-pointer">
@@ -114,7 +141,8 @@ const Login = () => {
             <div>
               <Button
                 type="submit"
-                isLoading={loading}
+                isLoading={isLoggingIn}
+                disabled={isLoggingIn}
                 fullWidth
                 size="lg"
               >
@@ -123,6 +151,7 @@ const Login = () => {
             </div>
           </form>
         </div>
+
         <div className="mt-8 text-center text-xs font-medium text-gray-400">
           &copy; {new Date().getFullYear()} KL CSE Capstone Portal. All rights reserved.
         </div>

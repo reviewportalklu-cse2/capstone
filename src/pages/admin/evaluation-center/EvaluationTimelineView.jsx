@@ -1,29 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { evaluationCenterService } from '@/firebase/services/evaluationCenterService';
+import { useEvaluationCenterData } from '@/hooks/useEvaluationCenterData';
 import Card from '@/components/common/Card';
 import { Calendar, CheckCircle2, Clock, Loader2 } from 'lucide-react';
 
 const EvaluationTimelineView = () => {
-  const [teams, setTeams] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const { getTeamsWithEvaluations, dataLoading } = useEvaluationCenterData();
+  const teams = getTeamsWithEvaluations();
 
-  useEffect(() => {
-    fetchTimeline();
-  }, []);
-
-  const fetchTimeline = async () => {
-    setLoading(true);
-    try {
-      const data = await evaluationCenterService.getAllTeamsWithEvaluations();
-      setTeams(data);
-    } catch (err) {
-      console.error("Failed to load timeline events:", err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  if (loading) {
+  if (dataLoading) {
     return (
       <div className="flex h-64 items-center justify-center">
         <Loader2 className="w-8 h-8 animate-spin text-primary-600" />

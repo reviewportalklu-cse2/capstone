@@ -6,12 +6,12 @@ import Badge from '@/components/common/Badge';
 import Input from '@/components/common/Input';
 import Button from '@/components/common/Button';
 import { useAuth } from '@/contexts/AuthContext';
+import { useStudentAnalytics } from '@/hooks/useStudentAnalytics';
 import { studentService } from '@/firebase/services/studentService';
-import { Loader2, UserCog, Save, CheckCircle, AlertCircle, Hash, Book, Award } from 'lucide-react';
+import { Loader2, UserCog, Save, CheckCircle, AlertCircle, Hash, Book, Award, Users, Target, Clock } from 'lucide-react';
 
 const MyProfile = () => {
   const { currentUser } = useAuth();
-  const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
@@ -27,37 +27,28 @@ const MyProfile = () => {
     phone: ''
   });
 
-  useEffect(() => {
-    if (currentUser?.uid) {
-      fetchProfile(currentUser.uid);
-    }
-  }, [currentUser]);
+  const { 
+    student, team, project, guide, classroomFaculty, currentReviewer, 
+    dashboardStats, dataLoading 
+  } = useStudentAnalytics();
 
-  const fetchProfile = async (uid) => {
-    try {
-      setLoading(true);
-      const data = await studentService.getById(uid);
-      if (data) {
-        setFormData({
-          name: data.name || '',
-          email: data.email || currentUser.email || '',
-          rollNumber: data.rollNumber || '',
-          department: data.department || '',
-          section: data.section || '',
-          batch: data.batch || '',
-          semester: data.semester || '',
-          phone: data.phone || ''
-        });
-      } else {
-        setFormData(prev => ({ ...prev, email: currentUser.email || '' }));
-      }
-    } catch (err) {
-      console.error("Error fetching profile:", err);
-      setError("Failed to load profile data.");
-    } finally {
-      setLoading(false);
+  useEffect(() => {
+    if (dataLoading || !currentUser?.uid) return;
+    if (student) {
+      setFormData({
+        name: student.name || '',
+        email: student.email || currentUser.email || '',
+        rollNumber: student.rollNo || student.rollNumber || '',
+        department: student.department || '',
+        section: student.section || '',
+        batch: student.batch || '',
+        semester: student.semester || '',
+        phone: student.phone || ''
+      });
+    } else {
+      setFormData(prev => ({ ...prev, email: currentUser.email || '' }));
     }
-  };
+  }, [currentUser, student, dataLoading]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -85,9 +76,9 @@ const MyProfile = () => {
     }
   };
 
-  if (loading) {
+  if (dataLoading) {
     return (
-      <DashboardLayout navigationItems={studentNavigation} title="KL CSE Capstone Portal - My Profile">
+      <DashboardLayout navigationItems={studentNavigation} title="My Profile">
         <div className="flex h-[calc(100vh-4rem)] items-center justify-center">
           <Loader2 className="h-8 w-8 animate-spin text-primary-600" />
         </div>
@@ -96,14 +87,14 @@ const MyProfile = () => {
   }
 
   return (
-    <DashboardLayout navigationItems={studentNavigation} title="KL CSE Capstone Portal - My Profile">
-      <div className="max-w-5xl mx-auto space-y-6">
+    <DashboardLayout navigationItems={studentNavigation} title="My Profile">
+      <div className="max-w-6xl mx-auto space-y-6">
         
         <div>
           <h1 className="text-2xl font-bold text-gray-900 tracking-tight flex items-center gap-2">
             <UserCog className="h-6 w-6 text-primary-600" /> My Profile
           </h1>
-          <p className="text-sm text-gray-500 mt-1">Manage your personal and academic details.</p>
+          <p className="text-sm text-gray-500 mt-1">Manage your personal details and view your comprehensive academic standing.</p>
         </div>
 
         {error && (
@@ -121,30 +112,69 @@ const MyProfile = () => {
         )}
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <Card className="lg:col-span-1 border-t-4 border-t-primary-500">
-            <div className="flex flex-col items-center text-center pt-4">
-              <div className="h-24 w-24 rounded-full bg-primary-100 flex items-center justify-center text-primary-700 font-bold text-3xl mb-4 shadow-sm border-4 border-white ring-1 ring-gray-100 uppercase">
-                {formData.name ? formData.name.charAt(0) : 'S'}
+          <div className="lg:col-span-1 space-y-6">
+            <Card className="border-t-4 border-t-primary-500 shadow-sm">
+              <div className="flex flex-col items-center text-center pt-4">
+                <div className="h-24 w-24 rounded-full bg-primary-100 flex items-center justify-center text-primary-700 font-bold text-3xl mb-4 shadow-sm border-4 border-white ring-1 ring-gray-100 uppercase">
+                  {formData.name ? formData.name.charAt(0) : 'S'}
+                </div>
+                <h2 className="text-xl font-bold text-gray-900">{formData.name || 'Student'}</h2>
+                <p className="text-sm text-gray-500 mb-2">{formData.email}</p>
+                <Badge variant="primary" className="mb-6">{team?.id || 'Unassigned'}</Badge>
+                
+                <div className="w-full flex justify-between items-center py-3 border-t border-gray-100">
+                  <span className="text-sm text-gray-500 flex items-center gap-2"><Hash className="h-4 w-4" /> Roll No</span>
+                  <span className="text-sm font-medium text-gray-900">{formData.rollNumber || 'N/A'}</span>
+                </div>
+                <div className="w-full flex justify-between items-center py-3 border-t border-gray-100">
+                  <span className="text-sm text-gray-500 flex items-center gap-2"><Book className="h-4 w-4" /> Dept</span>
+                  <span className="text-sm font-medium text-gray-900">{formData.department || 'N/A'}</span>
+                </div>
               </div>
-              <h2 className="text-xl font-bold text-gray-900">{formData.name || 'Student'}</h2>
-              <p className="text-sm text-gray-500 mb-6">{formData.email}</p>
-              
-              <div className="w-full flex justify-between items-center py-3 border-t border-gray-100">
-                <span className="text-sm text-gray-500 flex items-center"><Hash className="h-4 w-4 mr-2" /> Roll Number</span>
-                <span className="text-sm font-medium text-gray-900">{formData.rollNumber || 'N/A'}</span>
-              </div>
-              <div className="w-full flex justify-between items-center py-3 border-t border-gray-100">
-                <span className="text-sm text-gray-500 flex items-center"><Book className="h-4 w-4 mr-2" /> Department</span>
-                <span className="text-sm font-medium text-gray-900">{formData.department || 'N/A'}</span>
-              </div>
-              <div className="w-full flex justify-between items-center py-3 border-t border-gray-100">
-                <span className="text-sm text-gray-500 flex items-center"><Award className="h-4 w-4 mr-2" /> Batch</span>
-                <span className="text-sm font-medium text-gray-900">{formData.batch || 'N/A'}</span>
-              </div>
-            </div>
-          </Card>
+            </Card>
 
-          <Card className="lg:col-span-2">
+            <Card title="Academic Mentorship" className="shadow-sm">
+              <div className="space-y-4 mt-2">
+                <div className="flex justify-between items-center border-b border-gray-100 pb-3">
+                  <span className="text-sm text-gray-500 flex items-center gap-2"><UserCog className="w-4 h-4 text-blue-500"/> Guide</span>
+                  <span className="text-sm font-bold text-gray-900">{guide?.name || 'N/A'}</span>
+                </div>
+                <div className="flex justify-between items-center border-b border-gray-100 pb-3">
+                  <span className="text-sm text-gray-500 flex items-center gap-2"><Users className="w-4 h-4 text-emerald-500"/> Faculty</span>
+                  <span className="text-sm font-bold text-gray-900">{classroomFaculty?.name || 'N/A'}</span>
+                </div>
+                <div className="flex justify-between items-center pb-1">
+                  <span className="text-sm text-gray-500 flex items-center gap-2"><Award className="w-4 h-4 text-purple-500"/> Reviewer</span>
+                  <span className="text-sm font-bold text-gray-900">{currentReviewer?.name || 'N/A'}</span>
+                </div>
+              </div>
+            </Card>
+
+            <Card title="Progress Snapshot" className="shadow-sm bg-gray-50 border border-gray-200">
+              <div className="space-y-3 mt-2">
+                 <div className="flex justify-between items-center">
+                    <span className="text-sm font-medium text-gray-600">Progress</span>
+                    <Badge variant="primary">{dashboardStats?.progressPercent || 0}%</Badge>
+                 </div>
+                 <div className="w-full bg-gray-200 rounded-full h-1.5">
+                    <div className="bg-primary-500 h-1.5 rounded-full" style={{ width: `${dashboardStats?.progressPercent || 0}%` }}></div>
+                 </div>
+                 
+                 <div className="flex justify-between items-center pt-2 border-t border-gray-200">
+                    <span className="text-sm font-medium text-gray-600">Attendance</span>
+                    <Badge variant={dashboardStats?.attendancePercent >= 75 ? 'success' : 'danger'}>{dashboardStats?.attendancePercent || 0}%</Badge>
+                 </div>
+                 
+                 <div className="flex justify-between items-center pt-2 border-t border-gray-200">
+                    <span className="text-sm font-medium text-gray-600">Current Standing</span>
+                    <span className="font-bold text-gray-900">{dashboardStats?.currentGrade || 'N/A'}</span>
+                 </div>
+              </div>
+            </Card>
+          </div>
+
+          <Card className="lg:col-span-2 shadow-sm">
+            <h2 className="text-lg font-bold text-gray-900 mb-6">Personal Details</h2>
             <form onSubmit={handleSubmit} className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>

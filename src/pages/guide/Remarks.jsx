@@ -10,6 +10,7 @@ import Button from '@/components/common/Button';
 import Modal from '@/components/common/Modal';
 import EmptyState from '@/components/common/EmptyState';
 import { useAuth } from '@/contexts/AuthContext';
+import { useData } from '@/contexts/DataContext';
 import { remarkService } from '@/firebase/services/remarkService';
 import { studentService } from '@/firebase/services/studentService';
 import { notificationService } from '@/firebase/services/notificationService';
@@ -17,13 +18,9 @@ import { Loader2, Search, MessageSquare, Plus, Edit2, Trash2, AlertCircle } from
 
 const Remarks = () => {
   const { currentUser } = useAuth();
+  const { remarks: allRemarks, students: allStudents, dataLoading: loading, dataError: error } = useData();
   const [searchParams] = useSearchParams();
   const preselectedStudent = searchParams.get('student');
-
-  const [remarks, setRemarks] = useState([]);
-  const [students, setStudents] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
   
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -37,11 +34,34 @@ const Remarks = () => {
     content: ''
   });
 
-  useEffect(() => {
-    if (currentUser?.uid) {
-      fetchData(currentUser.uid);
-    }
-  }, [currentUser]);
+  const students = useMemo(() => {
+    if (!currentUser || !allStudents) return [];
+    return allStudents.filter(s => s.guideId === currentUser.uid);
+  }, [allStudents, currentUser]);
+
+  const remarks = useMemo(() => {
+    if (!currentUser || !allRemarks) return [];
+    const myRemarks = allRemarks.filter(r => r.authorId === currentUser.uid);
+    const studentMap = new Map();
+    allStudents.forEach(s => {
+      const key1 = s.id;
+      const key2 = s.uid;
+      if (key1) studentMap.set(key1, s);
+      if (key2) studentMap.set(key2, s);
+    });
+    
+    const enrichedRemarks = myRemarks.map(remark => {
+      const student = studentMap.get(remark.studentId) || students.find(s => s.id === remark.studentId || s.uid === remark.studentId);
+      return {
+        ...remark,
+        studentName: student?.name || remark.studentName || 'Student',
+        rollNumber: student?.rollNumber || student?.rollNo || remark.rollNumber || 'N/A',
+        projectTitle: student?.projectTitle || remark.projectTitle || 'N/A'
+      };
+    });
+
+    return enrichedRemarks.sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt));
+  }, [allRemarks, currentUser, allStudents, students]);
 
   useEffect(() => {
     if (preselectedStudent && students.length > 0) {
@@ -51,44 +71,6 @@ const Remarks = () => {
       setIsModalOpen(true);
     }
   }, [preselectedStudent, students]);
-
-  const fetchData = async (uid) => {
-    try {
-      setLoading(true);
-      setError(null);
-      const [remarksData, studentsData, allStudents] = await Promise.all([
-        remarkService.getRemarksByAuthor(uid),
-        studentService.getByGuideId(uid),
-        studentService.getAll()
-      ]);
-
-      const studentMap = new Map();
-      allStudents.forEach(s => {
-        const key1 = s.id;
-        const key2 = s.uid;
-        if (key1) studentMap.set(key1, s);
-        if (key2) studentMap.set(key2, s);
-      });
-      
-      const enrichedRemarks = remarksData.map(remark => {
-        const student = studentMap.get(remark.studentId) || studentsData.find(s => s.id === remark.studentId || s.uid === remark.studentId);
-        return {
-          ...remark,
-          studentName: student?.name || remark.studentName || 'Student',
-          rollNumber: student?.rollNumber || student?.rollNo || remark.rollNumber || 'N/A',
-          projectTitle: student?.projectTitle || remark.projectTitle || 'N/A'
-        };
-      });
-
-      setRemarks(enrichedRemarks.sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt)));
-      setStudents(studentsData.length > 0 ? studentsData : allStudents);
-    } catch (err) {
-      console.error("Error fetching remarks:", err);
-      setError("Failed to load remarks data.");
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const openAddModal = () => {
     setFormData({ id: null, studentId: '', title: '', content: '' });

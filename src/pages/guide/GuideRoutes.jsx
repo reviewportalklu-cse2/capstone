@@ -1,8 +1,7 @@
 import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import GuideDashboard from './GuideDashboard';
-import MyStudents from './MyStudents';
-import MyProjects from './MyProjects';
+import TeamSupervision from './TeamSupervision';
 import GuideMarks from './GuideMarks';
 import Remarks from './Remarks';
 import Meetings from './Meetings';
@@ -11,15 +10,17 @@ import GuideNotifications from './GuideNotifications';
 import GuideReports from './GuideReports';
 import GuideDownloads from './GuideDownloads';
 import GuideHelp from './GuideHelp';
+import EvaluationWorkspace from '@/pages/common/evaluation/EvaluationWorkspace';
 
 const GuideRoutes = () => {
   return (
     <Routes>
-      <Route path="/" element={<Navigate to="dashboard" replace />} />
+      <Route path="/" element={<Navigate to="/guide/dashboard" replace />} />
       <Route path="dashboard" element={<GuideDashboard />} />
-      <Route path="students" element={<MyStudents />} />
-      <Route path="projects" element={<MyProjects />} />
+      <Route path="teams" element={<TeamSupervision />} />
       <Route path="marks" element={<GuideMarks />} />
+      <Route path="evaluate" element={<EvaluationWorkspace />} />
+      <Route path="evaluate/:teamId" element={<EvaluationWorkspace />} />
       <Route path="remarks" element={<Remarks />} />
       <Route path="meetings" element={<Meetings />} />
       <Route path="progress" element={<ProgressTracking />} />
@@ -28,7 +29,7 @@ const GuideRoutes = () => {
       <Route path="downloads" element={<GuideDownloads />} />
       <Route path="help" element={<GuideHelp />} />
       {/* Fallback */}
-      <Route path="*" element={<Navigate to="dashboard" replace />} />
+      <Route path="*" element={<Navigate to="/guide/dashboard" replace />} />
     </Routes>
   );
 };

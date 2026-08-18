@@ -1,79 +1,106 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { studentNavigation } from '@/constants/navigation';
 import Card from '@/components/common/Card';
 import Button from '@/components/common/Button';
-import { Download, FileText, File as FileIcon, Archive, Upload } from 'lucide-react';
+import { Download, FileText, Lock, CheckCircle, Loader2 } from 'lucide-react';
+import { useStudentAnalytics } from '@/hooks/useStudentAnalytics';
+import { useData } from '@/contexts/DataContext';
+import EmptyState from '@/components/common/EmptyState';
 
 const StudentDownloads = () => {
+  const { getStudentEvaluations, dataLoading } = useStudentAnalytics();
+  const { settings } = useData();
 
-  const resources = [
-    { id: 1, title: 'Capstone Project Guidelines 2026', type: 'PDF', size: '2.4 MB', icon: FileText, color: 'text-red-500' },
-    { id: 2, title: 'Report Formatting Template', type: 'DOCX', size: '1.1 MB', icon: FileIcon, color: 'text-blue-500' },
-    { id: 3, title: 'Review 1 Presentation Template', type: 'PPTX', size: '4.5 MB', icon: FileIcon, color: 'text-orange-500' },
-    { id: 4, title: 'Standard UML Diagram Examples', type: 'ZIP', size: '8.2 MB', icon: Archive, color: 'text-purple-500' }
-  ];
+  const isPublished = useMemo(() => {
+    const pubSettings = settings?.find(s => s.id === 'resultPublication');
+    return pubSettings?.isPublished || false; // default false
+  }, [settings]);
 
-  const handleDownload = (title) => {
-    alert(`Downloading ${title}... (Simulated)`);
-  };
+  if (dataLoading) {
+    return (
+      <DashboardLayout navigationItems={studentNavigation} title="Downloads">
+        <div className="flex h-64 items-center justify-center">
+          <Loader2 className="h-8 w-8 animate-spin text-primary-600" />
+        </div>
+      </DashboardLayout>
+    );
+  }
 
-  const handleUpload = () => {
-    alert(`Upload dialog opened. (Simulated)`);
-  };
+  const evaluations = getStudentEvaluations();
 
   return (
-    <DashboardLayout navigationItems={studentNavigation} title="KL CSE Capstone Portal - Downloads">
+    <DashboardLayout navigationItems={studentNavigation} title="Downloads">
       <div className="max-w-5xl mx-auto space-y-6">
         
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-6 rounded-xl shadow-sm border border-gray-200">
           <div>
             <h1 className="text-2xl font-bold text-gray-900 tracking-tight flex items-center gap-2">
-              <Download className="h-6 w-6 text-primary-600" /> Resources & Submissions
+              <Download className="h-6 w-6 text-primary-600" /> Official Documents
             </h1>
-            <p className="text-sm text-gray-500 mt-1">Download official guidelines and manage your project document uploads.</p>
+            <p className="text-sm text-gray-500 mt-1">Download your official evaluations, attendance reports, and semester results.</p>
           </div>
-          <Button onClick={handleUpload} className="flex items-center gap-2">
-            <Upload className="w-4 h-4" /> Upload Document
-          </Button>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <Card title="Official Department Resources">
-            <div className="divide-y divide-gray-100 mt-2">
-              {resources.map(res => (
-                <div key={res.id} className="flex items-center justify-between py-4 hover:bg-gray-50 px-2 rounded transition-colors">
+          <Card title="Official Result Transcripts" className="shadow-sm">
+            {isPublished ? (
+              <div className="space-y-4 mt-2">
+                <div className="flex items-center justify-between p-4 bg-green-50 border border-green-100 rounded-lg">
                   <div className="flex items-center gap-3">
-                    <div className={`p-2 bg-gray-100 rounded-lg ${res.color}`}>
-                      <res.icon className="w-5 h-5" />
+                    <div className="p-2 bg-green-100 rounded-lg text-green-600">
+                      <FileText className="w-6 h-6" />
                     </div>
                     <div>
-                      <h4 className="text-sm font-semibold text-gray-900">{res.title}</h4>
-                      <p className="text-xs text-gray-500">{res.type} • {res.size}</p>
+                      <h4 className="text-sm font-bold text-green-900">Official Semester Result</h4>
+                      <p className="text-xs text-green-700">Final Marksheet • PDF</p>
                     </div>
                   </div>
-                  <Button variant="ghost" size="sm" onClick={() => handleDownload(res.title)}>
-                    <Download className="w-4 h-4 text-gray-600" />
+                  <Button size="sm" className="bg-green-600 hover:bg-green-700 flex items-center gap-2">
+                    <Download className="w-4 h-4" /> Download
                   </Button>
                 </div>
-              ))}
-            </div>
+              </div>
+            ) : (
+              <div className="py-8 border border-dashed border-gray-200 mt-2 rounded-lg bg-gray-50">
+                <EmptyState 
+                  icon={Lock}
+                  title="Results Not Published"
+                  description="Your official semester transcripts will be available for download once the department publishes them."
+                />
+              </div>
+            )}
           </Card>
 
-          <Card title="My Submissions">
-            <div className="space-y-4 mt-2">
-              <div className="border border-dashed border-gray-300 rounded-lg p-6 text-center bg-gray-50 hover:bg-gray-100 transition-colors cursor-pointer" onClick={handleUpload}>
-                <Upload className="w-8 h-8 text-gray-400 mx-auto mb-2" />
-                <h4 className="text-sm font-semibold text-gray-900">Upload Project Proposal</h4>
-                <p className="text-xs text-gray-500 mt-1">PDF format only. Max 10MB.</p>
+          <Card title="Published Evaluations" className="shadow-sm">
+            {evaluations && evaluations.length > 0 ? (
+              <div className="divide-y divide-gray-100 mt-2">
+                {evaluations.map(ev => (
+                  <div key={ev.id} className="flex items-center justify-between py-4 hover:bg-gray-50 px-2 rounded transition-colors">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-blue-50 rounded-lg text-blue-500">
+                        <FileText className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <h4 className="text-sm font-semibold text-gray-900">{ev.cycleName} Transcript</h4>
+                        <p className="text-xs text-gray-500">Evaluation Record • PDF</p>
+                      </div>
+                    </div>
+                    <Button variant="outline" size="sm" className="flex items-center gap-2">
+                      <Download className="w-4 h-4" /> PDF
+                    </Button>
+                  </div>
+                ))}
               </div>
-
-              <div className="border border-dashed border-gray-300 rounded-lg p-6 text-center bg-gray-50 hover:bg-gray-100 transition-colors cursor-pointer" onClick={handleUpload}>
-                <Upload className="w-8 h-8 text-gray-400 mx-auto mb-2" />
-                <h4 className="text-sm font-semibold text-gray-900">Upload Review 1 Slides</h4>
-                <p className="text-xs text-gray-500 mt-1">PPTX/PDF format. Max 20MB.</p>
+            ) : (
+              <div className="py-8 mt-2">
+                <EmptyState 
+                  icon={CheckCircle}
+                  title="No Evaluations Found"
+                  description="Your formal evaluations will appear here for download after they are completed."
+                />
               </div>
-            </div>
+            )}
           </Card>
         </div>
 

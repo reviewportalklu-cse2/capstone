@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { auditService } from '@/firebase/services/auditService';
+import { useData } from '@/contexts/DataContext';
 import Card from '@/components/common/Card';
 import Table from '@/components/common/Table';
 import Button from '@/components/common/Button';
@@ -19,27 +19,10 @@ import {
 } from 'lucide-react';
 
 const EvaluationAuditLogs = () => {
-  const [logs, setLogs] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const { auditLogs: logs, dataLoading } = useData();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedRole, setSelectedRole] = useState('All');
   const [viewMode, setViewMode] = useState('table'); // 'table' | 'timeline'
-
-  useEffect(() => {
-    fetchAuditLogs();
-  }, []);
-
-  const fetchAuditLogs = async () => {
-    setLoading(true);
-    try {
-      const data = await auditService.getAll();
-      setLogs(data);
-    } catch (err) {
-      console.error("Failed to load evaluation audit logs:", err);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const sampleLogs = [
     { id: '1', action: 'STAGE_UPDATE_PUBLISHED', user: 'admin@kl.edu', role: 'Admin', department: 'CSE', entity: 'Project', entityId: 'TEAM001', prevVal: 'Approved', newVal: 'Published', timestamp: '2026-07-22 10:15 AM', status: 'Success' },
@@ -109,7 +92,7 @@ const EvaluationAuditLogs = () => {
     }
   ];
 
-  if (loading) {
+  if (dataLoading) {
     return (
       <div className="flex h-64 items-center justify-center">
         <Loader2 className="w-8 h-8 animate-spin text-primary-600" />

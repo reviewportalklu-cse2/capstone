@@ -1,7 +1,7 @@
+import { useData } from '@/contexts/DataContext';
 import React, { useState, useEffect } from 'react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { useAdminNavigation } from '@/hooks/useAdminNavigation';
-import { useAdminStats } from '@/contexts/AdminStatsContext';
 import Card from '@/components/common/Card';
 import Table from '@/components/common/Table';
 import Badge from '@/components/common/Badge';
@@ -12,13 +12,14 @@ import { adminService, auditService, studentService, guideService, reviewerServi
 import { useAuth } from '@/contexts/AuthContext';
 import { Plus, Search, Upload, Loader2, Download, Edit2, Trash2 } from 'lucide-react';
 
+import { resolveStudentRelations } from '@/utils/relationshipResolver';
+
 const StudentManagement = () => {
   const navigationItems = useAdminNavigation();
 
   const { currentUser } = useAuth();
-  const { data, loading: contextLoading } = useAdminStats();
-  const { students, guides, reviewers, faculty, projects } = data;
-  
+  const { students = [], guides = [], faculty = [], reviewers = [], teams = [], projects = [], reviewCycles = [], reviewerAssignments = [], dataLoading } = useData();
+    
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEdit, setIsEdit] = useState(false);
@@ -26,14 +27,13 @@ const StudentManagement = () => {
   
   const [formData, setFormData] = useState({
     id: '',
+    rollNo: '',
     name: '',
     email: '',
-    rollNo: '',
-    batch: '',
-    section: '',
     guideId: '',
-    reviewerId: '',
     facultyId: '',
+    reviewerId: '',
+    teamId: '',
     projectId: ''
   });
 
@@ -41,14 +41,13 @@ const StudentManagement = () => {
     setIsEdit(true);
     setFormData({
       id: student.id,
+      rollNo: student.rollNo || student.rollNumber || '',
       name: student.name || '',
       email: student.email || '',
-      rollNo: student.rollNo || '',
-      batch: student.batch || '',
-      section: student.section || '',
       guideId: student.guideId || '',
-      reviewerId: student.reviewerId || '',
       facultyId: student.facultyId || '',
+      reviewerId: student.reviewerId || '',
+      teamId: student.teamId || '',
       projectId: student.projectId || ''
     });
     setIsModalOpen(true);
@@ -56,7 +55,10 @@ const StudentManagement = () => {
 
   const handleOpenAdd = () => {
     setIsEdit(false);
-    setFormData({ id: '', name: '', email: '', rollNo: '', batch: '', section: '', guideId: '', reviewerId: '', facultyId: '', projectId: '' });
+    setFormData({
+      id: '', rollNo: '', name: '', email: '',
+      guideId: '', facultyId: '', reviewerId: '', teamId: '', projectId: ''
+    });
     setIsModalOpen(true);
   };
 
@@ -67,59 +69,32 @@ const StudentManagement = () => {
       const payload = { ...formData };
       delete payload.id;
       
-      let studentId = formData.id;
       let prevData = null;
 
       if (isEdit) {
-        prevData = students.find(s => s.id === studentId);
-        await studentService.update(studentId, {
-          name: payload.name,
-          email: payload.email,
-          rollNo: payload.rollNo,
-          batch: payload.batch,
-          section: payload.section
-        });
+        prevData = students.find(s => s.id === formData.id);
+        await studentService.updateStudent(formData.id, payload);
+        await auditService.log(currentUser.uid, 'UPDATE_STUDENT', 'students', formData.id, { before: prevData, after: payload });
       } else {
-        studentId = await studentService.create({
-          ...payload,
-          status: 'Active',
-          createdAt: new Date().toISOString()
-        });
+        const newId = await studentService.createStudent(payload);
+        await auditService.log(currentUser.uid, 'CREATE_STUDENT', 'students', newId, { after: payload });
       }
-
-      // Sync relationships atomically
-      await adminService.assignStudent(studentId, {
-        guideId: payload.guideId,
-        reviewerId: payload.reviewerId,
-        facultyId: payload.facultyId,
-        projectId: payload.projectId
-      });
-
-      // Audit Log
-      await auditService.log(
-        currentUser.uid, 
-        isEdit ? 'UPDATE_STUDENT' : 'CREATE_STUDENT', 
-        'Student', 
-        prevData, 
-        payload
-      );
-
       setIsModalOpen(false);
-    } catch (error) {
-      console.error("Error saving student:", error);
-      alert("Error saving student. Please try again.");
+    } catch (err) {
+      console.error(err);
     } finally {
       setSubmitting(false);
     }
   };
 
-  const handleDelete = async (student) => {
-    if (window.confirm(`Are you sure you want to delete ${student.name}?`)) {
+  const handleDelete = async (id) => {
+    if (window.confirm("Are you sure you want to delete this student?")) {
       try {
-        await studentService.delete(student.id);
-        await auditService.log(currentUser.uid, 'DELETE_STUDENT', 'Student', student, null);
+        const prevData = students.find(s => s.id === id);
+        await studentService.deleteStudent(id);
+        await auditService.log(currentUser.uid, 'DELETE_STUDENT', 'students', id, { before: prevData });
       } catch (err) {
-        console.error("Error deleting student:", err);
+        console.error(err);
       }
     }
   };
@@ -133,19 +108,6 @@ const StudentManagement = () => {
       (student.email || '').toLowerCase().includes(term)
     );
   });
-
-  const getGuideName = (id) => {
-    const g = guides.find(g => g.id === id);
-    return g?.name || g?.['Guide Name'] || 'Unassigned';
-  };
-  const getReviewerName = (id) => {
-    const r = reviewers.find(r => r.id === id);
-    return r?.name || r?.['Reviewer Name'] || 'Unassigned';
-  };
-  const getFacultyName = (id) => {
-    const f = faculty.find(f => f.id === id);
-    return f?.name || f?.['Faculty Name'] || 'Unassigned';
-  };
 
   const columns = [
     { 
@@ -163,47 +125,65 @@ const StudentManagement = () => {
     },
     { 
       header: 'Batch', 
-      render: (row) => row.batch || row.Batch || 'N/A' 
+      render: (row) => {
+        const rel = resolveStudentRelations(row, { teams, projects, guides, faculty, reviewers, reviewCycles, reviewerAssignments });
+        return <span className="font-medium text-gray-900">{rel.batch || '2026'}</span>;
+      }
     },
     { 
       header: 'Assigned Guide', 
-      render: (row) => (
-        <span className={row.guideId ? 'text-gray-900' : 'text-gray-400 italic'}>
-          {getGuideName(row.guideId || row.GuideId)}
-        </span>
-      )
+      render: (row) => {
+        const rel = resolveStudentRelations(row, { teams, projects, guides, faculty, reviewers, reviewCycles, reviewerAssignments });
+        return (
+          <span className={rel.guideName !== 'Unassigned' ? 'text-gray-900 font-medium' : 'text-gray-400 italic'}>
+            {rel.guideName}
+          </span>
+        );
+      }
     },
     { 
       header: 'Assigned Faculty', 
-      render: (row) => (
-        <span className={row.facultyId ? 'text-gray-900' : 'text-gray-400 italic'}>
-          {getFacultyName(row.facultyId || row.FacultyId)}
-        </span>
-      )
+      render: (row) => {
+        const rel = resolveStudentRelations(row, { teams, projects, guides, faculty, reviewers, reviewCycles, reviewerAssignments });
+        return (
+          <span className={rel.facultyName !== 'Unassigned' ? 'text-gray-900 font-medium' : 'text-gray-400 italic'}>
+            {rel.facultyName}
+          </span>
+        );
+      }
     },
     { 
       header: 'Assigned Reviewer', 
-      render: (row) => (
-        <span className={row.reviewerId ? 'text-gray-900' : 'text-gray-400 italic'}>
-          {getReviewerName(row.reviewerId || row.ReviewerId)}
-        </span>
-      )
+      render: (row) => {
+        const rel = resolveStudentRelations(row, { teams, projects, guides, faculty, reviewers, reviewCycles, reviewerAssignments });
+        return (
+          <span className={rel.reviewerName !== 'Unassigned' ? 'text-gray-900 font-medium' : 'text-gray-400 italic'}>
+            {rel.reviewerName}
+          </span>
+        );
+      }
     },
     { 
       header: 'Team', 
-      render: (row) => (
-        <span className={row.teamId ? 'text-gray-900 font-medium' : 'text-gray-400 italic'}>
-          {row.teamId || 'Unassigned'}
-        </span>
-      )
+      render: (row) => {
+        const rel = resolveStudentRelations(row, { teams, projects, guides, faculty, reviewers, reviewCycles, reviewerAssignments });
+        return (
+          <span className={rel.teamName !== 'Unassigned' ? 'text-gray-900 font-medium' : 'text-gray-400 italic'}>
+            {rel.teamName}
+          </span>
+        );
+      }
     },
     { 
       header: 'Project', 
-      render: (row) => (
-        <span className={row.projectId ? 'text-gray-900 font-medium' : 'text-gray-400 italic'}>
-          {row.projectId || 'Unassigned'}
-        </span>
-      )
+      render: (row) => {
+        const rel = resolveStudentRelations(row, { teams, projects, guides, faculty, reviewers, reviewCycles, reviewerAssignments });
+        return (
+          <span className={rel.projectTitle !== 'Unassigned' ? 'text-gray-900 font-medium' : 'text-gray-400 italic'}>
+            {rel.projectTitle}
+          </span>
+        );
+      }
     },
     { 
       header: 'Action', 
@@ -219,6 +199,16 @@ const StudentManagement = () => {
       ) 
     },
   ];
+
+  if (dataLoading) {
+    return (
+      <DashboardLayout navigationItems={navigationItems} title="KL CSE Capstone Portal - Student Administration">
+        <div className="flex h-64 items-center justify-center">
+          <Loader2 className="h-8 w-8 animate-spin text-primary-600" />
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout navigationItems={navigationItems} title="KL CSE Capstone Portal - Student Administration">
@@ -248,7 +238,7 @@ const StudentManagement = () => {
         </div>
 
         <Card className="overflow-hidden p-0">
-          {contextLoading ? (
+          {dataLoading ? (
             <div className="flex justify-center items-center h-64">
               <Loader2 className="h-8 w-8 text-primary-500 animate-spin" />
             </div>

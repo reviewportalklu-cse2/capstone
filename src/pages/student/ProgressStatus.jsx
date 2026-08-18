@@ -4,31 +4,18 @@ import { studentNavigation } from '@/constants/navigation';
 import Card from '@/components/common/Card';
 import Badge from '@/components/common/Badge';
 import { useAuth } from '@/contexts/AuthContext';
+import { useData } from '@/contexts/DataContext';
 import { studentService } from '@/firebase/services/studentService';
 import { Loader2, Activity, CheckCircle, Clock, Calendar } from 'lucide-react';
 
 const ProgressStatus = () => {
   const { currentUser } = useAuth();
-  const [loading, setLoading] = useState(true);
-  const [studentData, setStudentData] = useState(null);
+  const { getStudentById, dataLoading: loading } = useData();
 
-  useEffect(() => {
-    if (currentUser?.uid) {
-      fetchProgress(currentUser.uid);
-    }
-  }, [currentUser]);
-
-  const fetchProgress = async (uid) => {
-    try {
-      setLoading(true);
-      const student = await studentService.getById(uid);
-      setStudentData(student);
-    } catch (err) {
-      console.error('Error fetching progress:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const studentData = React.useMemo(() => {
+    if (loading || !currentUser) return null;
+    return getStudentById(currentUser.uid);
+  }, [loading, currentUser, getStudentById]);
 
   if (loading) {
     return (

@@ -5,6 +5,7 @@ import Card from '@/components/common/Card';
 import Input from '@/components/common/Input';
 import Button from '@/components/common/Button';
 import { useAuth } from '@/contexts/AuthContext';
+import { useData } from '@/contexts/DataContext';
 import { reviewerService } from '@/firebase/services/reviewerService';
 import { Loader2, UserCog, Save, CheckCircle, AlertCircle } from 'lucide-react';
 
@@ -24,35 +25,24 @@ const ReviewerProfile = () => {
     employeeId: ''
   });
 
-  useEffect(() => {
-    if (currentUser?.uid) {
-      fetchProfile(currentUser.uid);
-    }
-  }, [currentUser]);
+  const { getReviewerById, dataLoading } = useData();
 
-  const fetchProfile = async (uid) => {
-    try {
-      setLoading(true);
-      const data = await reviewerService.getById(uid);
-      if (data) {
-        setFormData({
-          name: data.name || '',
-          email: data.email || currentUser.email || '',
-          department: data.department || '',
-          designation: data.designation || '',
-          phone: data.phone || '',
-          employeeId: data.employeeId || ''
-        });
-      } else {
-        setFormData(prev => ({ ...prev, email: currentUser.email || '' }));
-      }
-    } catch (err) {
-      console.error("Error fetching profile:", err);
-      setError("Failed to load profile data.");
-    } finally {
-      setLoading(false);
+  useEffect(() => {
+    if (dataLoading || !currentUser?.uid) return;
+    const data = getReviewerById(currentUser.uid);
+    if (data) {
+      setFormData({
+        name: data.name || '',
+        email: data.email || currentUser.email || '',
+        department: data.department || '',
+        designation: data.designation || '',
+        phone: data.phone || '',
+        employeeId: data.employeeId || ''
+      });
+    } else {
+      setFormData(prev => ({ ...prev, email: currentUser.email || '' }));
     }
-  };
+  }, [currentUser, getReviewerById, dataLoading]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -80,7 +70,7 @@ const ReviewerProfile = () => {
     }
   };
 
-  if (loading) {
+  if (dataLoading) {
     return (
       <DashboardLayout navigationItems={reviewerNavigation} title="KL CSE Capstone Portal - Profile">
         <div className="flex h-[calc(100vh-4rem)] items-center justify-center">

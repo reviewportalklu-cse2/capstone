@@ -6,25 +6,11 @@ import Badge from '../../components/common/Badge';
 import EmptyState from '../../components/common/EmptyState';
 import { Search, Download, FileText, Eye } from 'lucide-react';
 
-const Reports = () => {
-  const [reports, setReports] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
+import { useData } from '../../contexts/DataContext';
 
-  useEffect(() => {
-    setIsLoading(true);
-    const unsub = FirestoreService.subscribeAll('reports', (data) => {
-      setReports(data || []);
-      setIsLoading(false);
-    }, (error) => {
-      console.error('Error fetching reports:', error);
-      setIsLoading(false);
-    });
-    
-    return () => {
-      if (unsub) unsub();
-    };
-  }, []);
+const Reports = () => {
+  const { reports, dataLoading: isLoading } = useData();
+  const [searchTerm, setSearchTerm] = useState('');
 
   const filteredReports = reports.filter(report => 
     report.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||

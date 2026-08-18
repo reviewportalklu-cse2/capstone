@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { scheduleService } from '../../firebase/services/scheduleService';
+import React, { useState } from 'react';
+import { useData } from '@/contexts/DataContext';
 import Card from '../../components/common/Card';
 import Table from '../../components/common/Table';
 import Badge from '../../components/common/Badge';

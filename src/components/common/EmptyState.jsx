@@ -1,5 +1,6 @@
 import React from 'react';
 import { Inbox } from 'lucide-react';
+import Logo from '@/components/common/Logo';
 
 const EmptyState = ({ 
   icon: Icon = Inbox, 
@@ -13,8 +14,8 @@ const EmptyState = ({
     <div className="flex flex-col items-center justify-center py-16 px-4 text-center bg-white rounded-xl border border-dashed border-gray-300 hover:border-primary-400 transition-colors duration-300 shadow-sm">
       <div className="mb-6 relative">
         {useLogo ? (
-           <div className="bg-primary-50 rounded-full p-4 flex items-center justify-center border-4 border-white shadow-sm ring-1 ring-gray-100">
-             <img src="/logo.png" alt="KL CSE Capstone Portal" className="h-10 w-auto opacity-80 mix-blend-multiply" />
+           <div className="bg-primary-50 rounded-full p-3 flex items-center justify-center border-4 border-white shadow-sm ring-1 ring-gray-100">
+             <Logo size="sm" bgVariant="transparent" className="opacity-90" />
            </div>
         ) : (
           <div className="bg-gray-50 rounded-full p-5 shadow-sm border border-gray-100">

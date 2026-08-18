@@ -1,7 +1,7 @@
+import { useData } from '@/contexts/DataContext';
 import React, { useState, useEffect } from 'react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { useAdminNavigation } from '@/hooks/useAdminNavigation';
-import { useAdminStats } from '@/contexts/AdminStatsContext';
 import Card from '@/components/common/Card';
 import Table from '@/components/common/Table';
 import Badge from '@/components/common/Badge';
@@ -12,14 +12,33 @@ import { reviewerService, auditService, studentService } from '@/firebase/servic
 import { exportToCsv } from '@/utils/csvExport';
 import { useAuth } from '@/contexts/AuthContext';
 import { Plus, Search, Loader2, Download, Edit2, Trash2 } from 'lucide-react';
+import { resolveStudentRelations, resolveTeamRelations, resolveReviewerRelationships } from '@/utils/relationshipResolver';
 
 const ReviewerManagement = () => {
   const navigationItems = useAdminNavigation();
 
   const { currentUser } = useAuth();
-  const { data, loading: contextLoading } = useAdminStats();
-  const { reviewers, students } = data;
-  
+  const dataContext = useData() || {};
+  const { 
+    reviewers = [], 
+    students = [], 
+    teams = [], 
+    projects = [], 
+    guides = [], 
+    faculty = [], 
+    reviewCycles = [], 
+    reviewerAssignments = [], 
+    dataLoading 
+  } = dataContext;
+
+  const resolveReviewerMetrics = (row) => {
+    const { teamCount, studentCount } = resolveReviewerRelationships(row, dataContext);
+    return {
+      teamsCount: teamCount,
+      studentsCount: studentCount
+    };
+  };
+    
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEdit, setIsEdit] = useState(false);
@@ -32,6 +51,8 @@ const ReviewerManagement = () => {
     department: '',
     assignedBatch: ''
   });
+
+  const activeCycle = reviewCycles.find(c => c.status === 'Active') || reviewCycles[0] || null;
 
   const handleOpenEdit = (reviewer) => {
     setIsEdit(true);
@@ -71,7 +92,7 @@ const ReviewerManagement = () => {
       }
 
       await auditService.log(
-        currentUser.uid, 
+        currentUser?.uid || 'admin', 
         isEdit ? 'UPDATE_REVIEWER' : 'CREATE_REVIEWER', 
         'Reviewer', 
         prevData, 
@@ -87,17 +108,17 @@ const ReviewerManagement = () => {
     }
   };
 
-  const handleDelete = async (reviewer) => {
-    const assigned = students.filter(s => s.reviewerId === reviewer.id);
+  const handleDelete = async (rev) => {
+    const assigned = students.filter(s => s.reviewerId === rev.id);
     if (assigned.length > 0) {
       alert(`Cannot delete this reviewer. They have ${assigned.length} student(s) currently assigned.`);
       return;
     }
 
-    if (window.confirm(`Are you sure you want to delete ${reviewer.name}?`)) {
+    if (window.confirm(`Are you sure you want to delete ${rev.name}?`)) {
       try {
-        await reviewerService.delete(reviewer.id);
-        await auditService.log(currentUser.uid, 'DELETE_REVIEWER', 'Reviewer', reviewer, null);
+        await reviewerService.delete(rev.id);
+        await auditService.log(currentUser?.uid || 'admin', 'DELETE_REVIEWER', 'Reviewer', rev, null);
       } catch (err) {
         console.error("Error deleting reviewer:", err);
       }
@@ -106,13 +127,13 @@ const ReviewerManagement = () => {
 
   const handleExport = () => {
     const dataToExport = reviewers.map(r => {
-      const assignedCount = students.filter(s => s.reviewerId === r.id).length;
+      const { teamsCount, studentsCount } = resolveReviewerMetrics(r);
       return {
-        'Name': r.name,
-        'Email': r.email,
-        'Department': r.department,
-        'Assigned Batch': r.assignedBatch,
-        'Assigned Students': assignedCount
+        'Name': r.name || r['Reviewer Name'] || '',
+        'Email': r.email || r.Email || '',
+        'Department': r.department || r.Department || '',
+        'Assigned Teams': teamsCount,
+        'Assigned Students': studentsCount
       };
     });
     exportToCsv('capstoneflow_reviewers.csv', dataToExport);
@@ -139,20 +160,31 @@ const ReviewerManagement = () => {
       ) 
     },
     { 
-      header: 'Department', 
-      render: (row) => row.department || row.Department || 'N/A' 
+      header: 'Current Cycle', 
+      render: (row) => (
+        <Badge variant="primary" className="text-[10px]">
+          {activeCycle?.reviewName || activeCycle?.name || 'Cycle 1'}
+        </Badge>
+      )
     },
     { 
-      header: 'Batch', 
-      render: (row) => row.assignedBatch || row['Assigned Batch'] || row.Batch || 'N/A' 
-    },
-    { 
-      header: 'Assigned Students', 
+      header: 'Assigned Teams (Active)', 
       render: (row) => {
-        const count = students.filter(s => s.reviewerId === row.id).length;
+        const { teamsCount } = resolveReviewerMetrics(row);
         return (
-          <Badge variant={count > 0 ? 'primary' : 'default'}>
-            {count} Student{count !== 1 ? 's' : ''}
+          <Badge variant={teamsCount > 0 ? 'primary' : 'default'}>
+            {teamsCount} Team{teamsCount !== 1 ? 's' : ''}
+          </Badge>
+        );
+      }
+    },
+    { 
+      header: 'Assigned Students (Active)', 
+      render: (row) => {
+        const { studentsCount } = resolveReviewerMetrics(row);
+        return (
+          <Badge variant={studentsCount > 0 ? 'success' : 'default'}>
+            {studentsCount} Student{studentsCount !== 1 ? 's' : ''}
           </Badge>
         );
       }
@@ -171,6 +203,16 @@ const ReviewerManagement = () => {
       ) 
     },
   ];
+
+  if (dataLoading) {
+    return (
+      <DashboardLayout navigationItems={navigationItems} title="KL CSE Capstone Portal - Reviewer Administration">
+        <div className="flex h-64 items-center justify-center">
+          <Loader2 className="h-8 w-8 animate-spin text-primary-600" />
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout navigationItems={navigationItems} title="KL CSE Capstone Portal - Reviewer Administration">
@@ -200,7 +242,7 @@ const ReviewerManagement = () => {
         </div>
 
         <Card className="overflow-hidden p-0">
-          {contextLoading ? (
+          {dataLoading ? (
             <div className="flex justify-center items-center h-64">
               <Loader2 className="h-8 w-8 text-primary-500 animate-spin" />
             </div>

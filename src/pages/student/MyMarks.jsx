@@ -5,6 +5,7 @@ import Card from '@/components/common/Card';
 import Badge from '@/components/common/Badge';
 import EmptyState from '@/components/common/EmptyState';
 import { useAuth } from '@/contexts/AuthContext';
+import { useData } from '@/contexts/DataContext';
 import { studentService } from '@/firebase/services/studentService';
 import { reviewService } from '@/firebase/services/reviewService';
 import { marksService } from '@/firebase/services/marksService';
@@ -12,37 +13,22 @@ import { Loader2, Award, Calculator, BookOpen, UserCheck } from 'lucide-react';
 
 const MyMarks = () => {
   const { currentUser } = useAuth();
-  const [loading, setLoading] = useState(true);
-  const [reviews, setReviews] = useState([]);
-  const [facultyMarks, setFacultyMarks] = useState([]);
-  const [guideMarks, setGuideMarks] = useState([]);
+  const { reviews: allReviews, marks: allMarks, guideMarks: allGuideMarks, dataLoading: loading } = useData();
 
-  useEffect(() => {
-    if (currentUser?.uid) {
-      fetchMarks(currentUser.uid);
-    }
-  }, [currentUser]);
+  const reviews = React.useMemo(() => {
+    if (loading || !currentUser || !allReviews) return [];
+    return allReviews.filter(r => r.studentId === currentUser.uid && r.status === 'Final');
+  }, [allReviews, loading, currentUser]);
 
-  const fetchMarks = async (uid) => {
-    try {
-      setLoading(true);
-      const studentData = await studentService.getById(uid);
-      
-      const [revData, facData, gData] = await Promise.all([
-        reviewService.getByStudentId(uid),
-        marksService.getFacultyMarksByStudentId(uid),
-        marksService.getGuideMarksByStudentId(uid)
-      ]);
-      
-      setReviews(revData.filter(r => r.status === 'Final'));
-      setFacultyMarks(facData || []);
-      setGuideMarks(gData || []);
-    } catch (err) {
-      console.error('Error fetching marks:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const facultyMarks = React.useMemo(() => {
+    if (loading || !currentUser || !allMarks) return [];
+    return allMarks.filter(m => m.studentId === currentUser.uid);
+  }, [allMarks, loading, currentUser]);
+
+  const guideMarks = React.useMemo(() => {
+    if (loading || !currentUser || !allGuideMarks) return [];
+    return allGuideMarks.filter(m => m.studentId === currentUser.uid);
+  }, [allGuideMarks, loading, currentUser]);
 
   if (loading) {
     return (

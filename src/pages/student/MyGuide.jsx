@@ -5,35 +5,21 @@ import Card from '@/components/common/Card';
 import Badge from '@/components/common/Badge';
 import EmptyState from '@/components/common/EmptyState';
 import { useAuth } from '@/contexts/AuthContext';
+import { useData } from '@/contexts/DataContext';
 import { studentService } from '@/firebase/services/studentService';
 import { guideService } from '@/firebase/services/guideService';
 import { Loader2, UserCheck, Mail, Phone, Book, Clock } from 'lucide-react';
 
 const MyGuide = () => {
   const { currentUser } = useAuth();
-  const [guide, setGuide] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const { getStudentById, getGuideById, dataLoading: loading } = useData();
 
-  useEffect(() => {
-    if (currentUser?.uid) {
-      fetchGuide(currentUser.uid);
-    }
-  }, [currentUser]);
-
-  const fetchGuide = async (uid) => {
-    try {
-      setLoading(true);
-      const studentData = await studentService.getById(uid);
-      if (studentData?.guideId) {
-        const guideData = await guideService.getById(studentData.guideId);
-        setGuide(guideData);
-      }
-    } catch (err) {
-      console.error('Error fetching guide:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const guide = React.useMemo(() => {
+    if (loading || !currentUser) return null;
+    const student = getStudentById(currentUser.uid);
+    if (!student || !student.guideId) return null;
+    return getGuideById(student.guideId);
+  }, [loading, currentUser, getStudentById, getGuideById]);
 
   if (loading) {
     return (

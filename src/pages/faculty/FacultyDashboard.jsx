@@ -1,109 +1,27 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { facultyNavigation } from '@/constants/navigation';
 import Card from '@/components/common/Card';
 import StatCard from '@/components/common/StatCard';
-import Table from '@/components/common/Table';
-import Badge from '@/components/common/Badge';
-import Button from '@/components/common/Button';
-import EmptyState from '@/components/common/EmptyState';
 import { useAuth } from '@/contexts/AuthContext';
-import { Users, ClipboardList, CheckCircle, Clock, Loader2, AlertCircle, TrendingUp, BookOpen, UserCheck } from 'lucide-react';
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, BarChart, Bar, Legend } from 'recharts';
-import { studentService } from '@/firebase/services/studentService';
-import { facultyService } from '@/firebase/services/facultyService';
-import { FirestoreService } from '@/firebase/services/firestore';
+import { useFacultyAnalytics } from '@/hooks/useFacultyAnalytics';
+import { Users, FileText, CheckCircle2, Clock, Loader2, AlertCircle, AlertTriangle, PlayCircle } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 const FacultyDashboard = () => {
   const { domainUser } = useAuth();
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [students, setStudents] = useState([]);
+  const navigate = useNavigate();
   
-  // Custom workload state
-  const [workload, setWorkload] = useState({
-    totalAssigned: 0,
-    evaluated: 0,
-    pending: 0,
-    upcomingDeadlines: 0,
-  });
+  const { 
+    dashboardStats,
+    getPendingFacultyEvaluations,
+    getFacultyTimeline,
+    dataLoading
+  } = useFacultyAnalytics();
 
-  const [performanceData, setPerformanceData] = useState([]);
-
-  useEffect(() => {
-    if (domainUser === null) {
-      setLoading(false);
-      setError("No faculty profile found for this account.");
-      console.error("No domain record found for the authenticated email in classroomFaculty collection.");
-      return;
-    }
-    if (!domainUser) return;
-    const { domainId } = domainUser;
-    const unsubs = [];
-    
-    setLoading(true);
-    let loadedCount = 0;
-    const checkLoaded = () => {
-      loadedCount++;
-      if (loadedCount >= 1) setLoading(false);
-    };
-
-    unsubs.push(FirestoreService.subscribeQuery('students', [{ field: 'facultyId', operator: '==', value: domainId }], (myStudents) => {
-      let evaluated = 0;
-      let pending = 0;
-      
-      const enrichedStudents = myStudents.map(s => {
-        const hasMarks = Math.random() > 0.4;
-        if (hasMarks) evaluated++;
-        else pending++;
-        return { 
-          ...s, 
-          status: hasMarks ? 'Evaluated' : 'Pending',
-          lastUpdate: new Date(Date.now() - Math.random() * 10000000000).toLocaleDateString()
-        };
-      });
-
-      setWorkload({
-        totalAssigned: myStudents.length,
-        evaluated,
-        pending,
-        upcomingDeadlines: Math.floor(Math.random() * 5) + 1
-      });
-
-      setStudents(enrichedStudents);
-
-      // Dummy data for performance distribution
-      setPerformanceData([
-        { range: '0-40', count: Math.floor(Math.random() * 2) },
-        { range: '41-60', count: Math.floor(Math.random() * 5) },
-        { range: '61-80', count: Math.floor(Math.random() * 15) + 5 },
-        { range: '81-100', count: Math.floor(Math.random() * 10) + 2 },
-      ]);
-      checkLoaded();
-    }, () => checkLoaded()));
-
-    return () => unsubs.forEach(unsub => unsub && unsub());
-  }, [domainUser]);
-
-  if (error) {
+  if (dataLoading) {
     return (
-      <DashboardLayout navigationItems={facultyNavigation} title="KL CSE Capstone Portal - Evaluation Workspace">
-        <div className="p-6">
-          <div className="bg-red-50 text-red-600 p-4 rounded-lg flex items-center">
-            <AlertCircle className="w-5 h-5 mr-2" />
-            {error}
-          </div>
-          <Button className="mt-4 focus:outline-none focus:ring-2 focus:ring-primary-500" onClick={() => { setError(null); setLoading(true); fetchDashboardData(currentUser.uid); }}>
-            Retry
-          </Button>
-        </div>
-      </DashboardLayout>
-    );
-  }
-
-  if (loading) {
-    return (
-      <DashboardLayout navigationItems={facultyNavigation} title="KL CSE Capstone Portal - Evaluation Workspace">
+      <DashboardLayout navigationItems={facultyNavigation} title="Academic Evaluation Workspace">
         <div className="flex h-screen items-center justify-center">
           <Loader2 className="h-10 w-10 animate-spin text-primary-600" />
         </div>
@@ -111,39 +29,25 @@ const FacultyDashboard = () => {
     );
   }
 
-  const taskColumns = [
-    { header: 'Student', accessor: 'name' },
-    { header: 'Project / Task', render: (row) => <span className="text-sm text-gray-600 truncate max-w-[150px] block">{row.project || 'Internal Assessment'}</span> },
-    { header: 'Due Date', render: () => <span className="text-sm font-medium text-gray-800">In {Math.floor(Math.random() * 7) + 1} days</span> },
-    { 
-      header: 'Status', 
-      render: (row) => (
-        <Badge variant={row.status === 'Evaluated' ? 'success' : 'warning'}>
-          {row.status}
-        </Badge>
-      )
-    },
-    { 
-      header: 'Action', 
-      render: (row) => (
-        row.status === 'Pending' ? (
-          <Button size="sm" variant="primary" className="focus:outline-none focus:ring-2 focus:ring-primary-500">
-            Evaluate
-          </Button>
-        ) : (
-          <Button size="sm" variant="secondary" className="focus:outline-none focus:ring-2 focus:ring-primary-500">
-            Review
-          </Button>
-        )
-      ) 
-    }
-  ];
+  if (!domainUser || !dashboardStats) {
+    return (
+      <DashboardLayout navigationItems={facultyNavigation} title="Academic Evaluation Workspace">
+        <div className="p-6">
+          <div className="bg-red-50 text-red-600 p-4 rounded-lg flex items-center">
+            <AlertCircle className="w-5 h-5 mr-2" />
+            No faculty profile or data found.
+          </div>
+        </div>
+      </DashboardLayout>
+    );
+  }
 
-  const pendingTasks = students.filter(s => s.status === 'Pending');
+  const timeline = getFacultyTimeline().slice(0, 5);
+  const pendingEvals = getPendingFacultyEvaluations().slice(0, 5);
 
   return (
-    <DashboardLayout navigationItems={facultyNavigation} title="KL CSE Capstone Portal - Evaluation Workspace">
-      <div className="space-y-8 max-w-7xl mx-auto pb-10 px-6 sm:px-8">
+    <DashboardLayout navigationItems={facultyNavigation} title="Academic Evaluation Workspace">
+      <div className="space-y-8 max-w-7xl mx-auto pb-10 px-4 sm:px-6">
         
         {/* Header Section */}
         <div className="bg-gradient-to-r from-primary-900 to-primary-700 rounded-xl p-6 shadow-lg text-white">
@@ -151,177 +55,115 @@ const FacultyDashboard = () => {
             <div>
               <h1 className="text-3xl font-bold mb-2">Academic Evaluation Workspace</h1>
               <p className="text-primary-100 text-lg">
-                Welcome back, {domainUser?.name || 'Faculty'}. Here is your evaluation workload for today.
+                Welcome back, {domainUser.name}. Here is your classroom overview.
               </p>
             </div>
             <div className="bg-white/10 p-4 rounded-lg backdrop-blur-sm border border-white/20 text-right">
-              <p className="text-sm text-primary-100 uppercase tracking-wider font-semibold mb-1">Today's Date</p>
-              <p className="text-xl font-bold">{new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
+              <p className="text-sm text-primary-100 uppercase tracking-wider font-semibold mb-1">Active Cycle</p>
+              <p className="text-xl font-bold">{dashboardStats.activeCycle}</p>
             </div>
           </div>
         </div>
 
         {/* Workload Overview */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
-          <Card className="md:col-span-1 bg-white border-l-4 border-l-primary-500 shadow-sm">
-            <div className="flex items-center gap-4">
-              <div className="p-3 bg-primary-50 rounded-lg text-primary-600">
-                <Users size={24} />
-              </div>
-              <div>
-                <p className="text-sm font-medium text-gray-500">Mentee Students</p>
-                <h3 className="text-2xl font-bold text-gray-900">{workload.totalAssigned}</h3>
-              </div>
-            </div>
-          </Card>
-          
-          <Card className="md:col-span-1 bg-white border-l-4 border-l-green-500 shadow-sm">
-            <div className="flex items-center gap-4">
-              <div className="p-3 bg-green-50 rounded-lg text-green-600">
-                <CheckCircle size={24} />
-              </div>
-              <div>
-                <p className="text-sm font-medium text-gray-500">Marks Evaluated</p>
-                <h3 className="text-2xl font-bold text-gray-900">{workload.evaluated}</h3>
-              </div>
-            </div>
-          </Card>
-
-          <Card className="md:col-span-1 bg-white border-l-4 border-l-amber-500 shadow-sm">
-            <div className="flex items-center gap-4">
-              <div className="p-3 bg-amber-50 rounded-lg text-amber-600">
-                <AlertCircle size={24} />
-              </div>
-              <div>
-                <p className="text-sm font-medium text-gray-500">Pending Actions</p>
-                <h3 className="text-2xl font-bold text-gray-900">{workload.pending}</h3>
-              </div>
-            </div>
-          </Card>
-
-          <Card className="md:col-span-1 bg-white border-l-4 border-l-red-500 shadow-sm">
-            <div className="flex items-center gap-4">
-              <div className="p-3 bg-red-50 rounded-lg text-red-600">
-                <Clock size={24} />
-              </div>
-              <div>
-                <p className="text-sm font-medium text-gray-500">Upcoming Deadlines</p>
-                <h3 className="text-2xl font-bold text-gray-900">{workload.upcomingDeadlines}</h3>
-              </div>
-            </div>
-          </Card>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+          <StatCard 
+            title="Assigned Teams" 
+            value={dashboardStats.totalTeams} 
+            icon={Users} 
+            colorClass="text-blue-600" 
+            bgClass="bg-blue-50" 
+          />
+          <StatCard 
+            title="Active Cycle Pending" 
+            value={dashboardStats.pendingEvaluations} 
+            icon={PlayCircle} 
+            colorClass="text-purple-600" 
+            bgClass="bg-purple-50" 
+          />
+          <StatCard 
+            title="Absentee Pending" 
+            value={dashboardStats.absenteeEvaluations} 
+            icon={AlertTriangle} 
+            colorClass="text-amber-600" 
+            bgClass="bg-amber-50" 
+          />
+          <StatCard 
+            title="Overall Attendance" 
+            value={`${dashboardStats.overallAttendance}%`} 
+            icon={CheckCircle2} 
+            colorClass="text-green-600" 
+            bgClass="bg-green-50" 
+          />
         </div>
 
         {/* Main Workspace Area */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           
-          {/* Left Column: Tasks & Backlog */}
-          <div className="lg:col-span-2 space-y-8">
-            
-            {/* Priority Tasks */}
-            <Card title="Marks Entry Backlog & Priority Tasks" icon={<ClipboardList className="text-primary-600" />} className="shadow-sm">
-              <div className="mb-4">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-medium text-gray-600">Evaluation Progress</span>
-                  <span className="text-sm font-bold text-primary-600">{Math.round((workload.evaluated / (workload.totalAssigned || 1)) * 100)}%</span>
+          <div className="lg:col-span-2 space-y-6">
+            <Card title="Pending Evaluation Workload" icon={<FileText className="text-primary-600" />}>
+              {pendingEvals.length > 0 ? (
+                <div className="divide-y divide-gray-100 mt-2">
+                  {pendingEvals.map((task, idx) => (
+                    <div key={idx} className="py-3 flex justify-between items-center">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h4 className="text-sm font-bold text-gray-900">{task.teamId}</h4>
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase ${task.type === 'Absentee' ? 'bg-amber-100 text-amber-800' : 'bg-primary-100 text-primary-800'}`}>
+                            {task.type}
+                          </span>
+                        </div>
+                        <p className="text-xs text-gray-500 mt-1">{task.studentName} - {task.projectTitle}</p>
+                      </div>
+                      <div className="text-right flex flex-col items-end">
+                        <span className="text-xs text-red-500 font-medium flex items-center gap-1 mb-1">
+                          <Clock className="w-3 h-3"/> {task.deadline === 'End of Cycle' ? 'Cycle End' : new Date(task.deadline).toLocaleDateString()}
+                        </span>
+                        <button 
+                          onClick={() => navigate('/faculty/evaluations')}
+                          className="text-xs font-bold text-primary-600 hover:text-primary-800 transition-colors"
+                        >
+                          Evaluate &rarr;
+                        </button>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-                <div className="w-full bg-gray-200 rounded-full h-2.5">
-                  <div className="bg-primary-600 h-2.5 rounded-full transition-all duration-500" style={{ width: `${(workload.evaluated / (workload.totalAssigned || 1)) * 100}%` }}></div>
-                </div>
-              </div>
-              
-              <div className="mt-6 overflow-x-auto">
-                {pendingTasks.length > 0 ? (
-                  <Table columns={taskColumns} data={pendingTasks.slice(0, 5)} />
-                ) : (
-                  <EmptyState 
-                    icon={CheckCircle}
-                    title="All Caught Up!"
-                    message="You have no pending evaluations at the moment."
-                  />
-                )}
-              </div>
-              {pendingTasks.length > 5 && (
-                <div className="mt-4 text-center">
-                  <Button variant="ghost" className="text-primary-600 font-medium text-sm hover:text-primary-800 transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500">
-                    View all {pendingTasks.length} pending tasks
-                  </Button>
+              ) : (
+                <div className="text-center py-8">
+                  <CheckCircle2 className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                  <p className="text-gray-500">All caught up! No pending evaluations.</p>
                 </div>
               )}
             </Card>
-
-            {/* Quick Actions Workflow */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-              <button className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm hover:shadow-md hover:border-primary-300 transition-all text-left group flex items-start gap-5 focus:outline-none focus:ring-2 focus:ring-primary-500">
-                <div className="p-3 bg-blue-50 text-blue-600 rounded-lg group-hover:bg-blue-600 group-hover:text-white transition-colors">
-                  <BookOpen size={24} />
-                </div>
-                <div>
-                  <h4 className="font-bold text-gray-900 mb-1">Bulk Marks Entry</h4>
-                  <p className="text-sm text-gray-500">Enter marks for multiple students in spreadsheet view</p>
-                </div>
-              </button>
-              <button className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm hover:shadow-md hover:border-primary-300 transition-all text-left group flex items-start gap-5 focus:outline-none focus:ring-2 focus:ring-primary-500">
-                <div className="p-3 bg-purple-50 text-purple-600 rounded-lg group-hover:bg-purple-600 group-hover:text-white transition-colors">
-                  <UserCheck size={24} />
-                </div>
-                <div>
-                  <h4 className="font-bold text-gray-900 mb-1">Review Submissions</h4>
-                  <p className="text-sm text-gray-500">Check and evaluate recent project submissions</p>
-                </div>
-              </button>
-            </div>
           </div>
 
-          {/* Right Column: Insights */}
-          <div className="lg:col-span-1 space-y-8">
-            
-            <Card title="Performance Distribution" icon={<TrendingUp className="text-primary-600" />} className="shadow-sm">
-              <div className="h-64 mt-4">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={performanceData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
-                    <XAxis dataKey="range" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#6b7280' }} />
-                    <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#6b7280' }} />
-                    <RechartsTooltip 
-                      cursor={{ fill: '#f9fafb' }}
-                      contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                    />
-                    <Bar dataKey="count" name="Students" fill="#3b82f6" radius={[4, 4, 0, 0]} barSize={30} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-              <p className="text-xs text-center text-gray-500 mt-4">Distribution of Internal Marks across assigned students</p>
-            </Card>
-
-            <Card title="Upcoming Deadlines" className="shadow-sm bg-amber-50/50 border border-amber-100">
-              <div className="space-y-4">
-                <div className="flex gap-4 p-3 bg-white rounded-lg border border-amber-200">
-                  <div className="flex flex-col items-center justify-center bg-amber-100 text-amber-800 rounded px-3 py-1 min-w-[60px]">
-                    <span className="text-xs font-bold uppercase">Oct</span>
-                    <span className="text-xl font-bold">15</span>
-                  </div>
-                  <div>
-                    <h4 className="font-bold text-gray-900 text-sm">Mid-Term Eval</h4>
-                    <p className="text-xs text-gray-500 mt-1">Complete all internal marks entry</p>
-                  </div>
+          <div className="lg:col-span-1 space-y-6">
+            <Card title="Recent Activity Timeline">
+              {timeline.length > 0 ? (
+                <div className="space-y-4 relative before:absolute before:inset-0 before:ml-2 before:-translate-x-px md:before:mx-auto md:before:translate-x-0 before:h-full before:w-0.5 before:bg-gradient-to-b before:from-transparent before:via-slate-200 before:to-transparent mt-4">
+                  {timeline.map((event, idx) => (
+                    <div key={idx} className="relative flex items-center justify-between md:justify-normal md:odd:flex-row-reverse group is-active">
+                      <div className="flex items-center justify-center w-5 h-5 rounded-full border border-white bg-primary-100 text-primary-600 shadow shrink-0 md:order-1 md:group-odd:-translate-x-1/2 md:group-even:translate-x-1/2">
+                        <div className="w-1.5 h-1.5 bg-primary-600 rounded-full"></div>
+                      </div>
+                      <div className="w-[calc(100%-2rem)] md:w-[calc(50%-1.5rem)] p-3 rounded border border-slate-200 bg-white shadow-sm">
+                        <div className="flex items-center justify-between mb-1">
+                          <h4 className="font-bold text-slate-900 text-xs">{event.title}</h4>
+                        </div>
+                        <p className="text-[10px] text-slate-500">{event.details}</p>
+                        <time className="text-[10px] text-slate-400 mt-1 block">{new Date(event.date).toLocaleDateString()}</time>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-                <div className="flex gap-4 p-3 bg-white rounded-lg border border-gray-200 opacity-70">
-                  <div className="flex flex-col items-center justify-center bg-gray-100 text-gray-600 rounded px-3 py-1 min-w-[60px]">
-                    <span className="text-xs font-bold uppercase">Nov</span>
-                    <span className="text-xl font-bold">02</span>
-                  </div>
-                  <div>
-                    <h4 className="font-bold text-gray-900 text-sm">Final Project Review</h4>
-                    <p className="text-xs text-gray-500 mt-1">Phase 2 presentation evaluations</p>
-                  </div>
-                </div>
-              </div>
+              ) : (
+                <p className="text-sm text-gray-500 text-center py-6">No recent activity found.</p>
+              )}
             </Card>
-            
           </div>
+          
         </div>
-
       </div>
     </DashboardLayout>
   );

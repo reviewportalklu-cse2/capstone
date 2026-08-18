@@ -1,13 +1,17 @@
+import { useData } from '@/contexts/DataContext';
 import React, { useState } from 'react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { useAdminNavigation } from '@/hooks/useAdminNavigation';
 import Card from '@/components/common/Card';
 import Button from '@/components/common/Button';
 import { Download, Upload, AlertTriangle, Shield, CheckCircle, Database } from 'lucide-react';
-import { studentService, guideService, reviewerService, facultyService, projectService } from '@/firebase/services';
 
 const BackupRestore = () => {
   const navigationItems = useAdminNavigation();
+  const { students = [], guides = [], faculty = [], reviewers = [], teams = [], projects = [], reviews = [], dataLoading } = useData();
+  const data = { students, guides, faculty, reviewers, teams, projects, reviews };
+  const stats = { students: students.length, guides: guides.length, faculty: faculty.length, reviewers: reviewers.length, teams: teams.length, projects: projects.length, reviews: reviews.length };
+  const recentReviews = [...reviews].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0, 5);
 
   const [loading, setLoading] = useState(false);
   const [statusMsg, setStatusMsg] = useState(null);
@@ -15,14 +19,7 @@ const BackupRestore = () => {
   const handleBackup = async () => {
     setLoading(true);
     try {
-      const [st, gu, re, fa, pr] = await Promise.all([
-        studentService.getAll(),
-        guideService.getAll(),
-        reviewerService.getAll(),
-        facultyService.getAll(),
-        projectService.getAll()
-      ]);
-
+      
       const backupData = {
         timestamp: new Date().toISOString(),
         version: "1.0",

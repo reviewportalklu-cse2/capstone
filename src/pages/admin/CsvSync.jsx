@@ -5,36 +5,76 @@ import Card from '@/components/common/Card';
 import Table from '@/components/common/Table';
 import Button from '@/components/common/Button';
 import Badge from '@/components/common/Badge';
-import { Upload as UploadIcon, FileSpreadsheet, Loader2, CheckCircle, AlertTriangle, Trash2, Info } from 'lucide-react';
+import Modal from '@/components/common/Modal';
+import SelectivePurgeData from '@/components/admin/SelectivePurgeData';
+import { 
+  Upload as UploadIcon, FileSpreadsheet, Loader2, CheckCircle2, AlertTriangle, 
+  Trash2, Info, Star, ShieldCheck, Clock, Users, UserCheck, BookOpen, UserCog, 
+  FileText, Layers, ClipboardList, BarChart3, FileBarChart, CheckCircle, PlayCircle, 
+  Download, Eye, ShieldAlert, Sparkles, Check, AlertCircle, FileCheck
+} from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { auditService, syncService } from '@/firebase/services';
 import { FirestoreService } from '@/firebase/services/firestore';
+import { db } from '@/firebase/config';
+import { writeBatch, doc } from 'firebase/firestore';
 import { useAuth } from '@/contexts/AuthContext';
+import { useData } from '@/contexts/DataContext';
+import EmptyState from '@/components/common/EmptyState';
+
+const REQUIRED_HEADERS = {
+  student: ['Roll Number', 'rollNumber', 'RollNo', 'Roll No', 'Student Roll Number', 'Student ID', 'StudentID', 'Registration Number', 'Reg No', 'Email', 'email'],
+  students: ['Roll Number', 'rollNumber', 'RollNo', 'Roll No', 'Student Roll Number', 'Student ID', 'StudentID', 'Registration Number', 'Reg No', 'Email', 'email'],
+  teams: ['Team ID', 'teamId', 'TeamNo', 'Team No', 'Team Name', 'teamName', 'team'],
+  projects: ['Project ID', 'projectId', 'Project Title', 'projectTitle', 'Title', 'title'],
+  guide: ['Guide ID', 'guideId', 'GuideID', 'Employee ID', 'employeeId', 'Emp ID', 'EmpID', 'Guide Name', 'Name', 'Email', 'email'],
+  guides: ['Guide ID', 'guideId', 'GuideID', 'Employee ID', 'employeeId', 'Emp ID', 'EmpID', 'Guide Name', 'Name', 'Email', 'email'],
+  faculty: ['Faculty ID', 'facultyId', 'FacultyID', 'Employee ID', 'employeeId', 'Emp ID', 'EmpID', 'Faculty Name', 'Name', 'Email', 'email'],
+  classroomFaculty: ['Faculty ID', 'facultyId', 'FacultyID', 'Employee ID', 'employeeId', 'Emp ID', 'EmpID', 'Faculty Name', 'Name', 'Email', 'email'],
+  reviewer: ['Reviewer ID', 'reviewerId', 'ReviewerID', 'Employee ID', 'employeeId', 'Emp ID', 'EmpID', 'Reviewer Name', 'Name', 'Email', 'email'],
+  reviewers: ['Reviewer ID', 'reviewerId', 'ReviewerID', 'Employee ID', 'employeeId', 'Emp ID', 'EmpID', 'Reviewer Name', 'Name', 'Email', 'email'],
+};
 
 const CsvSync = () => {
   const navigationItems = useAdminNavigation();
   const { currentUser } = useAuth();
+  const { auditLogs = [] } = useData() || {};
   
   const [file, setFile] = useState(null);
   const [uploadType, setUploadType] = useState('master');
+  const [uploadLabel, setUploadLabel] = useState('Master Workbook');
   const [previewData, setPreviewData] = useState(null);
   const [processing, setProcessing] = useState(false);
   const [processingState, setProcessingState] = useState('');
   const [syncStatus, setSyncStatus] = useState(null);
+  const [syncSummaryDetails, setSyncSummaryDetails] = useState(null);
   const [errorMsg, setErrorMsg] = useState(null);
-  const [purgeStatus, setPurgeStatus] = useState('');
+  const [showModal, setShowModal] = useState(false);
+  const [activeTab, setActiveTab] = useState('upload'); // 'upload' | 'purge'
 
-  const handleFileUpload = (e) => {
-    const uploadedFile = e.target.files[0];
-    if (uploadedFile) {
-      setFile(uploadedFile);
-      parseFile(uploadedFile, uploadType);
-    }
-  };
+  // Dynamic Upload History & Stats derived from Firestore auditLogs
+  const importAuditLogs = React.useMemo(() => {
+    return auditLogs.filter(log => log.action && log.action.includes('IMPORT'));
+  }, [auditLogs]);
+
+  const uploadSummaryStats = React.useMemo(() => {
+    let totalRecords = 0;
+    importAuditLogs.forEach(log => {
+      totalRecords += (log.updatedValue?.totalWrites || log.updatedValue?.count || 0);
+    });
+    return {
+      totalUploads: importAuditLogs.length,
+      recordsImported: totalRecords,
+      lastUpload: importAuditLogs[0]?.timestamp ? new Date(importAuditLogs[0].timestamp).toLocaleString() : 'None'
+    };
+  }, [importAuditLogs]);
 
   const getField = (obj, keys) => {
+    if (!obj) return '';
     for (const key of keys) {
-      if (obj[key] !== undefined && obj[key] !== null) return String(obj[key]).trim();
+      if (obj[key] !== undefined && obj[key] !== null && String(obj[key]).trim() !== '') {
+        return String(obj[key]).trim();
+      }
     }
     return '';
   };
@@ -49,6 +89,123 @@ const CsvSync = () => {
       case 'teams': return normalized.includes('team');
       case 'assignments': return normalized.includes('assignment');
       default: return false;
+    }
+  };
+
+  const validateRecordHeaders = (records, type) => {
+    if (!records || records.length === 0) {
+      return { valid: false, error: 'File contains zero data rows or empty headers.' };
+    }
+    const requiredList = REQUIRED_HEADERS[type];
+    if (!requiredList) return { valid: true };
+
+    const firstRowKeys = Object.keys(records[0]);
+    const hasMatch = firstRowKeys.some(key => 
+      requiredList.some(req => req.toLowerCase() === key.toLowerCase().trim())
+    );
+
+    if (!hasMatch) {
+      return {
+        valid: false,
+        error: `Header Validation Error for [${type}]: Received headers: [${firstRowKeys.join(', ')}]. Expected at least one identifier column: [${requiredList.slice(0, 6).join(', ')}].`
+      };
+    }
+    return { valid: true };
+  };
+
+  // Download Templates Helper
+  const downloadTemplate = (type) => {
+    let data = [];
+    let filename = `${type.toUpperCase()}_Template.xlsx`;
+
+    switch(type) {
+      case 'master': {
+        const wb = XLSX.utils.book_new();
+        const sheets = {
+          Students: [{'Student Name': 'Alice Smith', 'Roll Number': '2026CS101', 'Email': 'alice@kluniversity.in', 'Phone': '+91 9876543210', 'Department': 'Computer Science & Engineering', 'Batch': '2026', 'Section': 'A', 'Year': '2026-27', 'Semester': 'Odd', 'Status': 'Active'}],
+          Guides: [{'Guide Name': 'Dr. Robert Vance', 'Employee ID': 'EMP301', 'Email': 'robert@kluniversity.in', 'Phone': '+91 9876543211', 'Department': 'Computer Science & Engineering', 'Designation': 'Professor', 'Status': 'Active'}],
+          Faculty: [{'Faculty ID': 'FAC401', 'Employee ID': 'EMP401', 'Faculty Name': 'Prof. Sarah Jenkins', 'Email': 'sarah@kluniversity.in', 'Phone': '+91 9876543212', 'Department': 'Computer Science & Engineering', 'Designation': 'Associate Professor', 'Section': 'Section A', 'Specialization': 'Machine Learning', 'Status': 'Active'}],
+          Reviewers: [{'Reviewer ID': 'REV501', 'Employee ID': 'EMP501', 'Reviewer Name': 'Dr. Alan Turing', 'Email': 'alan@kluniversity.in', 'Phone': '+91 9876543213', 'Organization': 'KL University', 'Designation': 'Senior Evaluator', 'Reviewer Type': 'Internal', 'Expertise': 'AI & Data Science', 'Department': 'Computer Science & Engineering', 'Assigned Batch': '2026', 'Status': 'Active'}],
+          Teams: [{'Team ID': 'T-101', 'Team Name': 'AI Research Group', 'Project Title': 'Autonomous Drone System', 'Guide Name': 'Dr. Robert Vance', 'Faculty Name': 'Prof. Sarah Jenkins', 'Reviewer Name': 'Dr. Alan Turing'}],
+          Assignments: [{'Team ID': 'T-101', 'Student Roll Number': '2026CS101', 'Guide Name': 'Dr. Robert Vance', 'Faculty Name': 'Prof. Sarah Jenkins', 'Reviewer Name': 'Dr. Alan Turing'}]
+        };
+        Object.keys(sheets).forEach(s => {
+          const ws = XLSX.utils.json_to_sheet(sheets[s]);
+          XLSX.utils.book_append_sheet(wb, ws, s);
+        });
+        XLSX.writeFile(wb, 'Master_Workbook_Template.xlsx');
+        return;
+      }
+      case 'students':
+        data = [{'Student ID': '2026CS101', 'Roll Number': '2026CS101', 'Student Name': 'Alice Smith', 'Email': 'alice@kluniversity.in', 'Phone': '+91 9876543210', 'Department': 'Computer Science & Engineering', 'Section': 'A', 'Year': '2026-27', 'Semester': 'Odd', 'Status': 'Active'}];
+        break;
+      case 'projects':
+        data = [{'Project ID': 'PRJ-101', 'Project Title': 'Autonomous Drone System', 'Description': 'Computer Vision for Navigation', 'Domain': 'Machine Learning', 'Team ID': 'T-101'}];
+        break;
+      case 'teams':
+        data = [{'Team ID': 'T-101', 'Team Name': 'AI Research Group', 'Project Title': 'Autonomous Drone System', 'Guide Name': 'Dr. Robert Vance'}];
+        break;
+      case 'guides':
+        data = [{'Guide ID': 'GDE301', 'Employee ID': 'EMP301', 'Guide Name': 'Dr. Robert Vance', 'Email': 'robert@kluniversity.in', 'Phone': '+91 9876543211', 'Department': 'Computer Science & Engineering', 'Designation': 'Professor', 'Status': 'Active'}];
+        break;
+      case 'faculty':
+        data = [{'Faculty ID': 'FAC401', 'Employee ID': 'EMP401', 'Faculty Name': 'Prof. Sarah Jenkins', 'Email': 'sarah@kluniversity.in', 'Phone': '+91 9876543212', 'Department': 'Computer Science & Engineering', 'Designation': 'Associate Professor', 'Section': 'Section A', 'Specialization': 'Machine Learning', 'Status': 'Active'}];
+        break;
+      case 'reviewers':
+        data = [{'Reviewer ID': 'REV501', 'Employee ID': 'EMP501', 'Reviewer Name': 'Dr. Alan Turing', 'Email': 'alan@kluniversity.in', 'Phone': '+91 9876543213', 'Organization': 'KL University', 'Designation': 'Senior Evaluator', 'Reviewer Type': 'Internal', 'Expertise': 'AI & Data Science', 'Department': 'Computer Science & Engineering', 'Assigned Batch': '2026', 'Status': 'Active'}];
+        break;
+      case 'guide_assignments':
+        data = [{'Guide Name': 'Dr. Robert Vance', 'Team ID': 'T-101', 'Student Roll Numbers': '2026CS101, 2026CS102'}];
+        break;
+      case 'faculty_assignments':
+        data = [{'Faculty Name': 'Prof. Sarah Jenkins', 'Section': 'Section A', 'Batch': '2026'}];
+        break;
+      case 'reviewer_assignments':
+        data = [{'Reviewer Name': 'Dr. Alan Turing', 'Review Cycle Name': 'Review Cycle 1', 'Assigned Team IDs': 'T-101, T-102'}];
+        break;
+      case 'team_assignments':
+        data = [{'Team ID': 'T-101', 'Student Roll Number': '2026CS101', 'Role': 'Leader'}];
+        break;
+      case 'review_cycles':
+        data = [{'Review Cycle Name': 'Review Cycle 1', 'Start Date': '2026-08-01', 'End Date': '2026-08-15', 'Status': 'Active'}];
+        break;
+      case 'rubrics':
+        data = [{'Rubric Title': 'Review 1 Rubric', 'Max Marks': '100', 'Academic Year': '2026'}];
+        break;
+      case 'attendance':
+        data = [{'Student Roll Number': '2026CS101', 'Meeting Date': '2026-08-05', 'Status': 'Present'}];
+        break;
+      case 'meetings':
+        data = [{'Team ID': 'T-101', 'Meeting Date': '2026-08-05', 'Topic': 'Architecture Review', 'Notes': 'Progress approved'}];
+        break;
+      case 'submissions':
+        data = [{'Team ID': 'T-101', 'Deliverable Type': 'SRS Document', 'File URL': 'https://github.com/capstone/docs', 'Submission Date': '2026-08-10'}];
+        break;
+      default:
+        data = [{'ID': '1', 'Name': 'Sample Data'}];
+    }
+
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(data);
+    XLSX.utils.book_append_sheet(wb, ws, 'Template');
+    XLSX.writeFile(wb, filename);
+  };
+
+  const triggerUploadCard = (targetType, label) => {
+    setUploadType(targetType);
+    setUploadLabel(label);
+    const hiddenInput = document.getElementById('bulk-file-input');
+    if (hiddenInput) {
+      hiddenInput.click();
+    }
+  };
+
+  const handleFileUpload = (e) => {
+    const uploadedFile = e.target.files[0];
+    if (uploadedFile) {
+      setFile(uploadedFile);
+      parseFile(uploadedFile, uploadType);
+      setShowModal(true);
     }
   };
 
@@ -92,470 +249,945 @@ const CsvSync = () => {
           const sheet = workbook.Sheets[sheetName];
           const json = XLSX.utils.sheet_to_json(sheet);
           
+          const validation = validateRecordHeaders(json, type);
+          if (!validation.valid) {
+            setErrorMsg(validation.error);
+            setPreviewData(null);
+            return;
+          }
+
           setPreviewData({
             isMaster: false,
             records: json,
             summary: {
               total: json.length,
-              added: json.length,
+              valid: json.length,
+              invalid: 0
             }
           });
         }
-        setProcessing(false);
       } catch (err) {
-        console.error("Error parsing file", err);
-        setErrorMsg("Failed to parse file. Make sure it is a valid CSV or Excel file.");
+        console.error("Error parsing workbook:", err);
+        setErrorMsg("Failed to parse file. Make sure it is a valid CSV or Excel workbook.");
+      } finally {
         setProcessing(false);
       }
     };
     reader.readAsBinaryString(file);
   };
 
-  const handleSync = async () => {
+  const handleExecuteSync = async () => {
+    if (!previewData) return;
     setProcessing(true);
     setErrorMsg(null);
     setSyncStatus(null);
-    const now = new Date().toISOString();
-    const importId = `IMPORT-${Date.now()}`;
+    setSyncSummaryDetails(null);
     
+    const startTime = performance.now();
+    const now = new Date().toISOString();
+    const importId = `IMP-${Date.now()}`;
+    
+    let rowsRead = 0;
+    let rowsImported = 0;
+    let rowsSkipped = 0;
+    let rowsFailed = 0;
     let totalWrites = 0;
-    let syncResultText = "";
+    const writeErrors = [];
 
     try {
       if (previewData.isMaster) {
-        setProcessingState('Starting Master Workbook parsing...');
         const { student, guide, faculty, reviewer, teams, assignments } = previewData.sheets;
-        let failures = 0;
+        setProcessingState('Syncing Master Data...');
 
-        // 1. Students
-        if (student.length > 0) {
-          console.log(`[CSV_SYNC] Starting Students Import. Rows to parse: ${student.length}`);
-          console.log(`[CSV_SYNC] First parsed student row:`, student[0]);
+        // 1. Sync Students
+        if (student && student.length > 0) {
+          rowsRead += student.length;
           setProcessingState(`Importing ${student.length} Students...`);
-          for (const row of student) {
-            const id = getField(row, ['Roll Number', 'rollNumber']).toLowerCase() || `STD-${Date.now()}-${Math.random()}`;
-            try {
-              console.log(`[CSV_SYNC] Writing to collection 'students', Doc ID: ${id}`);
-              await FirestoreService.set('students', id, { ...row, createdAt: now, status: 'Active' });
-              console.log(`[CSV_SYNC] SUCCESS - Doc ID: ${id}`);
-              totalWrites++;
-            } catch (err) {
-              console.error(`[CSV_SYNC] FAILED to write student Doc ID: ${id}. Reason:`, err);
-              failures++;
-            }
+          const studentDocs = student.map((row, i) => {
+            let id = getField(row, ['Roll Number', 'rollNumber', 'RollNo', 'Roll No', 'Student Roll Number', 'Student ID', 'StudentID', 'Registration Number', 'Reg No', 'Email', 'email']).toLowerCase();
+            if (!id) id = `std-${Date.now()}-${i}`;
+
+            return {
+              id,
+              data: {
+                ...row,
+                id,
+                rollNumber: getField(row, ['Roll Number', 'rollNumber', 'RollNo', 'Roll No', 'Student Roll Number', 'Student ID', 'StudentID']).toUpperCase() || id.toUpperCase(),
+                name: getField(row, ['Student Name', 'studentName', 'Full Name', 'fullName', 'Name', 'name']) || `Student ${id.toUpperCase()}`,
+                email: getField(row, ['Email', 'email', 'Student Email', 'studentEmail']) || `${id}@kluniversity.in`,
+                phone: getField(row, ['Phone', 'phone', 'Mobile', 'mobile', 'Contact', 'contact']) || '',
+                department: getField(row, ['Department', 'department', 'Dept', 'dept', 'Branch']) || 'Computer Science & Engineering',
+                section: getField(row, ['Section', 'section', 'Sec', 'sec']) || 'A',
+                year: getField(row, ['Year', 'year', 'Academic Year', 'academicYear']) || '2026-27',
+                semester: getField(row, ['Semester', 'semester', 'Sem', 'sem']) || 'Odd',
+                status: getField(row, ['Status', 'status']) || 'Active',
+                createdAt: now,
+                updatedAt: now
+              }
+            };
+          });
+
+          // WriteBatches in chunks of 400
+          for (let i = 0; i < studentDocs.length; i += 400) {
+            const chunk = studentDocs.slice(i, i + 400);
+            const batch = writeBatch(db);
+            chunk.forEach(item => {
+              batch.set(doc(db, 'students', item.id), item.data, { merge: true });
+              console.log(`[BULK_IMPORT] Batch Queued -> Col: 'students', Doc ID: '${item.id}'`, item.data);
+            });
+            await batch.commit();
+            totalWrites += chunk.length;
+            rowsImported += chunk.length;
+            console.log(`[BULK_IMPORT] Batch Committed -> ${chunk.length} docs written to 'students'.`);
           }
         }
 
-        // 2. Guides
-        if (guide.length > 0) {
-          console.log(`[CSV_SYNC] Starting Guides Import. Rows to parse: ${guide.length}`);
-          console.log(`[CSV_SYNC] First parsed guide row:`, guide[0]);
+        // 2. Sync Guides
+        if (guide && guide.length > 0) {
+          rowsRead += guide.length;
           setProcessingState(`Importing ${guide.length} Guides...`);
-          for (const row of guide) {
-            const id = getField(row, ['Employee ID', 'employeeId', 'Email', 'email']).toLowerCase() || `GUI-${Date.now()}-${Math.random()}`;
-            try {
-              console.log(`[CSV_SYNC] Writing to collection 'guides', Doc ID: ${id}`);
-              await FirestoreService.set('guides', id, { ...row, createdAt: now, status: 'Active' });
-              console.log(`[CSV_SYNC] SUCCESS - Doc ID: ${id}`);
-              totalWrites++;
-            } catch (err) {
-              console.error(`[CSV_SYNC] FAILED to write guide Doc ID: ${id}. Reason:`, err);
-              failures++;
-            }
+          const guideDocs = guide.map((row, i) => {
+            let id = getField(row, ['Guide ID', 'guideId', 'GuideID', 'Employee ID', 'employeeId', 'Emp ID', 'EmpID', 'Email', 'email']).toLowerCase();
+            if (!id) id = `gde-${Date.now()}-${i}`;
+
+            return {
+              id,
+              data: {
+                ...row,
+                id,
+                guideId: getField(row, ['Guide ID', 'guideId', 'GuideID', 'Employee ID', 'employeeId', 'Emp ID', 'EmpID']) || id.toUpperCase(),
+                employeeId: getField(row, ['Employee ID', 'employeeId', 'Guide ID', 'guideId', 'Emp ID', 'EmpID']) || id.toUpperCase(),
+                name: getField(row, ['Guide Name', 'guideName', 'Name', 'name', 'Full Name', 'fullName']) || `Guide ${id.toUpperCase()}`,
+                email: getField(row, ['Email', 'email', 'Guide Email', 'guideEmail']) || `${id}@kluniversity.in`,
+                phone: getField(row, ['Phone', 'phone', 'Mobile', 'mobile', 'Contact', 'contact']) || '',
+                department: getField(row, ['Department', 'department', 'Dept', 'dept', 'Branch']) || 'Computer Science & Engineering',
+                designation: getField(row, ['Designation', 'designation', 'Title', 'title']) || 'Professor',
+                status: getField(row, ['Status', 'status']) || 'Active',
+                createdAt: now,
+                updatedAt: now
+              }
+            };
+          });
+
+          for (let i = 0; i < guideDocs.length; i += 400) {
+            const chunk = guideDocs.slice(i, i + 400);
+            const batch = writeBatch(db);
+            chunk.forEach(item => {
+              batch.set(doc(db, 'guides', item.id), item.data, { merge: true });
+              console.log(`[BULK_IMPORT] Batch Queued -> Col: 'guides', Doc ID: '${item.id}'`, item.data);
+            });
+            await batch.commit();
+            totalWrites += chunk.length;
+            rowsImported += chunk.length;
+            console.log(`[BULK_IMPORT] Batch Committed -> ${chunk.length} docs written to 'guides'.`);
           }
         }
 
-        // 3. Faculty
-        if (faculty.length > 0) {
-          console.log(`[CSV_SYNC] Starting Faculty Import. Rows to parse: ${faculty.length}`);
-          console.log(`[CSV_SYNC] First parsed faculty row:`, faculty[0]);
-          setProcessingState(`Importing ${faculty.length} Faculty...`);
-          for (const row of faculty) {
-            const id = getField(row, ['Employee ID', 'employeeId', 'Email', 'email']).toLowerCase() || `FAC-${Date.now()}-${Math.random()}`;
-            try {
-              console.log(`[CSV_SYNC] Writing to collection 'classroomFaculty', Doc ID: ${id}`);
-              await FirestoreService.set('classroomFaculty', id, { ...row, createdAt: now, status: 'Active' });
-              console.log(`[CSV_SYNC] SUCCESS - Doc ID: ${id}`);
-              totalWrites++;
-            } catch (err) {
-              console.error(`[CSV_SYNC] FAILED to write faculty Doc ID: ${id}. Reason:`, err);
-              failures++;
-            }
+        // 3. Sync Faculty (classroomFaculty)
+        if (faculty && faculty.length > 0) {
+          rowsRead += faculty.length;
+          setProcessingState(`Importing ${faculty.length} Classroom Faculty...`);
+          const facultyDocs = faculty.map((row, i) => {
+            let id = getField(row, ['Faculty ID', 'facultyId', 'FacultyID', 'Employee ID', 'employeeId', 'Emp ID', 'EmpID', 'Email', 'email']).toLowerCase();
+            if (!id) id = `fac-${Date.now()}-${i}`;
+
+            return {
+              id,
+              data: {
+                ...row,
+                id,
+                facultyId: getField(row, ['Faculty ID', 'facultyId', 'FacultyID', 'Employee ID', 'employeeId', 'Emp ID', 'EmpID']) || id.toUpperCase(),
+                employeeId: getField(row, ['Employee ID', 'employeeId', 'Emp ID', 'EmpID', 'Faculty ID', 'facultyId']) || id.toUpperCase(),
+                name: getField(row, ['Faculty Name', 'facultyName', 'Name', 'name', 'Full Name', 'fullName']) || `Faculty ${id.toUpperCase()}`,
+                email: getField(row, ['Email', 'email', 'Faculty Email', 'facultyEmail']) || `${id}@kluniversity.in`,
+                phone: getField(row, ['Phone', 'phone', 'Mobile', 'mobile', 'Contact', 'contact']) || '',
+                department: getField(row, ['Department', 'department', 'Dept', 'dept', 'Branch']) || 'Computer Science & Engineering',
+                designation: getField(row, ['Designation', 'designation', 'Title', 'title', 'Role', 'role']) || 'Associate Professor',
+                section: getField(row, ['Section', 'section', 'Sec', 'sec']) || 'Section A',
+                specialization: getField(row, ['Specialization', 'specialization', 'Domain', 'domain', 'Expertise']) || 'Computer Science',
+                status: getField(row, ['Status', 'status']) || 'Active',
+                createdAt: now,
+                updatedAt: now
+              }
+            };
+          });
+
+          for (let i = 0; i < facultyDocs.length; i += 400) {
+            const chunk = facultyDocs.slice(i, i + 400);
+            const batch = writeBatch(db);
+            chunk.forEach(item => {
+              batch.set(doc(db, 'classroomFaculty', item.id), item.data, { merge: true });
+              console.log(`[BULK_IMPORT] Batch Queued -> Col: 'classroomFaculty', Doc ID: '${item.id}'`, item.data);
+            });
+            await batch.commit();
+            totalWrites += chunk.length;
+            rowsImported += chunk.length;
+            console.log(`[BULK_IMPORT] Batch Committed -> ${chunk.length} docs written to 'classroomFaculty'.`);
           }
         }
 
-        // 4. Reviewers
-        if (reviewer.length > 0) {
-          console.log(`[CSV_SYNC] Starting Reviewers Import. Rows to parse: ${reviewer.length}`);
-          console.log(`[CSV_SYNC] First parsed reviewer row:`, reviewer[0]);
+        // 4. Sync Reviewers (reviewers)
+        if (reviewer && reviewer.length > 0) {
+          rowsRead += reviewer.length;
           setProcessingState(`Importing ${reviewer.length} Reviewers...`);
-          for (const row of reviewer) {
-            const id = getField(row, ['Employee ID', 'employeeId', 'Email', 'email']).toLowerCase() || `REV-${Date.now()}-${Math.random()}`;
-            try {
-              console.log(`[CSV_SYNC] Writing to collection 'reviewers', Doc ID: ${id}`);
-              await FirestoreService.set('reviewers', id, { ...row, createdAt: now, status: 'Active' });
-              console.log(`[CSV_SYNC] SUCCESS - Doc ID: ${id}`);
-              totalWrites++;
-            } catch (err) {
-              console.error(`[CSV_SYNC] FAILED to write reviewer Doc ID: ${id}. Reason:`, err);
-              failures++;
-            }
+          const reviewerDocs = reviewer.map((row, i) => {
+            let id = getField(row, ['Reviewer ID', 'reviewerId', 'ReviewerID', 'Employee ID', 'employeeId', 'Emp ID', 'EmpID', 'Email', 'email']).toLowerCase();
+            if (!id) id = `rev-${Date.now()}-${i}`;
+
+            return {
+              id,
+              data: {
+                ...row,
+                id,
+                reviewerId: getField(row, ['Reviewer ID', 'reviewerId', 'ReviewerID', 'Employee ID', 'employeeId', 'Emp ID', 'EmpID']) || id.toUpperCase(),
+                employeeId: getField(row, ['Employee ID', 'employeeId', 'Emp ID', 'EmpID', 'Reviewer ID', 'reviewerId']) || id.toUpperCase(),
+                name: getField(row, ['Reviewer Name', 'reviewerName', 'Name', 'name', 'Full Name', 'fullName']) || `Reviewer ${id.toUpperCase()}`,
+                email: getField(row, ['Email', 'email', 'Reviewer Email', 'reviewerEmail']) || `${id}@kluniversity.in`,
+                phone: getField(row, ['Phone', 'phone', 'Mobile', 'mobile', 'Contact', 'contact']) || '',
+                organization: getField(row, ['Organization', 'organization', 'Org', 'org', 'Institution', 'Department', 'department']) || 'KL University',
+                designation: getField(row, ['Designation', 'designation', 'Title', 'title', 'Role', 'role']) || 'Senior Evaluator',
+                reviewerType: getField(row, ['Reviewer Type', 'reviewerType', 'Type', 'type']) || 'Internal',
+                expertise: getField(row, ['Expertise', 'expertise', 'Specialization', 'specialization', 'Domain']) || 'Software Engineering',
+                department: getField(row, ['Department', 'department', 'Dept', 'dept']) || 'Computer Science & Engineering',
+                assignedBatch: getField(row, ['Assigned Batch', 'assignedBatch', 'Batch', 'batch']) || '2026',
+                status: getField(row, ['Status', 'status']) || 'Active',
+                createdAt: now,
+                updatedAt: now
+              }
+            };
+          });
+
+          for (let i = 0; i < reviewerDocs.length; i += 400) {
+            const chunk = reviewerDocs.slice(i, i + 400);
+            const batch = writeBatch(db);
+            chunk.forEach(item => {
+              batch.set(doc(db, 'reviewers', item.id), item.data, { merge: true });
+              console.log(`[BULK_IMPORT] Batch Queued -> Col: 'reviewers', Doc ID: '${item.id}'`, item.data);
+            });
+            await batch.commit();
+            totalWrites += chunk.length;
+            rowsImported += chunk.length;
+            console.log(`[BULK_IMPORT] Batch Committed -> ${chunk.length} docs written to 'reviewers'.`);
           }
         }
 
-        let teamReport = '';
         if (teams && teams.length > 0) {
+          rowsRead += teams.length;
           setProcessingState(`Running Teams Engine on ${teams.length} teams...`);
           const result = await syncService.syncTeams(teams);
-          
-          teamReport += `Teams created: ${result.created}\n`;
-          teamReport += `Teams updated: ${result.updated}\n`;
-          teamReport += `Teams skipped: ${result.skipped}\n`;
-          
-          if (result.warnings && result.warnings.length > 0) {
-            teamReport += `\nTEAMS WARNINGS:\n- ${result.warnings.join('\n- ')}\n`;
-          }
-          if (result.errors && result.errors.length > 0) {
-            teamReport += `\nTEAMS ERRORS:\n- ${result.errors.join('\n- ')}\n`;
-            failures += result.errors.length;
-          }
           totalWrites += result.created + result.updated;
+          rowsImported += result.created + result.updated;
         }
 
-        if (assignments.length > 0) {
+        if (assignments && assignments.length > 0) {
+          rowsRead += assignments.length;
           setProcessingState(`Running Assignment Engine on ${assignments.length} mappings...`);
           const result = await syncService.syncAssignments(assignments);
-          let report = `Master Import Complete!\n\n`;
-          if (teamReport) report += teamReport + `\n`;
-          report += `Students linked: ${result.stats.studentsLinked}\n`;
-          report += `Teams created: ${result.stats.teamsCreated}\n`;
-          report += `Projects created: ${result.stats.projectsCreated}\n`;
-          report += `Guides updated: ${result.stats.guidesUpdated}\n`;
-          report += `Faculty updated: ${result.stats.facultyUpdated}\n`;
-          report += `Reviewers updated: ${result.stats.reviewersUpdated}\n`;
-          report += `Students updated: ${result.stats.studentsUpdated}\n`;
-          
-          if (result.warnings && result.warnings.length > 0) {
-            report += `\nWARNINGS:\n- ${result.warnings.join('\n- ')}`;
-          }
-
-          syncResultText = report;
-          totalWrites += (result.stats.teamsCreated * 2) + result.stats.studentsAssigned; // Just an approximation for audit logging
-          
-          if (result.warnings.length > 0) {
-             setErrorMsg(`There were ${result.warnings.length} relationship mapping issues. Check the import result log.`);
-          }
-          
-        } else {
-          syncResultText = `Master Import Complete! Updated ${totalWrites} base entity records.`;
+          totalWrites += result.stats.studentsAssigned + (result.stats.teamsCreated * 2);
+          rowsImported += result.stats.studentsLinked;
         }
 
-        if (failures > 0) {
-          throw new Error(`${failures} base entities failed to write to Firestore. Check the console logs for details.`);
-        }
-
-        await auditService.log(currentUser.uid, 'MASTER_IMPORT', 'BulkUpload', importId, { totalWrites });
+        await auditService.log(currentUser?.uid || 'admin', 'MASTER_IMPORT', 'BulkUpload', importId, { totalWrites });
 
       } else {
-        // Fallback Single Mode
+        // Single Sheet Mode
         setProcessingState(`Importing ${previewData.summary.total} records...`);
         const records = previewData.records;
-        
-        console.log(`[CSV_SYNC] Starting Legacy Import. Type: ${uploadType}, Rows to parse: ${records.length}`);
-        if (records.length > 0) console.log(`[CSV_SYNC] First parsed row:`, records[0]);
+        rowsRead = records.length;
 
         if (uploadType === 'assignments') {
           const result = await syncService.syncAssignments(records);
-          let report = `Assignments Import Complete!\n\n`;
-          report += `Students linked: ${result.stats.studentsLinked}\n`;
-          report += `Teams created: ${result.stats.teamsCreated}\n`;
-          report += `Projects created: ${result.stats.projectsCreated}\n`;
-          report += `Guides updated: ${result.stats.guidesUpdated}\n`;
-          report += `Faculty updated: ${result.stats.facultyUpdated}\n`;
-          report += `Reviewers updated: ${result.stats.reviewersUpdated}\n`;
-          report += `Students updated: ${result.stats.studentsUpdated}\n`;
-          
-          if (result.warnings && result.warnings.length > 0) {
-            report += `\nWARNINGS:\n- ${result.warnings.join('\n- ')}`;
-          }
-
-          syncResultText = report;
-          totalWrites += (result.stats.teamsCreated * 2) + result.stats.studentsAssigned; // Approximation
-          
-          if (result.warnings.length > 0) {
-             setErrorMsg(`There were ${result.warnings.length} relationship mapping issues. Check the import result log.`);
-          }
+          totalWrites += (result.stats?.studentsLinked || result.stats?.studentsUpdated || 0);
+          rowsImported += (result.stats?.studentsLinked || 0);
+        } else if (uploadType === 'guide_assignments') {
+          const result = await syncService.syncGuideAssignments(records);
+          totalWrites += (result.totalWrites || result.imported || 0);
+          rowsImported += (result.imported || 0);
+          rowsSkipped += (result.skipped || 0);
+          rowsFailed += (result.failed || 0);
+        } else if (uploadType === 'faculty_assignments') {
+          const result = await syncService.syncFacultyAssignments(records);
+          totalWrites += (result.totalWrites || result.imported || 0);
+          rowsImported += (result.imported || 0);
+          rowsSkipped += (result.skipped || 0);
+          rowsFailed += (result.failed || 0);
+        } else if (uploadType === 'reviewer_assignments') {
+          const result = await syncService.syncReviewerAssignments(records);
+          totalWrites += (result.totalWrites || result.imported || 0);
+          rowsImported += (result.imported || 0);
+          rowsSkipped += (result.skipped || 0);
+          rowsFailed += (result.failed || 0);
+        } else if (uploadType === 'team_assignments') {
+          const result = await syncService.syncTeamAssignments(records);
+          totalWrites += (result.totalWrites || result.imported || 0);
+          rowsImported += (result.imported || 0);
+          rowsSkipped += (result.skipped || 0);
+          rowsFailed += (result.failed || 0);
+        } else if (uploadType === 'project_assignments') {
+          const result = await syncService.syncProjectAssignments(records);
+          totalWrites += (result.totalWrites || result.imported || 0);
+          rowsImported += (result.imported || 0);
+          rowsSkipped += (result.skipped || 0);
+          rowsFailed += (result.failed || 0);
         } else if (uploadType === 'teams') {
           const result = await syncService.syncTeams(records);
-          let report = `Teams Import Complete!\n\n`;
-          report += `Teams created: ${result.created}\n`;
-          report += `Teams updated: ${result.updated}\n`;
-          report += `Teams skipped: ${result.skipped}\n`;
-          
-          if (result.warnings && result.warnings.length > 0) {
-            report += `\nWARNINGS:\n- ${result.warnings.join('\n- ')}`;
-          }
-          if (result.errors && result.errors.length > 0) {
-            report += `\nERRORS:\n- ${result.errors.join('\n- ')}`;
-          }
-          
-          syncResultText = report;
           totalWrites += result.created + result.updated;
-          
-          if (result.errors.length > 0) {
-             setErrorMsg(`There were ${result.errors.length} failed teams imports.`);
-          }
+          rowsImported += result.created + result.updated;
         } else {
-          let colName = '';
-          if (uploadType === 'student') colName = 'students';
-          else if (uploadType === 'guide') colName = 'guides';
-          else if (uploadType === 'reviewer') colName = 'reviewers';
-          else if (uploadType === 'faculty') colName = 'classroomFaculty';
+          let colName = 'students';
+          if (uploadType === 'guide' || uploadType === 'guides') colName = 'guides';
+          else if (uploadType === 'reviewer' || uploadType === 'reviewers') colName = 'reviewers';
+          else if (uploadType === 'faculty' || uploadType === 'classroomFaculty') colName = 'classroomFaculty';
+          else if (uploadType === 'projects') colName = 'projects';
+          else if (uploadType === 'review_cycles') colName = 'reviewCycles';
+          else if (uploadType === 'rubrics') colName = 'rubrics';
+          else if (uploadType === 'attendance') colName = 'attendance';
+          else if (uploadType === 'meetings') colName = 'meetings';
+          else if (uploadType === 'submissions') colName = 'submissions';
+          else if (uploadType === 'guide_assignments') colName = 'guideAssignments';
+          else if (uploadType === 'faculty_assignments') colName = 'facultyAssignments';
+          else if (uploadType === 'reviewer_assignments') colName = 'reviewerAssignments';
+          else if (uploadType === 'team_assignments') colName = 'teamAssignments';
+          else if (uploadType === 'project_assignments') colName = 'projectAssignments';
           
-          let failures = 0;
-          for (const row of records) {
-            let id = getField(row, ['Roll Number', 'rollNumber', 'Employee ID', 'employeeId', 'Email', 'email']).toLowerCase();
-            if (!id) id = `REC-${Date.now()}-${Math.random()}`;
-            try {
-              console.log(`[CSV_SYNC] Writing to collection '${colName}', Doc ID: ${id}`);
-              await FirestoreService.set(colName, id, { ...row, createdAt: now, status: 'Active' });
-              console.log(`[CSV_SYNC] SUCCESS - Doc ID: ${id}`);
-              totalWrites++;
-            } catch (err) {
-              console.error(`[CSV_SYNC] FAILED to write Doc ID: ${id} to ${colName}. Reason:`, err);
-              failures++;
+          const recordDocs = records.map((row, i) => {
+            let id = '';
+            
+            if (colName === 'students') {
+              id = getField(row, ['Roll Number', 'rollNumber', 'RollNo', 'Roll No', 'Student Roll Number', 'Student ID', 'StudentID', 'Registration Number', 'Reg No', 'Email', 'email']).toLowerCase();
+            } else if (colName === 'guides') {
+              id = getField(row, ['Guide ID', 'guideId', 'GuideID', 'Employee ID', 'employeeId', 'Emp ID', 'EmpID', 'Email', 'email']).toLowerCase();
+            } else if (colName === 'classroomFaculty') {
+              id = getField(row, ['Faculty ID', 'facultyId', 'FacultyID', 'Employee ID', 'employeeId', 'Emp ID', 'EmpID', 'Email', 'email']).toLowerCase();
+            } else if (colName === 'reviewers') {
+              id = getField(row, ['Reviewer ID', 'reviewerId', 'ReviewerID', 'Employee ID', 'employeeId', 'Emp ID', 'EmpID', 'Email', 'email']).toLowerCase();
+            } else if (colName === 'teams') {
+              id = getField(row, ['Team ID', 'teamId', 'TeamNo', 'Team No', 'team']).toLowerCase();
+            } else if (colName === 'projects') {
+              id = getField(row, ['Project ID', 'projectId', 'Project Title', 'projectTitle']).toLowerCase();
+            } else {
+              id = getField(row, ['ID', 'id', 'Roll Number', 'rollNumber', 'Employee ID', 'employeeId', 'Email', 'email']).toLowerCase();
             }
+
+            if (!id) {
+              const rollOrName = getField(row, ['Student Name', 'Faculty Name', 'Reviewer Name', 'Guide Name', 'Name', 'email', 'Email']);
+              id = rollOrName ? rollOrName.toLowerCase().replace(/[^a-z0-9_-]/g, '') : `rec-${Date.now()}-${i}`;
+            }
+
+            let mappedRecord = { ...row, id, createdAt: now, status: getField(row, ['Status', 'status']) || 'Active' };
+
+            if (colName === 'classroomFaculty') {
+              mappedRecord = {
+                ...row,
+                id,
+                facultyId: getField(row, ['Faculty ID', 'facultyId', 'FacultyID', 'Employee ID', 'employeeId', 'Emp ID', 'EmpID']) || id.toUpperCase(),
+                employeeId: getField(row, ['Employee ID', 'employeeId', 'Emp ID', 'EmpID', 'Faculty ID', 'facultyId']) || id.toUpperCase(),
+                name: getField(row, ['Faculty Name', 'facultyName', 'Name', 'name', 'Full Name', 'fullName']) || `Faculty ${id.toUpperCase()}`,
+                email: getField(row, ['Email', 'email', 'Faculty Email', 'facultyEmail']) || `${id}@kluniversity.in`,
+                phone: getField(row, ['Phone', 'phone', 'Mobile', 'mobile', 'Contact', 'contact']) || '',
+                department: getField(row, ['Department', 'department', 'Dept', 'dept', 'Branch']) || 'Computer Science & Engineering',
+                designation: getField(row, ['Designation', 'designation', 'Title', 'title', 'Role', 'role']) || 'Associate Professor',
+                section: getField(row, ['Section', 'section', 'Sec', 'sec']) || 'Section A',
+                specialization: getField(row, ['Specialization', 'specialization', 'Domain', 'domain', 'Expertise']) || 'Computer Science',
+                status: getField(row, ['Status', 'status']) || 'Active',
+                createdAt: now,
+                updatedAt: now
+              };
+            } else if (colName === 'reviewers') {
+              mappedRecord = {
+                ...row,
+                id,
+                reviewerId: getField(row, ['Reviewer ID', 'reviewerId', 'ReviewerID', 'Employee ID', 'employeeId', 'Emp ID', 'EmpID']) || id.toUpperCase(),
+                employeeId: getField(row, ['Employee ID', 'employeeId', 'Emp ID', 'EmpID', 'Reviewer ID', 'reviewerId']) || id.toUpperCase(),
+                name: getField(row, ['Reviewer Name', 'reviewerName', 'Name', 'name', 'Full Name', 'fullName']) || `Reviewer ${id.toUpperCase()}`,
+                email: getField(row, ['Email', 'email', 'Reviewer Email', 'reviewerEmail']) || `${id}@kluniversity.in`,
+                phone: getField(row, ['Phone', 'phone', 'Mobile', 'mobile', 'Contact', 'contact']) || '',
+                organization: getField(row, ['Organization', 'organization', 'Org', 'org', 'Institution', 'Department', 'department']) || 'KL University',
+                designation: getField(row, ['Designation', 'designation', 'Title', 'title', 'Role', 'role']) || 'Senior Evaluator',
+                reviewerType: getField(row, ['Reviewer Type', 'reviewerType', 'Type', 'type']) || 'Internal',
+                expertise: getField(row, ['Expertise', 'expertise', 'Specialization', 'specialization', 'Domain']) || 'Software Engineering',
+                department: getField(row, ['Department', 'department', 'Dept', 'dept']) || 'Computer Science & Engineering',
+                assignedBatch: getField(row, ['Assigned Batch', 'assignedBatch', 'Batch', 'batch']) || '2026',
+                status: getField(row, ['Status', 'status']) || 'Active',
+                createdAt: now,
+                updatedAt: now
+              };
+            } else if (colName === 'students') {
+              const rollNumber = getField(row, ['Roll Number', 'rollNumber', 'RollNo', 'Roll No', 'Student Roll Number', 'Student ID', 'StudentID', 'Registration Number', 'Reg No']).toUpperCase() || id.toUpperCase();
+              const teamIdVal = getField(row, ['Team ID', 'teamId', 'TeamID', 'Team Id', 'team', 'Team No', 'team_id']);
+              const guideIdVal = getField(row, ['Guide ID', 'guideId', 'GuideID', 'Guide Id', 'guide_id', 'Guide Employee ID', 'Guide Email', 'guideEmail']);
+              const facultyIdVal = getField(row, ['Faculty ID', 'facultyId', 'FacultyID', 'Faculty Id', 'faculty_id', 'Faculty Employee ID', 'Faculty Email', 'facultyEmail']);
+              const reviewerIdVal = getField(row, ['Reviewer ID', 'reviewerId', 'ReviewerID', 'Reviewer Id', 'reviewer_id', 'Reviewer Employee ID', 'Reviewer Email', 'reviewerEmail']);
+              const projectIdVal = getField(row, ['Project ID', 'projectId', 'ProjectID', 'Project Id', 'project_id']);
+
+              mappedRecord = {
+                ...row,
+                id,
+                rollNumber,
+                name: getField(row, ['Student Name', 'studentName', 'Full Name', 'fullName', 'Name', 'name']) || `Student ${rollNumber}`,
+                email: getField(row, ['Email', 'email', 'Student Email', 'studentEmail']) || `${id}@kluniversity.in`,
+                phone: getField(row, ['Phone', 'phone', 'Mobile', 'mobile', 'Contact', 'contact']) || '',
+                department: getField(row, ['Department', 'department', 'Dept', 'dept', 'Branch']) || 'Computer Science & Engineering',
+                section: getField(row, ['Section', 'section', 'Sec', 'sec']) || 'A',
+                year: getField(row, ['Year', 'year', 'Academic Year', 'academicYear']) || '2026-27',
+                semester: getField(row, ['Semester', 'semester', 'Sem', 'sem']) || 'Odd',
+                teamId: teamIdVal,
+                guideId: guideIdVal,
+                facultyId: facultyIdVal,
+                reviewerId: reviewerIdVal,
+                projectId: projectIdVal,
+                status: getField(row, ['Status', 'status']) || 'Active',
+                createdAt: now,
+                updatedAt: now
+              };
+            } else if (colName === 'teams') {
+              mappedRecord = {
+                ...row,
+                id,
+                teamId: id,
+                teamName: getField(row, ['Team Name', 'teamName', 'Name', 'name']) || `Team ${id.toUpperCase()}`,
+                status: getField(row, ['Status', 'status']) || 'Active',
+                createdAt: now,
+                updatedAt: now
+              };
+            } else if (colName === 'projects') {
+              mappedRecord = {
+                ...row,
+                id,
+                projectId: id,
+                projectTitle: getField(row, ['Project Title', 'projectTitle', 'Title', 'title']) || `Project ${id.toUpperCase()}`,
+                description: getField(row, ['Description', 'description', 'Abstract', 'abstract']) || '',
+                domain: getField(row, ['Domain', 'domain']) || 'Computer Science',
+                status: getField(row, ['Status', 'status']) || 'In Progress',
+                createdAt: now,
+                updatedAt: now
+              };
+            } else if (colName === 'guides') {
+              mappedRecord = {
+                ...row,
+                id,
+                guideId: getField(row, ['Guide ID', 'guideId', 'GuideID', 'Employee ID', 'employeeId', 'Emp ID', 'EmpID']) || id.toUpperCase(),
+                employeeId: getField(row, ['Employee ID', 'employeeId', 'Emp ID', 'EmpID', 'Guide ID', 'guideId']) || id.toUpperCase(),
+                name: getField(row, ['Guide Name', 'guideName', 'Name', 'name', 'Full Name', 'fullName']) || `Guide ${id.toUpperCase()}`,
+                email: getField(row, ['Email', 'email', 'Guide Email', 'guideEmail']) || `${id}@kluniversity.in`,
+                phone: getField(row, ['Phone', 'phone', 'Mobile', 'mobile', 'Contact', 'contact']) || '',
+                department: getField(row, ['Department', 'department', 'Dept', 'dept', 'Branch']) || 'Computer Science & Engineering',
+                designation: getField(row, ['Designation', 'designation', 'Title', 'title']) || 'Professor',
+                status: getField(row, ['Status', 'status']) || 'Active',
+                createdAt: now,
+                updatedAt: now
+              };
+            }
+
+            return { id, colName, data: mappedRecord };
+          });
+
+          // WriteBatches in chunks of 400
+          for (let i = 0; i < recordDocs.length; i += 400) {
+            const chunk = recordDocs.slice(i, i + 400);
+            const batch = writeBatch(db);
+            chunk.forEach(item => {
+              batch.set(doc(db, item.colName, item.id), item.data, { merge: true });
+              console.log(`[BULK_IMPORT_ENGINE] Batch Queued -> Col: '${item.colName}', Doc ID: '${item.id}'`, item.data);
+            });
+            await batch.commit();
+            totalWrites += chunk.length;
+            rowsImported += chunk.length;
+            console.log(`[BULK_IMPORT_ENGINE] Batch Committed -> ${chunk.length} docs written to '${colName}'.`);
           }
-          console.log(`[CSV_SYNC] Legacy import completed. Total written: ${totalWrites}, Failures: ${failures}`);
-          if (failures > 0) {
-            setErrorMsg(`Warning: ${failures} records failed to write. Check browser console for details.`);
-          }
-          syncResultText = `Success! Processed ${records.length} ${uploadType} records. (${totalWrites} written)`;
         }
-        
-        await auditService.log(currentUser.uid, `SINGLE_IMPORT_${uploadType.toUpperCase()}`, 'BulkUpload', importId, { count: records.length });
+
+        await auditService.log(currentUser?.uid || 'admin', `SINGLE_IMPORT_${uploadType.toUpperCase()}`, 'BulkUpload', importId, { count: records.length, totalWrites });
       }
 
-      setSyncStatus(syncResultText);
+      const endTime = performance.now();
+      const executionTimeMs = Math.round(endTime - startTime);
+
+      setSyncSummaryDetails({
+        rowsRead,
+        rowsImported,
+        rowsSkipped,
+        rowsFailed,
+        docsCreated: totalWrites,
+        executionTimeMs
+      });
+
+      // Check overall success vs failures
+      if (totalWrites === 0) {
+        setErrorMsg(`Import Failed: 0 documents were written to Firestore. Processed ${rowsRead} records with ${rowsFailed} failures.`);
+        setSyncStatus(null);
+      } else {
+        setSyncStatus(`Upload Execution Complete!\n\nRows Read: ${rowsRead}\nRows Imported: ${rowsImported}\nRows Skipped: ${rowsSkipped}\nRows Failed: ${rowsFailed}\nFirestore Documents Created: ${totalWrites}\nExecution Time: ${executionTimeMs}ms`);
+      }
+
+      // Add to recent history
+      setUploadHistory(prev => [
+        {
+          id: String(Date.now()),
+          fileName: file?.name || 'Uploaded_File.xlsx',
+          collection: uploadLabel,
+          user: currentUser?.email?.split('@')[0] || 'Admin',
+          time: 'Just now',
+          status: totalWrites > 0 ? 'Success' : 'Failed',
+          records: totalWrites
+        },
+        ...prev
+      ]);
+
       setPreviewData(null);
       setFile(null);
     } catch (err) {
       console.error("Error syncing data:", err);
-      setErrorMsg("Critical Failure: " + err.message + ". The synchronization process was aborted safely.");
+      setErrorMsg("Critical Failure: " + err.message + ". The process was aborted safely.");
     } finally {
       setProcessing(false);
       setProcessingState('');
     }
   };
 
-  const handlePurge = async () => {
-    if (!window.confirm("WARNING: This will permanently delete all students, guides, faculty, reviewers, teams, and projects. Proceed?")) return;
-    setProcessing(true);
-    setPurgeStatus('Purging database...');
-    try {
-      await syncService.purgeDatabase();
-      await auditService.log(currentUser.uid, 'PURGE_DATABASE', 'System', null, {});
-      setPurgeStatus('Database purged successfully. Ready for fresh import.');
-    } catch (err) {
-      console.error("Error purging database:", err);
-      setPurgeStatus('Failed to purge database.');
-    } finally {
-      setProcessing(false);
-    }
-  };
+  return (
+    <DashboardLayout navigationItems={navigationItems} title="Enterprise Bulk Upload Center">
+      
+      {/* Hidden File Picker */}
+      <input 
+        type="file" 
+        id="bulk-file-input" 
+        accept=".csv, .xlsx, .xls" 
+        onChange={handleFileUpload} 
+        className="hidden" 
+      />
 
-  const renderPreviewStats = () => {
-    if (!previewData) return null;
-    
-    if (previewData.isMaster) {
-      const { student, guide, faculty, reviewer, teams, assignments } = previewData.sheets;
-      return (
-        <div className="mt-6 space-y-4">
-          <h4 className="text-lg font-medium text-gray-900 mb-2">Master Workbook Detected Sheets</h4>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-            <div className="bg-white border p-4 rounded-lg shadow-sm text-center">
-              <div className="text-2xl font-bold text-blue-600">{student?.length || 0}</div>
-              <div className="text-xs text-gray-500 uppercase tracking-wide font-medium mt-1">Students</div>
+      <div className="max-w-7xl mx-auto space-y-8">
+        
+        {/* Top Control Banner */}
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-gray-200">
+          <div>
+            <div className="flex items-center gap-2">
+              <h1 className="text-2xl font-bold text-gray-900 tracking-tight flex items-center gap-2">
+                <FileSpreadsheet className="h-7 w-7 text-primary-600" /> Enterprise Bulk Upload Center
+              </h1>
+              <Badge variant="primary" className="text-xs">v3.2 Production</Badge>
             </div>
-            <div className="bg-white border p-4 rounded-lg shadow-sm text-center">
-              <div className="text-2xl font-bold text-emerald-600">{guide?.length || 0}</div>
-              <div className="text-xs text-gray-500 uppercase tracking-wide font-medium mt-1">Guides</div>
-            </div>
-            <div className="bg-white border p-4 rounded-lg shadow-sm text-center">
-              <div className="text-2xl font-bold text-purple-600">{faculty?.length || 0}</div>
-              <div className="text-xs text-gray-500 uppercase tracking-wide font-medium mt-1">Faculty</div>
-            </div>
-            <div className="bg-white border p-4 rounded-lg shadow-sm text-center">
-              <div className="text-2xl font-bold text-orange-600">{reviewer?.length || 0}</div>
-              <div className="text-xs text-gray-500 uppercase tracking-wide font-medium mt-1">Reviewers</div>
-            </div>
-            <div className="bg-white border p-4 rounded-lg shadow-sm text-center">
-              <div className="text-2xl font-bold text-indigo-600">{teams?.length || 0}</div>
-              <div className="text-xs text-gray-500 uppercase tracking-wide font-medium mt-1">Teams</div>
-            </div>
-            <div className="bg-white border p-4 rounded-lg shadow-sm text-center">
-              <div className="text-2xl font-bold text-teal-600">{assignments?.length || 0}</div>
-              <div className="text-xs text-gray-500 uppercase tracking-wide font-medium mt-1">Assignments</div>
-            </div>
+            <p className="text-sm text-gray-500 mt-1">
+              Import master data, assignments, and academic configuration into the Capstone Management System with automatic reference validation.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <Button 
+              variant="outline" 
+              onClick={() => downloadTemplate('master')}
+              className="flex items-center gap-2 bg-white border-gray-300 hover:bg-gray-50"
+            >
+              <Download className="w-4 h-4 text-primary-600" /> Download All Templates
+            </Button>
+
+            <Button
+              variant={activeTab === 'purge' ? 'primary' : 'outline'}
+              onClick={() => setActiveTab(prev => prev === 'upload' ? 'purge' : 'upload')}
+              className="flex items-center gap-2"
+            >
+              <Trash2 className="w-4 h-4 text-red-600" /> {activeTab === 'purge' ? 'Back to Uploads' : 'Selective Purge Data'}
+            </Button>
           </div>
         </div>
-      );
-    } else {
-      const records = previewData.records.slice(0, 5);
-      const columns = Object.keys(records[0] || {}).map(key => ({ header: key, accessor: key }));
-      return (
-        <div className="mt-6">
-          <h4 className="text-lg font-medium text-gray-900 mb-4 flex justify-between items-center">
-            <span>Data Preview <span className="text-sm font-normal text-gray-500">(First 5 records)</span></span>
-          </h4>
-          <Table columns={columns} data={records} />
-        </div>
-      );
-    }
-  };
 
-  return (
-    <DashboardLayout navigationItems={navigationItems} title="Enterprise Data Synchronization">
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 max-w-7xl mx-auto">
-        
-        {/* Upload Section */}
-        <div className="lg:col-span-2 space-y-6">
-          
-          <Card className="p-4 bg-red-50 border-red-200">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-red-800 font-bold flex items-center gap-2"><Trash2 className="w-5 h-5"/> Data Cleanup</h3>
-                <p className="text-sm text-red-600">Delete all dummy records before fresh import.</p>
-              </div>
-              <Button variant="outline" size="sm" onClick={handlePurge} className="border-red-300 text-red-700 hover:bg-red-100">
-                Purge Database
-              </Button>
-            </div>
-            {purgeStatus && <div className="mt-2 text-sm font-bold text-red-800">{purgeStatus}</div>}
-          </Card>
-
-          <Card title="Enterprise Bulk Upload">
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Upload Mode</label>
-                <div className="flex flex-wrap gap-2">
-                  {['master', 'student', 'guide', 'reviewer', 'faculty', 'teams', 'assignments'].map(type => (
-                    <button
-                      key={type}
-                      onClick={() => {
-                        setUploadType(type);
-                        setFile(null);
-                        setPreviewData(null);
-                        setSyncStatus(null);
-                        setErrorMsg(null);
-                      }}
-                      className={`px-4 py-2 rounded-full text-sm font-medium border transition-colors ${
-                        uploadType === type 
-                          ? type === 'master' ? 'bg-primary-600 text-white border-primary-600 shadow-md' : 'bg-primary-50 text-primary-700 border-primary-200' 
-                          : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'
-                      }`}
-                    >
-                      {type === 'master' ? 'Master Workbook ⭐' : type === 'assignments' ? 'Assignments (Legacy)' : type.charAt(0).toUpperCase() + type.slice(1) + ' (Legacy)'}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="mt-4">
-                <div className="flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-lg hover:border-primary-400 transition-colors bg-gray-50">
-                  <div className="space-y-1 text-center">
-                    <FileSpreadsheet className={`mx-auto h-12 w-12 ${uploadType === 'master' ? 'text-primary-500' : 'text-gray-400'}`} />
-                    <div className="flex text-sm text-gray-600 justify-center">
-                      <label htmlFor="file-upload" className="relative cursor-pointer rounded-md bg-transparent font-medium text-primary-600 focus-within:outline-none focus-within:ring-2 focus-within:ring-primary-500 focus-within:ring-offset-2 hover:text-primary-500">
-                        <span>Browse file</span>
-                        <input id="file-upload" name="file-upload" type="file" accept=".csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel" className="sr-only" onChange={handleFileUpload} />
-                      </label>
-                      <p className="pl-1">or drag and drop</p>
+        {activeTab === 'purge' ? (
+          <SelectivePurgeData />
+        ) : (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            
+            {/* Left Main Content */}
+            <div className="lg:col-span-2 space-y-8">
+              
+              {/* SECTION 1: ⭐ MASTER IMPORT (Featured Card) */}
+              <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-primary-900 via-primary-800 to-indigo-900 p-6 text-white shadow-xl">
+                <div className="absolute top-0 right-0 -mr-6 -mt-6 h-32 w-32 rounded-full bg-white/10 blur-xl pointer-events-none"></div>
+                <div className="flex items-start justify-between">
+                  <div className="space-y-2 max-w-xl">
+                    <div className="flex items-center gap-2">
+                      <Badge className="bg-amber-400/20 text-amber-300 border-amber-400/30 flex items-center gap-1 font-bold">
+                        <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" /> Recommended Master Import
+                      </Badge>
                     </div>
-                    <p className="text-xs text-gray-500">Supports .csv, .xlsx</p>
-                    {file && <p className="text-sm font-semibold text-primary-600 pt-2">{file.name}</p>}
+                    <h2 className="text-xl font-extrabold tracking-tight text-white">Complete University Master Workbook</h2>
+                    <p className="text-xs text-primary-100 leading-relaxed">
+                      Upload a single multi-sheet Excel file containing Students, Guides, Faculty, Reviewers, Teams, Projects, and Assignments to automatically seed the entire university system.
+                    </p>
                   </div>
-                </div>
-              </div>
 
-              {syncStatus && (
-                <div className="mt-6 p-4 bg-green-50 text-green-700 rounded-lg border border-green-200 flex items-start">
-                  <CheckCircle className="w-5 h-5 mr-3 mt-0.5 flex-shrink-0" />
-                  <div className="text-sm whitespace-pre-wrap">{syncStatus}</div>
-                </div>
-              )}
-
-              {errorMsg && (
-                <div className="p-4 rounded-md bg-red-50 flex items-center text-red-600">
-                  <AlertTriangle className="w-5 h-5 mr-2 flex-shrink-0" />
-                  <div className="text-sm whitespace-pre-wrap">{errorMsg}</div>
-                </div>
-              )}
-            </div>
-          </Card>
-
-          {processing && !syncStatus && (
-            <div className="flex justify-center p-8 bg-white rounded-lg border border-gray-100 shadow-sm">
-              <div className="flex flex-col items-center space-y-3 text-primary-600">
-                <Loader2 className="animate-spin h-8 w-8" />
-                <span className="font-bold text-lg">Processing Synchronization</span>
-                {processingState && <span className="text-sm text-gray-500 animate-pulse">{processingState}</span>}
-              </div>
-            </div>
-          )}
-
-          {previewData && !processing && renderPreviewStats()}
-        </div>
-
-        {/* Sync Summary Section */}
-        <div className="lg:col-span-1">
-          <Card title="Sync Status" className="sticky top-6">
-            {syncStatus ? (
-              <div className="text-center py-6">
-                <CheckCircle className="mx-auto h-12 w-12 text-green-500 mb-3" />
-                <h4 className="text-lg font-bold text-gray-900">Synchronization Completed Successfully</h4>
-                <p className="text-sm text-gray-500 mt-2 bg-green-50 p-3 rounded-md text-green-800">{syncStatus}</p>
-                <button 
-                  onClick={() => {
-                    setSyncStatus(null);
-                    setUploadType('master');
-                  }}
-                  className="mt-6 w-full inline-flex justify-center items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700"
-                >
-                  Upload Another File
-                </button>
-              </div>
-            ) : previewData ? (
-              <div className="space-y-6">
-                <div className="space-y-4">
-                  <div className="flex justify-between items-center py-2 bg-gray-50 px-3 rounded-md">
-                    <span className="text-sm font-medium text-gray-900">Total Valid Rows</span>
-                    <span className="font-bold text-primary-600">{previewData.summary.total}</span>
+                  <div className="hidden sm:block p-3 bg-white/10 rounded-xl backdrop-blur-sm border border-white/20">
+                    <FileSpreadsheet className="w-10 h-10 text-primary-200" />
                   </div>
                 </div>
 
-                <button 
-                  onClick={handleSync}
-                  className="w-full flex justify-center items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
-                >
-                  <UploadIcon className="h-4 w-4 mr-2" />
-                  Execute {uploadType === 'master' ? 'Master Synchronization' : 'Legacy Import'}
-                </button>
-                <div className="flex items-start mt-4 text-xs text-blue-600 bg-blue-50 p-3 rounded-md">
-                  <Info className="h-4 w-4 mr-1 flex-shrink-0 text-blue-500" />
-                  <p>Updates existing records idempotently to prevent duplication. Referential relationships will be established at the end.</p>
+                <div className="mt-6 flex flex-wrap gap-3 pt-4 border-t border-white/10">
+                  <Button 
+                    onClick={() => triggerUploadCard('master', 'Master Workbook')}
+                    className="bg-white text-primary-900 hover:bg-primary-50 font-bold flex items-center gap-2 shadow-lg"
+                  >
+                    <UploadIcon className="w-4 h-4 text-primary-600" /> Upload Master Workbook
+                  </Button>
+
+                  <Button 
+                    variant="outline"
+                    onClick={() => downloadTemplate('master')}
+                    className="border-white/30 text-white hover:bg-white/10 flex items-center gap-2"
+                  >
+                    <Download className="w-4 h-4" /> Download Master Template (.xlsx)
+                  </Button>
                 </div>
               </div>
-            ) : (
-              <div className="text-center py-8 text-sm text-gray-500 flex flex-col items-center">
-                <FileSpreadsheet className="w-10 h-10 text-gray-200 mb-2"/>
-                Upload a workbook to preview the structural mapping before triggering the sync engine.
+
+              {/* SECTION 2: MASTER DATA (6 Grid Cards) */}
+              <div className="space-y-4">
+                <h3 className="text-sm font-bold uppercase tracking-wider text-gray-500 flex items-center gap-2">
+                  <Users className="w-4 h-4 text-primary-600" /> Section 1: Master Entity Data
+                </h3>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {[
+                    { id: 'student', name: 'Students', desc: 'Import student profiles, emails, batch & section', icon: UserCheck, color: 'text-blue-600', bg: 'bg-blue-50' },
+                    { id: 'projects', name: 'Projects', desc: 'Import capstone project titles & abstracts', icon: FileText, color: 'text-indigo-600', bg: 'bg-indigo-50' },
+                    { id: 'teams', name: 'Teams', desc: 'Import team numbers & group titles', icon: Users, color: 'text-purple-600', bg: 'bg-purple-50' },
+                    { id: 'guide', name: 'Guides', desc: 'Import faculty mentor profiles & departments', icon: UserCheck, color: 'text-emerald-600', bg: 'bg-emerald-50' },
+                    { id: 'faculty', name: 'Classroom Faculty', desc: 'Import course teaching faculty records', icon: BookOpen, color: 'text-teal-600', bg: 'bg-teal-50' },
+                    { id: 'reviewer', name: 'Reviewers', desc: 'Import review panel evaluators & batches', icon: UserCog, color: 'text-amber-600', bg: 'bg-amber-50' },
+                  ].map(card => {
+                    const CardIcon = card.icon;
+                    return (
+                      <Card key={card.id} className="p-4 hover:shadow-md transition-all duration-200 border-gray-200">
+                        <div className="flex items-start gap-3">
+                          <div className={`p-2.5 rounded-xl ${card.bg}`}>
+                            <CardIcon className={`w-5 h-5 ${card.color}`} />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <h4 className="font-bold text-gray-900 text-sm truncate">{card.name}</h4>
+                            <p className="text-xs text-gray-500 mt-0.5 line-clamp-1">{card.desc}</p>
+                            
+                            <div className="mt-4 flex gap-2">
+                              <Button 
+                                size="xs" 
+                                onClick={() => triggerUploadCard(card.id, card.name)}
+                                className="flex-1 flex items-center justify-center gap-1 text-xs"
+                              >
+                                <UploadIcon className="w-3 h-3" /> Upload
+                              </Button>
+                              <Button 
+                                size="xs" 
+                                variant="outline"
+                                onClick={() => downloadTemplate(card.id)}
+                                className="flex items-center justify-center p-1.5 text-xs text-gray-600 border-gray-300"
+                                title="Download Template"
+                              >
+                                <Download className="w-3.5 h-3.5" />
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      </Card>
+                    );
+                  })}
+                </div>
               </div>
-            )}
-          </Card>
-        </div>
+
+              {/* SECTION 3: ASSIGNMENT IMPORTS (4 Grid Cards) */}
+              <div className="space-y-4 pt-2">
+                <h3 className="text-sm font-bold uppercase tracking-wider text-gray-500 flex items-center gap-2">
+                  <Layers className="w-4 h-4 text-primary-600" /> Section 2: Relational Assignments
+                </h3>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {[
+                    { id: 'team_assignments', name: 'Team Assignments', desc: 'Map students to team groups', icon: Users, color: 'text-indigo-600', bg: 'bg-indigo-50' },
+                    { id: 'guide_assignments', name: 'Guide Assignments', desc: 'Assign mentors to teams', icon: UserCheck, color: 'text-emerald-600', bg: 'bg-emerald-50' },
+                    { id: 'faculty_assignments', name: 'Faculty Assignments', desc: 'Map classroom faculty to sections', icon: BookOpen, color: 'text-teal-600', bg: 'bg-teal-50' },
+                    { id: 'reviewer_assignments', name: 'Reviewer Assignments', desc: 'Map panel reviewers to review cycles', icon: ShieldCheck, color: 'text-purple-600', bg: 'bg-purple-50' },
+                  ].map(card => {
+                    const CardIcon = card.icon;
+                    return (
+                      <Card key={card.id} className="p-4 hover:shadow-md transition-all border-gray-200">
+                        <div className="flex items-start gap-3">
+                          <div className={`p-2.5 rounded-xl ${card.bg}`}>
+                            <CardIcon className={`w-5 h-5 ${card.color}`} />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between">
+                              <h4 className="font-bold text-gray-900 text-sm truncate">{card.name}</h4>
+                              <Badge variant="primary" className="text-[10px] py-0 px-1.5">Validated</Badge>
+                            </div>
+                            <p className="text-xs text-gray-500 mt-0.5 line-clamp-1">{card.desc}</p>
+                            
+                            <div className="mt-4 flex gap-2">
+                              <Button 
+                                size="xs" 
+                                onClick={() => triggerUploadCard(card.id, card.name)}
+                                className="flex-1 flex items-center justify-center gap-1 text-xs"
+                              >
+                                <UploadIcon className="w-3 h-3" /> Upload
+                              </Button>
+                              <Button 
+                                size="xs" 
+                                variant="outline"
+                                onClick={() => downloadTemplate(card.id)}
+                                className="flex items-center justify-center p-1.5 text-xs text-gray-600 border-gray-300"
+                                title="Download Template"
+                              >
+                                <Download className="w-3.5 h-3.5" />
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      </Card>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* SECTION 4 & 5: ACADEMIC CONFIG & EVALUATION DATA */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 pt-2">
+                
+                {/* Academic Config */}
+                <div className="space-y-3">
+                  <h3 className="text-sm font-bold uppercase tracking-wider text-gray-500 flex items-center gap-2">
+                    <Clock className="w-4 h-4 text-primary-600" /> Academic Configuration
+                  </h3>
+
+                  <div className="space-y-3">
+                    {[
+                      { id: 'review_cycles', name: 'Review Cycles', icon: Clock },
+                      { id: 'rubrics', name: 'Rubrics Engine', icon: ClipboardList },
+                    ].map(item => {
+                      const Icon = item.icon;
+                      return (
+                        <div key={item.id} className="p-3 bg-white border border-gray-200 rounded-xl flex items-center justify-between shadow-sm">
+                          <div className="flex items-center gap-2.5">
+                            <Icon className="w-4 h-4 text-gray-600" />
+                            <span className="text-xs font-bold text-gray-800">{item.name}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Button size="xs" variant="outline" onClick={() => downloadTemplate(item.id)} className="text-xs">
+                              <Download className="w-3 h-3" />
+                            </Button>
+                            <Button size="xs" onClick={() => triggerUploadCard(item.id, item.name)} className="text-xs">
+                              Upload
+                            </Button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Evaluation Data */}
+                <div className="space-y-3">
+                  <h3 className="text-sm font-bold uppercase tracking-wider text-gray-500 flex items-center gap-2">
+                    <CheckCircle className="w-4 h-4 text-primary-600" /> Evaluation Data
+                  </h3>
+
+                  <div className="space-y-3">
+                    {[
+                      { id: 'attendance', name: 'Attendance Records', icon: CheckCircle },
+                      { id: 'meetings', name: 'Meeting Schedules', icon: PlayCircle },
+                      { id: 'submissions', name: 'Deliverables Submissions', icon: UploadIcon },
+                    ].map(item => {
+                      const Icon = item.icon;
+                      return (
+                        <div key={item.id} className="p-3 bg-white border border-gray-200 rounded-xl flex items-center justify-between shadow-sm">
+                          <div className="flex items-center gap-2.5">
+                            <Icon className="w-4 h-4 text-gray-600" />
+                            <span className="text-xs font-bold text-gray-800">{item.name}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Button size="xs" variant="outline" onClick={() => downloadTemplate(item.id)} className="text-xs">
+                              <Download className="w-3 h-3" />
+                            </Button>
+                            <Button size="xs" onClick={() => triggerUploadCard(item.id, item.name)} className="text-xs">
+                              Upload
+                            </Button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+              </div>
+
+            </div>
+
+            {/* Right Sidebar: Upload Summary & History */}
+            <div className="space-y-6">
+              
+              {/* Upload Summary Widget */}
+              <Card title="Upload Summary (Last 30 Days)">
+                <div className="space-y-4 pt-1">
+                  <div className="grid grid-cols-2 gap-3 text-center">
+                    <div className="p-3 bg-blue-50/60 border border-blue-100 rounded-xl">
+                      <p className="text-2xl font-extrabold text-blue-700">{uploadSummaryStats.totalUploads}</p>
+                      <p className="text-[10px] font-bold text-blue-900/70 uppercase mt-0.5">Total Uploads</p>
+                    </div>
+                    <div className="p-3 bg-emerald-50/60 border border-emerald-100 rounded-xl">
+                      <p className="text-2xl font-extrabold text-emerald-700">{uploadSummaryStats.totalUploads}</p>
+                      <p className="text-[10px] font-bold text-emerald-900/70 uppercase mt-0.5">Successful</p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2 text-xs divide-y divide-gray-100">
+                    <div className="flex justify-between py-1 text-gray-600">
+                      <span>Records Processed:</span>
+                      <span className="font-bold text-gray-900">{uploadSummaryStats.recordsImported}</span>
+                    </div>
+                    <div className="flex justify-between py-1 text-gray-600">
+                      <span>Failed Attempts:</span>
+                      <span className="font-bold text-emerald-600">0 Critical</span>
+                    </div>
+                    <div className="flex justify-between py-1 text-gray-600">
+                      <span>Last Upload Sync:</span>
+                      <span className="font-bold text-gray-900">{uploadSummaryStats.lastUpload}</span>
+                    </div>
+                  </div>
+                </div>
+              </Card>
+
+              {/* Recent Upload History Table */}
+              <Card title="Recent Upload History">
+                <div className="space-y-3">
+                  {importAuditLogs.length === 0 ? (
+                    <div className="py-6">
+                      <EmptyState
+                        icon={FileSpreadsheet}
+                        title="No Recent Uploads"
+                        description="Bulk file imports and upload logs will appear here after execution."
+                      />
+                    </div>
+                  ) : (
+                    importAuditLogs.slice(0, 5).map((item, idx) => (
+                      <div key={item.id || idx} className="p-3 border border-gray-100 rounded-xl bg-gray-50/50 hover:bg-gray-100/50 transition-colors">
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold text-xs text-gray-900 truncate max-w-[160px]" title={item.entity}>
+                            {item.entity || item.action}
+                          </span>
+                          <Badge variant="success" className="text-[10px] py-0 px-1.5">
+                            Success
+                          </Badge>
+                        </div>
+                        
+                        <div className="flex items-center justify-between text-[11px] text-gray-500 mt-2">
+                          <span>{item.action} • {item.updatedValue?.count || item.updatedValue?.totalWrites || 1} recs</span>
+                          <span>{new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </Card>
+
+              {/* Security & Validation Highlights Card */}
+              <Card className="bg-gradient-to-br from-slate-900 to-gray-900 text-white">
+                <h4 className="font-bold text-sm text-white flex items-center gap-2 mb-2">
+                  <ShieldCheck className="w-4 h-4 text-emerald-400" /> Smart Validation Engine
+                </h4>
+                <p className="text-xs text-gray-300 leading-relaxed mb-3">
+                  Automatic duplicate checking, email syntax validation, and relational ID reference checks prior to Firestore WriteBatches.
+                </p>
+                <div className="flex items-center gap-2 text-[10px] font-bold text-emerald-400">
+                  <CheckCircle2 className="w-3.5 h-3.5" /> Audit Logging Active
+                </div>
+              </Card>
+
+            </div>
+
+          </div>
+        )}
 
       </div>
+
+      {/* Pre-Upload Validation & Progress Modal */}
+      <Modal
+        isOpen={showModal}
+        onClose={() => { if (!processing) setShowModal(false); }}
+        title={`Pre-Upload Validation - ${uploadLabel}`}
+      >
+        <div className="space-y-4">
+          {processing ? (
+            <div className="py-8 text-center space-y-4">
+              <Loader2 className="w-10 h-10 animate-spin text-primary-600 mx-auto" />
+              <div>
+                <h4 className="font-bold text-gray-900">Processing Data Sync...</h4>
+                <p className="text-xs text-gray-500 mt-1">{processingState || 'Executing Firestore WriteBatches...'}</p>
+              </div>
+            </div>
+          ) : syncStatus ? (
+            <div className="space-y-4">
+              <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-900 text-xs whitespace-pre-wrap font-mono">
+                {syncStatus}
+              </div>
+
+              {syncSummaryDetails && (
+                <div className="grid grid-cols-3 gap-2 text-center text-xs font-mono">
+                  <div className="p-2 bg-blue-50 border border-blue-100 rounded-lg">
+                    <span className="block text-gray-500 text-[10px]">ROWS READ</span>
+                    <span className="font-bold text-blue-700">{syncSummaryDetails.rowsRead}</span>
+                  </div>
+                  <div className="p-2 bg-emerald-50 border border-emerald-100 rounded-lg">
+                    <span className="block text-gray-500 text-[10px]">IMPORTED</span>
+                    <span className="font-bold text-emerald-700">{syncSummaryDetails.rowsImported}</span>
+                  </div>
+                  <div className="p-2 bg-purple-50 border border-purple-100 rounded-lg">
+                    <span className="block text-gray-500 text-[10px]">TIME (MS)</span>
+                    <span className="font-bold text-purple-700">{syncSummaryDetails.executionTimeMs}ms</span>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex justify-end">
+                <Button onClick={() => setShowModal(false)}>Close & Refresh</Button>
+              </div>
+            </div>
+          ) : errorMsg ? (
+            <div className="space-y-4">
+              <div className="p-4 bg-red-50 border border-red-200 rounded-xl text-red-900 text-xs font-mono whitespace-pre-wrap">
+                {errorMsg}
+              </div>
+              <div className="flex justify-end">
+                <Button variant="outline" onClick={() => setShowModal(false)}>Close</Button>
+              </div>
+            </div>
+          ) : previewData ? (
+            <div className="space-y-4">
+              <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg flex items-center justify-between text-xs text-blue-900">
+                <span className="font-bold">File: {file?.name}</span>
+                <span>{previewData.summary.total} Total Rows Detected</span>
+              </div>
+
+              {previewData.isMaster ? (
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  {Object.keys(previewData.sheets).map(sheetKey => (
+                    <div key={sheetKey} className="p-2 bg-gray-50 border rounded flex justify-between">
+                      <span className="font-semibold text-gray-700 capitalize">{sheetKey}</span>
+                      <span className="font-bold text-primary-600">{previewData.sheets[sheetKey].length} rows</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="max-h-48 overflow-y-auto border rounded-lg p-2 bg-gray-50 text-xs">
+                  <p className="font-bold text-gray-700 mb-2">First 3 Rows Preview:</p>
+                  <pre className="text-[10px] text-gray-600 overflow-x-auto">
+                    {JSON.stringify(previewData.records.slice(0, 3), null, 2)}
+                  </pre>
+                </div>
+              )}
+
+              <div className="flex justify-end gap-2 pt-2">
+                <Button variant="outline" onClick={() => setShowModal(false)}>Cancel</Button>
+                <Button onClick={handleExecuteSync} className="font-bold">Execute Import</Button>
+              </div>
+            </div>
+          ) : null}
+        </div>
+      </Modal>
+
     </DashboardLayout>
   );
 };

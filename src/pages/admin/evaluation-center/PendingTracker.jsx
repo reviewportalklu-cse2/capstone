@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { evaluationCenterService } from '@/firebase/services/evaluationCenterService';
+import { useEvaluationCenterData } from '@/hooks/useEvaluationCenterData';
 import Card from '@/components/common/Card';
 import Table from '@/components/common/Table';
 import Badge from '@/components/common/Badge';

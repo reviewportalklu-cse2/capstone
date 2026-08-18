@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { studentService } from '@/firebase/services/studentService';
-import { evaluationCenterService } from '@/firebase/services/evaluationCenterService';
+import { useData } from '@/contexts/DataContext';
+import { useEvaluationCenterData } from '@/hooks/useEvaluationCenterData';
 import Card from '@/components/common/Card';
 import Button from '@/components/common/Button';
 import Badge from '@/components/common/Badge';
@@ -12,33 +12,11 @@ const StudentEvaluationDetails = () => {
   const { studentId } = useParams();
   const navigate = useNavigate();
 
-  const [student, setStudent] = useState(null);
-  const [team, setTeam] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const { getStudentById, dataLoading: studentsLoading } = useData();
+  const { getTeamsWithEvaluations, dataLoading: teamsLoading } = useEvaluationCenterData();
 
-  useEffect(() => {
-    fetchStudentData();
-  }, [studentId]);
-
-  const fetchStudentData = async () => {
-    setLoading(true);
-    try {
-      const allStudents = await studentService.getAll();
-      const currentStudent = allStudents.find(s => s.id === studentId || s.uid === studentId || s.rollNumber === studentId);
-      
-      if (currentStudent) {
-        setStudent(currentStudent);
-        const teams = await evaluationCenterService.getAllTeamsWithEvaluations();
-        const matchedTeam = teams.find(t => t.id === currentStudent.projectId || t.teamId === currentStudent.projectId || t.members.some(m => m.id === currentStudent.id || m.uid === currentStudent.uid));
-        setTeam(matchedTeam);
-      }
-    } catch (err) {
-      console.error("Failed to load student evaluation details:", err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
+  const loading = studentsLoading || teamsLoading;
+  
   if (loading) {
     return (
       <div className="flex h-64 items-center justify-center">
@@ -46,6 +24,10 @@ const StudentEvaluationDetails = () => {
       </div>
     );
   }
+
+  const student = getStudentById(studentId);
+  const teams = getTeamsWithEvaluations();
+  const team = student ? teams.find(t => t.id === student.projectId || t.teamId === student.projectId || t.members.some(m => m.id === student.id || m.uid === student.uid)) : null;
 
   if (!student) {
     return (

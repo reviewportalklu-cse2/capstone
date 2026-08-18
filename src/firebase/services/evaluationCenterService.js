@@ -33,7 +33,7 @@ export const evaluationCenterService = {
   // Get all teams with complete aggregated evaluation metadata
   getAllTeamsWithEvaluations: async () => {
     try {
-      const [projects, students, guides, reviewers, faculty, reviews, guideMarks, facultyMarks] = await Promise.all([
+      const [projects, students, guides, reviewers, faculty, reviews, guideMarks, facultyMarks, evaluationsDocs] = await Promise.all([
         projectService.getAll(),
         studentService.getAll(),
         guideService.getAll(),
@@ -41,7 +41,8 @@ export const evaluationCenterService = {
         facultyService.getAll(),
         reviewService.getAll(),
         marksService.getGuideMarks(),
-        marksService.getFacultyMarks()
+        marksService.getFacultyMarks(),
+        FirestoreService.getAll('evaluations')
       ]);
 
       const guideMap = new Map(guides.map(g => [g.id, g]));
@@ -58,10 +59,17 @@ export const evaluationCenterService = {
           s.projectTitle === project.title
         );
 
+        // Fetch evaluations for this team
+        const teamEvals = evaluationsDocs.filter(e => e.teamId === project.id || e.teamId === teamId);
+
+        const guideEval = teamEvals.find(e => e.role === 'guide');
+        const facultyEval = teamEvals.find(e => e.role === 'classroom_faculty' || e.role === 'faculty');
+        const reviewerEval = teamEvals.find(e => e.role === 'reviewer');
+
         // Mentor details
-        const guide = guideMap.get(project.guideId) || { name: project.guideName || 'Dr. Ramesh (Assigned)' };
-        const reviewer = reviewerMap.get(project.reviewerId) || { name: project.reviewerName || 'Dr. Kiran (Assigned)' };
-        const facultyPanel = facultyMap.get(project.facultyId) || { name: project.facultyName || 'Faculty Panel A' };
+        const guide = guideMap.get(project.guideId) || { name: project.guideName || (guideEval?.evaluatorName || 'Dr. Ramesh (Assigned)') };
+        const reviewer = reviewerMap.get(project.reviewerId) || { name: project.reviewerName || (reviewerEval?.evaluatorName || 'Dr. Kiran (Assigned)') };
+        const facultyPanel = facultyMap.get(project.facultyId) || { name: project.facultyName || (facultyEval?.evaluatorName || 'Faculty Panel A') };
 
         // Evaluation Scores derivation
         const teamReviews = reviews.filter(r => 
@@ -69,12 +77,12 @@ export const evaluationCenterService = {
           members.some(m => m.id === r.studentId || m.uid === r.studentId)
         );
 
-        const r1 = teamReviews.find(r => r.reviewType === 'Review 1')?.totalScore || project.review1Score || 0;
+        const r1 = reviewerEval?.teamAverage || teamReviews.find(r => r.reviewType === 'Review 1')?.totalScore || project.review1Score || 0;
         const r2 = teamReviews.find(r => r.reviewType === 'Review 2')?.totalScore || project.review2Score || 0;
         const r3 = teamReviews.find(r => r.reviewType === 'Review 3')?.totalScore || project.review3Score || 0;
 
-        const gMark = guideMarks.find(m => members.some(s => s.id === m.studentId || s.uid === m.studentId))?.marks || project.guideScore || 0;
-        const fMark = facultyMarks.find(m => members.some(s => s.id === m.studentId || s.uid === m.studentId))?.marks || project.facultyScore || 0;
+        const gMark = guideEval?.teamAverage || guideMarks.find(m => members.some(s => s.id === m.studentId || s.uid === m.studentId))?.marks || project.guideScore || 0;
+        const fMark = facultyEval?.teamAverage || facultyMarks.find(m => members.some(s => s.id === m.studentId || s.uid === m.studentId))?.marks || project.facultyScore || 0;
 
         // Weighted total calculation (20% each out of 100)
         const totalWeightedScore = Math.round(
@@ -92,6 +100,21 @@ export const evaluationCenterService = {
         if (r1 > 0) stageProgress += 20;
         if (r2 > 0) stageProgress += 20;
         if (r3 > 0) stageProgress += 20;
+
+        // Formatted timestamp of last evaluation activity
+        const latestEvalDate = [guideEval, facultyEval, reviewerEval]
+          .filter(Boolean)
+          .map(e => e.submittedAt || e.evaluatedAt || e.updatedAt || e.createdAt)
+          .sort()
+          .reverse()[0];
+
+        const formattedDate = latestEvalDate 
+          ? new Date(latestEvalDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+          : 'Pending';
+
+        const formattedTime = latestEvalDate 
+          ? new Date(latestEvalDate).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+          : '';
 
         return {
           ...project,
@@ -112,8 +135,12 @@ export const evaluationCenterService = {
           grade,
           passStatus,
           stageProgress,
-          approvalStage: project.approvalStage || (stageProgress === 100 ? 'Published' : 'Submitted'),
-          isLocked: project.isLocked || false,
+          evaluations: teamEvals,
+          statusMatrix: evaluationCenterService.deriveTeamStatusMatrix(project.id || teamId, evaluationsDocs, []),
+          latestEvalDate: formattedDate,
+          latestEvalTime: formattedTime,
+          approvalStage: project.approvalStage || (stageProgress === 100 ? 'Published' : (teamEvals.length > 0 ? 'Submitted' : 'Draft')),
+          isLocked: project.isLocked || teamEvals.some(e => e.status === 'Locked'),
           status: project.status || (stageProgress === 100 ? 'Completed' : 'In Progress'),
           department: project.department || 'CSE',
           academicYear: project.academicYear || '2026-27',
@@ -127,6 +154,39 @@ export const evaluationCenterService = {
       console.error("Error fetching all teams with evaluations:", err);
       return [];
     }
+  },
+
+  // Derive dynamic evaluation status matrix per review cycle & evaluator role directly from Firestore
+  deriveTeamStatusMatrix: (teamId, evaluationsDocs = [], reviewCycles = []) => {
+    const teamEvals = (evaluationsDocs || []).filter(e => String(e.teamId || e.team).toLowerCase() === String(teamId).toLowerCase());
+    const cycles = reviewCycles.length > 0 ? reviewCycles : [
+      { id: 'cycle-1', reviewName: 'Review 1' },
+      { id: 'cycle-2', reviewName: 'Review 2' },
+      { id: 'cycle-3', reviewName: 'Review 3' },
+      { id: 'cycle-cp', reviewName: 'Classroom Presentation' }
+    ];
+
+    const matrix = {};
+    cycles.forEach(c => {
+      const cName = c.reviewName || c.name || c.id;
+      const cEvals = teamEvals.filter(e => e.reviewCycle === cName || e.reviewCycleId === c.id);
+      
+      const getRoleStatus = (targetRole) => {
+        const match = cEvals.find(e => e.role === targetRole || (targetRole === 'faculty' && e.role === 'classroom_faculty'));
+        if (!match) return 'Not Started';
+        if (match.status === 'Locked' || match.status === 'Submitted') return 'Locked';
+        if (match.status === 'Draft') return 'Draft';
+        return match.status || 'Draft';
+      };
+
+      matrix[cName] = {
+        guide: getRoleStatus('guide'),
+        faculty: getRoleStatus('faculty'),
+        reviewer: getRoleStatus('reviewer')
+      };
+    });
+
+    return matrix;
   },
 
   // Get Team Details with complete roster, rubrics, version history, documents & timeline

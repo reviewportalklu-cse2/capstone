@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { studentNavigation } from '@/constants/navigation';
 import Card from '@/components/common/Card';
@@ -6,37 +6,22 @@ import Button from '@/components/common/Button';
 import EmptyState from '@/components/common/EmptyState';
 import { useAuth } from '@/contexts/AuthContext';
 import { notificationService } from '@/firebase/services/notificationService';
-import { Loader2, Bell, Check, Trash2 } from 'lucide-react';
+import { useData } from '@/contexts/DataContext';
+import { Loader2, Bell, Check, Filter } from 'lucide-react';
 
 const StudentNotifications = () => {
   const { currentUser } = useAuth();
-  const [loading, setLoading] = useState(true);
-  const [notifications, setNotifications] = useState([]);
+  const { getNotificationsByRole, dataLoading } = useData();
+  const [activeTab, setActiveTab] = useState('All');
+  const [filterUnread, setFilterUnread] = useState(false);
 
-  useEffect(() => {
-    if (currentUser?.uid) {
-      fetchNotifications(currentUser.uid);
-    }
-  }, [currentUser]);
+  const categories = ['All', 'Evaluations', 'Attendance', 'Meeting', 'Project', 'General', 'System'];
 
-  const fetchNotifications = async (uid) => {
-    try {
-      setLoading(true);
-      const data = await notificationService.getByUserId(uid);
-      // Sort newest first
-      data.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-      setNotifications(data);
-    } catch (err) {
-      console.error('Error fetching notifications:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const notifications = getNotificationsByRole();
 
   const handleMarkAsRead = async (id) => {
     try {
-      await notificationService.update(id, { read: true });
-      setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
+      await notificationService.markRead(id, currentUser.uid);
     } catch (err) {
       console.error('Error marking as read:', err);
     }
@@ -44,17 +29,16 @@ const StudentNotifications = () => {
 
   const handleMarkAllRead = async () => {
     try {
-      const unread = notifications.filter(n => !n.read);
-      await Promise.all(unread.map(n => notificationService.update(n.id, { read: true })));
-      setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+      const unread = notifications.filter(n => !n.readBy?.includes(currentUser.uid));
+      await Promise.all(unread.map(n => notificationService.markRead(n.id, currentUser.uid)));
     } catch (err) {
       console.error('Error marking all as read:', err);
     }
   };
 
-  if (loading) {
+  if (dataLoading) {
     return (
-      <DashboardLayout navigationItems={studentNavigation} title="KL CSE Capstone Portal - Notifications">
+      <DashboardLayout navigationItems={studentNavigation} title="Notifications">
         <div className="flex h-[calc(100vh-4rem)] items-center justify-center">
           <Loader2 className="h-8 w-8 animate-spin text-primary-600" />
         </div>
@@ -62,16 +46,24 @@ const StudentNotifications = () => {
     );
   }
 
-  const unreadCount = notifications.filter(n => !n.read).length;
+  const unreadCount = notifications.filter(n => !n.readBy?.includes(currentUser.uid)).length;
+
+  let filteredNotifications = notifications;
+  if (activeTab !== 'All') {
+    filteredNotifications = filteredNotifications.filter(n => n.category === activeTab);
+  }
+  if (filterUnread) {
+    filteredNotifications = filteredNotifications.filter(n => !n.readBy?.includes(currentUser.uid));
+  }
 
   return (
-    <DashboardLayout navigationItems={studentNavigation} title="KL CSE Capstone Portal - Notifications">
-      <div className="max-w-4xl mx-auto space-y-6">
+    <DashboardLayout navigationItems={studentNavigation} title="Notifications">
+      <div className="max-w-5xl mx-auto space-y-6">
         
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-6 rounded-xl shadow-sm border border-gray-200">
           <div>
             <h1 className="text-2xl font-bold text-gray-900 tracking-tight flex items-center gap-2">
-              <Bell className="h-6 w-6 text-primary-600" /> Notifications
+              <Bell className="h-6 w-6 text-primary-600" /> Notifications Inbox
               {unreadCount > 0 && (
                 <span className="bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full ml-2">
                   {unreadCount} New
@@ -87,49 +79,97 @@ const StudentNotifications = () => {
           )}
         </div>
 
-        {notifications.length === 0 ? (
-          <div className="py-12">
-            <EmptyState 
-              icon={Bell}
-              title="All Caught Up!" 
-              description="You have no notifications at this time." 
-            />
+        <Card className="p-0 shadow-sm overflow-hidden">
+          <div className="border-b border-gray-200 bg-gray-50 px-4 py-2 flex flex-col sm:flex-row justify-between sm:items-center gap-4">
+            <nav className="flex space-x-4 overflow-x-auto pb-2 sm:pb-0 hide-scrollbar">
+              {categories.map((tab) => (
+                <button
+                  key={tab}
+                  onClick={() => setActiveTab(tab)}
+                  className={`
+                    whitespace-nowrap py-2 px-3 rounded-md font-medium text-sm transition-colors
+                    ${activeTab === tab
+                      ? 'bg-primary-100 text-primary-700'
+                      : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'
+                    }
+                  `}
+                >
+                  {tab}
+                </button>
+              ))}
+            </nav>
+            <div className="flex items-center gap-2 border-l border-gray-200 pl-4">
+              <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
+                <input 
+                  type="checkbox" 
+                  checked={filterUnread}
+                  onChange={(e) => setFilterUnread(e.target.checked)}
+                  className="rounded text-primary-600 focus:ring-primary-500"
+                />
+                Unread Only
+              </label>
+              <Filter className="w-4 h-4 text-gray-400" />
+            </div>
           </div>
-        ) : (
-          <div className="space-y-4">
-            {notifications.map((notification) => (
-              <Card 
-                key={notification.id} 
-                className={`transition-colors border-l-4 ${notification.read ? 'border-l-gray-300 opacity-75' : 'border-l-primary-500 shadow-sm'}`}
-              >
-                <div className="flex items-start justify-between">
-                  <div className="flex items-start gap-4">
-                    <div className={`p-2 rounded-lg flex-shrink-0 ${notification.read ? 'bg-gray-100' : 'bg-primary-50 text-primary-600'}`}>
-                      <Bell className="w-5 h-5" />
-                    </div>
-                    <div>
-                      <h4 className={`text-base font-bold ${notification.read ? 'text-gray-700' : 'text-gray-900'}`}>
-                        {notification.title}
-                      </h4>
-                      <p className="text-sm text-gray-600 mt-1">{notification.message}</p>
-                      <p className="text-xs text-gray-400 mt-2 font-medium">
-                        {new Date(notification.createdAt).toLocaleString()}
-                      </p>
-                    </div>
-                  </div>
-                  {!notification.read && (
-                    <button 
-                      onClick={() => handleMarkAsRead(notification.id)}
-                      className="text-xs font-medium text-primary-600 hover:text-primary-700 flex items-center gap-1 bg-primary-50 px-2 py-1 rounded"
+
+          <div className="p-0">
+            {filteredNotifications.length === 0 ? (
+              <div className="py-12">
+                <EmptyState 
+                  icon={Bell}
+                  title="All Caught Up!" 
+                  description="You have no notifications in this category." 
+                />
+              </div>
+            ) : (
+              <div className="divide-y divide-gray-100">
+                {filteredNotifications.map((notification) => {
+                  const isRead = notification.readBy?.includes(currentUser.uid);
+                  let priorityColor = 'text-primary-600';
+                  let priorityBg = 'bg-primary-100';
+                  if (notification.priority === 'Critical') { priorityColor = 'text-red-600'; priorityBg = 'bg-red-100'; }
+                  else if (notification.priority === 'High') { priorityColor = 'text-orange-600'; priorityBg = 'bg-orange-100'; }
+
+                  return (
+                    <div 
+                      key={notification.id} 
+                      className={`p-6 transition-colors flex flex-col md:flex-row items-start justify-between gap-4 border-l-4 ${isRead ? 'border-l-transparent bg-white hover:bg-gray-50' : 'border-l-primary-500 bg-primary-50/30 hover:bg-primary-50/50'}`}
                     >
-                      <Check className="w-3 h-3" /> Mark Read
-                    </button>
-                  )}
-                </div>
-              </Card>
-            ))}
+                      <div className="flex items-start gap-4">
+                        <div className={`p-3 rounded-full flex-shrink-0 ${isRead ? 'bg-gray-100' : `${priorityBg} ${priorityColor} shadow-sm`}`}>
+                          <Bell className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2 mb-1">
+                            <h4 className={`text-base font-bold ${isRead ? 'text-gray-700' : 'text-gray-900'}`}>
+                              {notification.title}
+                            </h4>
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 bg-gray-100 px-2 py-0.5 rounded">
+                              {notification.category}
+                            </span>
+                            {notification.priority === 'Critical' && <span className="text-[10px] font-bold uppercase text-red-600 bg-red-100 px-2 py-0.5 rounded">Critical</span>}
+                          </div>
+                          <p className={`text-sm mt-1 ${isRead ? 'text-gray-500' : 'text-gray-700'}`}>{notification.message}</p>
+                          <p className="text-xs text-gray-400 mt-2 font-medium">
+                            {new Date(notification.createdAt).toLocaleString()}
+                          </p>
+                        </div>
+                      </div>
+                      {!isRead && (
+                        <button 
+                          onClick={() => handleMarkAsRead(notification.id)}
+                          className="text-xs font-bold text-primary-600 hover:text-primary-700 flex items-center gap-1 bg-white border border-primary-200 px-3 py-1.5 rounded-full shadow-sm hover:shadow"
+                        >
+                          <Check className="w-4 h-4" /> Mark Read
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
-        )}
+        </Card>
       </div>
     </DashboardLayout>
   );

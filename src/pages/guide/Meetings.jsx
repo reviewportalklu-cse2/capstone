@@ -7,16 +7,14 @@ import Input from '@/components/common/Input';
 import Modal from '@/components/common/Modal';
 import EmptyState from '@/components/common/EmptyState';
 import { useAuth } from '@/contexts/AuthContext';
+import { useGuideAnalytics } from '@/hooks/useGuideAnalytics';
 import { meetingService } from '@/firebase/services/meetingService';
-import { studentService } from '@/firebase/services/studentService';
 import { notificationService } from '@/firebase/services/notificationService';
-import { Loader2, Calendar, Plus, Edit2, Trash2, Clock, AlertCircle } from 'lucide-react';
+import { Loader2, Calendar, Plus, Clock, AlertCircle } from 'lucide-react';
 
 const Meetings = () => {
   const { currentUser } = useAuth();
-  const [meetings, setMeetings] = useState([]);
-  const [students, setStudents] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const { getGuideMeetings, getSupervisedTeams, dataLoading } = useGuideAnalytics();
   const [error, setError] = useState(null);
   
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -28,59 +26,28 @@ const Meetings = () => {
     title: '',
     date: '',
     time: '',
-    studentId: '',
-    notes: ''
+    teamId: '',
+    agenda: ''
   });
 
-  useEffect(() => {
-    if (currentUser?.uid) {
-      fetchData(currentUser.uid);
-    }
-  }, [currentUser]);
-
-  const fetchData = async (uid) => {
-    try {
-      setLoading(true);
-      const [meetingsData, studentsData] = await Promise.all([
-        meetingService.getByGuideId(uid),
-        studentService.getByGuideId(uid)
-      ]);
-      
-      const enrichedMeetings = meetingsData.map(m => {
-        const student = studentsData.find(s => s.uid === m.studentId);
-        return {
-          ...m,
-          studentName: student?.name || 'Unknown Student',
-          group: student?.projectTitle || 'N/A'
-        };
-      });
-
-      // Sort by date ascending (upcoming first)
-      const sorted = enrichedMeetings.sort((a,b) => new Date(`${a.date}T${a.time}`) - new Date(`${b.date}T${b.time}`));
-      setMeetings(sorted);
-      setStudents(studentsData);
-    } catch (err) {
-      console.error("Error fetching meetings:", err);
-      setError("Failed to load meetings.");
-    } finally {
-      setLoading(false);
-    }
-  };
+  const teams = getSupervisedTeams();
+  const meetings = getGuideMeetings();
 
   const openAddModal = () => {
-    setFormData({ id: null, title: '', date: '', time: '', studentId: '', notes: '' });
+    setFormData({ id: null, title: '', date: '', time: '', teamId: '', agenda: '' });
     setIsEditMode(false);
     setIsModalOpen(true);
   };
 
   const openEditModal = (meeting) => {
+    const meetingDate = new Date(meeting.meetingDate);
     setFormData({
       id: meeting.id,
-      title: meeting.title,
-      date: meeting.date,
-      time: meeting.time,
-      studentId: meeting.studentId,
-      notes: meeting.notes || ''
+      title: meeting.agenda || 'Meeting', // simplified title mapping
+      date: meetingDate.toISOString().split('T')[0],
+      time: meetingDate.toTimeString().slice(0, 5),
+      teamId: meeting.teamId,
+      agenda: meeting.agenda || ''
     });
     setIsEditMode(true);
     setIsModalOpen(true);
@@ -90,7 +57,6 @@ const Meetings = () => {
     if (window.confirm('Are you sure you want to cancel and delete this meeting?')) {
       try {
         await meetingService.delete(id);
-        setMeetings(prev => prev.filter(m => m.id !== id));
       } catch (err) {
         console.error("Failed to delete meeting:", err);
       }
@@ -103,32 +69,32 @@ const Meetings = () => {
     
     setSubmitting(true);
     try {
+      // Combine date and time
+      const meetingDateTime = new Date(`${formData.date}T${formData.time}:00`).toISOString();
       const payload = {
         guideId: currentUser.uid,
-        studentId: formData.studentId,
-        title: formData.title,
-        date: formData.date,
-        time: formData.time,
-        notes: formData.notes
+        teamId: formData.teamId,
+        meetingDate: meetingDateTime,
+        agenda: formData.title + (formData.agenda ? ` - ${formData.agenda}` : ''),
       };
 
       if (isEditMode) {
-        await meetingService.update(formData.id, payload);
+        await meetingService.update(formData.id, { ...payload, updatedAt: new Date().toISOString() });
       } else {
-        await meetingService.create({ ...payload, createdAt: new Date().toISOString() });
+        await meetingService.create({ ...payload, status: 'Scheduled', createdAt: new Date().toISOString() });
         
-        // Notify student about new meeting
+        // Notify team about new meeting
         await notificationService.create({
-          userId: formData.studentId,
+          targetTeam: formData.teamId,
+          targetRole: 'student',
           title: 'Meeting Scheduled',
-          message: `Your guide has scheduled a meeting: ${formData.title} on ${formData.date} at ${formData.time}`,
+          message: `Your guide has scheduled a meeting for ${new Date(meetingDateTime).toLocaleString()}`,
           read: false,
           createdAt: new Date().toISOString()
         });
       }
 
       setIsModalOpen(false);
-      fetchData(currentUser.uid);
     } catch (err) {
       console.error("Failed to save meeting:", err);
       setError("Failed to save meeting.");
@@ -137,9 +103,9 @@ const Meetings = () => {
     }
   };
 
-  if (loading) {
+  if (dataLoading) {
     return (
-      <DashboardLayout navigationItems={guideNavigation} title="KL CSE Capstone Portal - Meetings">
+      <DashboardLayout navigationItems={guideNavigation} title="Mentorship Meetings">
         <div className="flex h-[calc(100vh-4rem)] items-center justify-center">
           <Loader2 className="h-8 w-8 animate-spin text-primary-600" />
         </div>
@@ -149,11 +115,11 @@ const Meetings = () => {
 
   // Split into upcoming and past
   const now = new Date();
-  const upcomingMeetings = meetings.filter(m => new Date(`${m.date}T${m.time}`) >= now);
-  const pastMeetings = meetings.filter(m => new Date(`${m.date}T${m.time}`) < now);
+  const upcomingMeetings = meetings.filter(m => new Date(m.meetingDate) >= now).sort((a,b) => new Date(a.meetingDate) - new Date(b.meetingDate));
+  const pastMeetings = meetings.filter(m => new Date(m.meetingDate) < now).sort((a,b) => new Date(b.meetingDate) - new Date(a.meetingDate));
 
   return (
-    <DashboardLayout navigationItems={guideNavigation} title="KL CSE Capstone Portal - Meetings">
+    <DashboardLayout navigationItems={guideNavigation} title="Mentorship Meetings">
       <div className="max-w-7xl mx-auto space-y-6">
         
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -161,7 +127,7 @@ const Meetings = () => {
             <h1 className="text-2xl font-bold text-gray-900 tracking-tight flex items-center gap-2">
               <Calendar className="h-6 w-6 text-primary-600" /> Meetings & Schedule
             </h1>
-            <p className="text-sm text-gray-500 mt-1">Schedule and manage reviews with your assigned students.</p>
+            <p className="text-sm text-gray-500 mt-1">Schedule and manage mentorship reviews with your assigned teams.</p>
           </div>
           <Button onClick={openAddModal} className="flex items-center gap-2">
             <Plus className="w-4 h-4" /> Schedule Meeting
@@ -182,16 +148,15 @@ const Meetings = () => {
                 <div key={meeting.id} className="flex items-start justify-between p-4 rounded-xl border border-gray-200 bg-white shadow-sm">
                   <div className="flex gap-4">
                     <div className="bg-primary-50 text-primary-600 rounded-lg p-3 flex flex-col items-center justify-center min-w-[4rem]">
-                      <span className="text-xs font-semibold uppercase">{new Date(meeting.date).toLocaleString('default', { month: 'short' })}</span>
-                      <span className="text-lg font-bold">{new Date(meeting.date).getDate()}</span>
+                      <span className="text-xs font-semibold uppercase">{new Date(meeting.meetingDate).toLocaleString('default', { month: 'short' })}</span>
+                      <span className="text-lg font-bold">{new Date(meeting.meetingDate).getDate()}</span>
                     </div>
                     <div>
-                      <h4 className="font-semibold text-gray-900">{meeting.title}</h4>
+                      <h4 className="font-semibold text-gray-900 line-clamp-1">{meeting.agenda}</h4>
                       <p className="text-sm text-gray-500 flex items-center gap-1 mt-1">
-                        <Clock className="w-3.5 h-3.5" /> {meeting.time}
+                        <Clock className="w-3.5 h-3.5" /> {new Date(meeting.meetingDate).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                       </p>
-                      <p className="text-sm font-medium text-gray-700 mt-2">Group: {meeting.group}</p>
-                      <p className="text-xs text-gray-500">{meeting.studentName}</p>
+                      <p className="text-sm font-bold text-gray-700 mt-2">{meeting.teamId}</p>
                     </div>
                   </div>
                   <div className="flex flex-col gap-2">
@@ -200,7 +165,9 @@ const Meetings = () => {
                   </div>
                 </div>
               )) : (
-                <EmptyState icon={Calendar} title="No Upcoming Meetings" description="Schedule a meeting to review student progress." />
+                <div className="py-6 border border-dashed border-gray-200 rounded-lg">
+                  <EmptyState icon={Calendar} title="No Upcoming Meetings" description="Schedule a meeting to review team progress." />
+                </div>
               )}
             </div>
           </Card>
@@ -211,12 +178,12 @@ const Meetings = () => {
                 <div key={meeting.id} className="flex items-start justify-between p-4 rounded-xl border border-gray-100 bg-gray-50">
                   <div className="flex gap-4">
                     <div className="bg-gray-200 text-gray-600 rounded-lg p-3 flex flex-col items-center justify-center min-w-[4rem]">
-                      <span className="text-xs font-semibold uppercase">{new Date(meeting.date).toLocaleString('default', { month: 'short' })}</span>
-                      <span className="text-lg font-bold">{new Date(meeting.date).getDate()}</span>
+                      <span className="text-xs font-semibold uppercase">{new Date(meeting.meetingDate).toLocaleString('default', { month: 'short' })}</span>
+                      <span className="text-lg font-bold">{new Date(meeting.meetingDate).getDate()}</span>
                     </div>
                     <div>
-                      <h4 className="font-semibold text-gray-700">{meeting.title}</h4>
-                      <p className="text-sm text-gray-500 mt-1">{meeting.group}</p>
+                      <h4 className="font-semibold text-gray-700 line-clamp-1">{meeting.agenda}</h4>
+                      <p className="text-sm font-bold text-gray-500 mt-1">{meeting.teamId}</p>
                     </div>
                   </div>
                 </div>
@@ -231,7 +198,7 @@ const Meetings = () => {
         <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={isEditMode ? "Edit Meeting" : "Schedule Meeting"}>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Meeting Title</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Meeting Title / Agenda</label>
               <Input 
                 required 
                 value={formData.title} 
@@ -240,16 +207,16 @@ const Meetings = () => {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Student / Group</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Supervised Team</label>
               <select
                 required
                 className="w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm p-2 border bg-white"
-                value={formData.studentId}
-                onChange={e => setFormData({...formData, studentId: e.target.value})}
+                value={formData.teamId}
+                onChange={e => setFormData({...formData, teamId: e.target.value})}
               >
-                <option value="" disabled>Select Student</option>
-                {students.map(s => (
-                  <option key={s.uid} value={s.uid}>{s.name} ({s.projectTitle || 'No Project'})</option>
+                <option value="" disabled>Select Team</option>
+                {teams.map(t => (
+                  <option key={t.id} value={t.id}>{t.id} ({t.project?.title || 'No Project'})</option>
                 ))}
               </select>
             </div>
@@ -272,16 +239,6 @@ const Meetings = () => {
                   onChange={e => setFormData({...formData, time: e.target.value})} 
                 />
               </div>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Notes / Agenda (Optional)</label>
-              <textarea 
-                rows={3}
-                className="w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm p-2 border"
-                value={formData.notes}
-                onChange={e => setFormData({...formData, notes: e.target.value})}
-                placeholder="Meeting agenda..."
-              />
             </div>
             <div className="pt-4 flex justify-end gap-3 border-t border-gray-100 mt-4">
               <Button type="button" variant="outline" onClick={() => setIsModalOpen(false)}>Cancel</Button>

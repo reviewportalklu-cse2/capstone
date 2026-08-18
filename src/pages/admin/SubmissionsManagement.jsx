@@ -6,6 +6,7 @@ import Table from '@/components/common/Table';
 import Badge from '@/components/common/Badge';
 import Button from '@/components/common/Button';
 import { submissionService, auditService, studentService, projectService } from '@/firebase/services';
+import { useData } from '@/contexts/DataContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { exportToCsv } from '@/utils/csvExport';
 import { Search, Loader2, Download, CheckCircle, XCircle } from 'lucide-react';
@@ -14,39 +15,14 @@ const SubmissionsManagement = () => {
   const navigationItems = useAdminNavigation();
 
   const { currentUser } = useAuth();
-  const [submissions, setSubmissions] = useState([]);
-  const [students, setStudents] = useState([]);
-  const [projects, setProjects] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const { submissions, students, projects, dataLoading } = useData();
   const [searchTerm, setSearchTerm] = useState('');
-
-  useEffect(() => {
-    fetchData();
-  }, []);
-
-  const fetchData = async () => {
-    setLoading(true);
-    try {
-      const [suData, stData, prData] = await Promise.all([
-        submissionService.getAll(),
-        studentService.getAll(),
-        projectService.getAll()
-      ]);
-      setSubmissions(suData || []);
-      setStudents(stData || []);
-      setProjects(prData || []);
-    } catch (error) {
-      console.error("Error fetching submissions:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleUpdateStatus = async (submission, status) => {
     try {
       await submissionService.update(submission.id, { status });
       await auditService.log(currentUser.uid, `UPDATE_SUBMISSION_${status.toUpperCase()}`, 'Submission', submission, { ...submission, status });
-      setSubmissions(prev => prev.map(s => s.id === submission.id ? { ...s, status } : s));
+      // setSubmissions(prev => prev.map(s => s.id === submission.id ? { ...s, status } : s));
     } catch (err) {
       console.error("Error updating submission:", err);
     }

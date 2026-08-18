@@ -1,9 +1,10 @@
+import { useData } from '@/contexts/DataContext';
 import { useMemo } from 'react';
 import { adminNavigation } from '@/constants/navigation';
-import { useAdminStats } from '@/contexts/AdminStatsContext';
 
 export const useAdminNavigation = () => {
-  const { stats, loading } = useAdminStats();
+  const { students = [], guides = [], faculty = [], reviewers = [], teams = [], projects = [], reviews = [], dataLoading: loading } = useData();
+  const stats = { students: students.length, guides: guides.length, faculty: faculty.length, reviewers: reviewers.length, teams: teams.length, projects: projects.length, reviews: reviews.length };
 
   const navigationWithCounts = useMemo(() => {
     return adminNavigation.map(item => {

@@ -1,7 +1,7 @@
+import { useData } from '@/contexts/DataContext';
 import React, { useState, useEffect } from 'react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { useAdminNavigation } from '@/hooks/useAdminNavigation';
-import { useAdminStats } from '@/contexts/AdminStatsContext';
 import Card from '@/components/common/Card';
 import Table from '@/components/common/Table';
 import Badge from '@/components/common/Badge';
@@ -13,13 +13,35 @@ import { exportToCsv } from '@/utils/csvExport';
 import { useAuth } from '@/contexts/AuthContext';
 import { Plus, Search, Loader2, Download, Edit2, Trash2 } from 'lucide-react';
 
+import { resolveStudentRelations, resolveTeamRelations, resolveGuideRelationships, getEntityKeys } from '@/utils/relationshipResolver';
+
 const GuideManagement = () => {
   const navigationItems = useAdminNavigation();
 
   const { currentUser } = useAuth();
-  const { data, loading: contextLoading } = useAdminStats();
-  const { guides, students } = data;
-  
+  const dataContext = useData() || {};
+  const { 
+    guides = [], 
+    students = [], 
+    teams = [], 
+    projects = [], 
+    faculty = [], 
+    reviewers = [], 
+    reviewCycles = [], 
+    guideAssignments = [],
+    reviewerAssignments = [], 
+    dataLoading 
+  } = dataContext;
+
+  const resolveGuideMetrics = (row) => {
+    const res = resolveGuideRelationships(row, dataContext);
+    return {
+      teamsCount: res.teamCount,
+      studentsCount: res.studentCount,
+      projectsCount: res.projectCount
+    };
+  };
+    
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEdit, setIsEdit] = useState(false);
@@ -71,7 +93,7 @@ const GuideManagement = () => {
       }
 
       await auditService.log(
-        currentUser.uid, 
+        currentUser?.uid || 'admin', 
         isEdit ? 'UPDATE_GUIDE' : 'CREATE_GUIDE', 
         'Guide', 
         prevData, 
@@ -98,7 +120,7 @@ const GuideManagement = () => {
     if (window.confirm(`Are you sure you want to delete ${guide.name}?`)) {
       try {
         await guideService.delete(guide.id);
-        await auditService.log(currentUser.uid, 'DELETE_GUIDE', 'Guide', guide, null);
+        await auditService.log(currentUser?.uid || 'admin', 'DELETE_GUIDE', 'Guide', guide, null);
       } catch (err) {
         console.error("Error deleting guide:", err);
       }
@@ -107,13 +129,13 @@ const GuideManagement = () => {
 
   const handleExport = () => {
     const dataToExport = guides.map(g => {
-      const assignedCount = students.filter(s => s.guideId === g.id).length;
+      const { studentsCount } = resolveGuideMetrics(g);
       return {
-        'Name': g.name,
-        'Email': g.email,
-        'Department': g.department,
-        'Designation': g.designation,
-        'Assigned Students': assignedCount
+        'Name': g.name || g['Guide Name'] || '',
+        'Email': g.email || g.Email || '',
+        'Department': g.department || g.Department || '',
+        'Designation': g.designation || g.Designation || '',
+        'Assigned Students': studentsCount
       };
     });
     exportToCsv('capstoneflow_guides.csv', dataToExport);
@@ -148,12 +170,34 @@ const GuideManagement = () => {
       render: (row) => row.designation || row.Designation || 'N/A' 
     },
     { 
+      header: 'Assigned Teams', 
+      render: (row) => {
+        const { teamsCount } = resolveGuideMetrics(row);
+        return (
+          <Badge variant={teamsCount > 0 ? 'primary' : 'default'}>
+            {teamsCount} Team{teamsCount !== 1 ? 's' : ''}
+          </Badge>
+        );
+      }
+    },
+    { 
       header: 'Assigned Students', 
       render: (row) => {
-        const count = students.filter(s => s.guideId === row.id).length;
+        const { studentsCount } = resolveGuideMetrics(row);
         return (
-          <Badge variant={count > 0 ? 'primary' : 'default'}>
-            {count} Student{count !== 1 ? 's' : ''}
+          <Badge variant={studentsCount > 0 ? 'success' : 'default'}>
+            {studentsCount} Student{studentsCount !== 1 ? 's' : ''}
+          </Badge>
+        );
+      }
+    },
+    { 
+      header: 'Assigned Projects', 
+      render: (row) => {
+        const { projectsCount } = resolveGuideMetrics(row);
+        return (
+          <Badge variant={projectsCount > 0 ? 'warning' : 'default'}>
+            {projectsCount} Project{projectsCount !== 1 ? 's' : ''}
           </Badge>
         );
       }
@@ -172,6 +216,16 @@ const GuideManagement = () => {
       ) 
     },
   ];
+
+  if (dataLoading) {
+    return (
+      <DashboardLayout navigationItems={navigationItems} title="KL CSE Capstone Portal - Guide Administration">
+        <div className="flex h-64 items-center justify-center">
+          <Loader2 className="h-8 w-8 animate-spin text-primary-600" />
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout navigationItems={navigationItems} title="KL CSE Capstone Portal - Guide Administration">
@@ -201,7 +255,7 @@ const GuideManagement = () => {
         </div>
 
         <Card className="overflow-hidden p-0">
-          {contextLoading ? (
+          {dataLoading ? (
             <div className="flex justify-center items-center h-64">
               <Loader2 className="h-8 w-8 text-primary-500 animate-spin" />
             </div>

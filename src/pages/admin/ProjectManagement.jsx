@@ -1,7 +1,7 @@
+import { useData } from '@/contexts/DataContext';
 import React, { useState, useEffect } from 'react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { useAdminNavigation } from '@/hooks/useAdminNavigation';
-import { useAdminStats } from '@/contexts/AdminStatsContext';
 import Card from '@/components/common/Card';
 import Table from '@/components/common/Table';
 import Badge from '@/components/common/Badge';
@@ -13,13 +13,25 @@ import { exportToCsv } from '@/utils/csvExport';
 import { useAuth } from '@/contexts/AuthContext';
 import { Plus, Search, Loader2, Download, Edit2, Trash2 } from 'lucide-react';
 
+import { resolveStudentRelations, resolveTeamRelations } from '@/utils/relationshipResolver';
+
 const ProjectManagement = () => {
   const navigationItems = useAdminNavigation();
 
   const { currentUser } = useAuth();
-  const { data, loading: contextLoading } = useAdminStats();
-  const { projects, students, guides } = data;
-  
+  const dataContext = useData() || {};
+  const { 
+    projects = [], 
+    guides = [], 
+    faculty = [], 
+    reviewers = [], 
+    teams = [], 
+    students = [], 
+    reviewCycles = [],
+    reviewerAssignments = [],
+    dataLoading 
+  } = dataContext;
+    
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEdit, setIsEdit] = useState(false);
@@ -38,10 +50,10 @@ const ProjectManagement = () => {
     setIsEdit(true);
     setFormData({
       id: project.id,
-      title: project.title || '',
+      title: project.title || project.projectTitle || '',
       description: project.description || '',
       domain: project.domain || '',
-      teamName: project.teamName || '',
+      teamName: project.teamName || project.teamId || '',
       status: project.status || 'Active'
     });
     setIsModalOpen(true);
@@ -73,7 +85,7 @@ const ProjectManagement = () => {
       }
 
       await auditService.log(
-        currentUser.uid, 
+        currentUser?.uid || 'admin', 
         isEdit ? 'UPDATE_PROJECT' : 'CREATE_PROJECT', 
         'Project', 
         prevData, 
@@ -99,7 +111,7 @@ const ProjectManagement = () => {
     if (window.confirm(`Are you sure you want to delete ${project.title}?`)) {
       try {
         await projectService.delete(project.id);
-        await auditService.log(currentUser.uid, 'DELETE_PROJECT', 'Project', project, null);
+        await auditService.log(currentUser?.uid || 'admin', 'DELETE_PROJECT', 'Project', project, null);
       } catch (err) {
         console.error("Error deleting project:", err);
       }
@@ -110,9 +122,9 @@ const ProjectManagement = () => {
     const dataToExport = projects.map(p => {
       const assignedCount = students.filter(s => s.projectId === p.id).length;
       return {
-        'Title': p.title,
+        'Title': p.title || p.projectTitle,
         'Domain': p.domain,
-        'Team Name': p.teamName,
+        'Team Name': p.teamName || p.teamId,
         'Status': p.status,
         'Assigned Students': assignedCount
       };
@@ -124,8 +136,8 @@ const ProjectManagement = () => {
     if (!searchTerm) return true;
     const term = searchTerm.toLowerCase();
     return (
-      (p.title || '').toLowerCase().includes(term) || 
-      (p.teamName || '').toLowerCase().includes(term) ||
+      (p.projectTitle || p.title || p.name || '').toLowerCase().includes(term) || 
+      (p.teamName || p.teamId || '').toLowerCase().includes(term) ||
       (p.domain || '').toLowerCase().includes(term)
     );
   });
@@ -135,25 +147,103 @@ const ProjectManagement = () => {
       header: 'Project Details', 
       render: (row) => (
         <div>
-          <p className="font-semibold text-gray-900">{row.title || 'Untitled Project'}</p>
-          <p className="text-xs text-gray-500">Team: {row.teamName || 'N/A'}</p>
+          <p className="font-semibold text-gray-900">{row.projectTitle || row.title || row.name || 'Untitled Project'}</p>
+          <p className="text-xs text-gray-500">ID: {row.projectId || row.id}</p>
         </div>
       ) 
     },
-    { header: 'Domain', accessor: 'domain' },
+    { 
+      header: 'Domain', 
+      render: (row) => (
+        <Badge variant="default" className="text-[11px]">
+          {row.domain || 'Software Engineering'}
+        </Badge>
+      )
+    },
+    {
+      header: 'Team & Members',
+      render: (row) => {
+        const pKey = String(row.id || row.projectId || row.title || '').toLowerCase();
+        
+        // Find assigned students for this project
+        const assignedStudents = students.map(s => resolveStudentRelations(s, dataContext)).filter(s => {
+          const sPId = String(s.projectId || '').toLowerCase();
+          const sPTitle = String(s.projectTitle || '').toLowerCase();
+          return (sPId && sPId === pKey) || (sPTitle && sPTitle === pKey) || sPId === String(row.id).toLowerCase();
+        });
+
+        const teamName = row.teamName || row.teamId || assignedStudents[0]?.teamName || 'Unassigned';
+
+        return (
+          <div>
+            <p className="font-medium text-gray-900">{teamName}</p>
+            <p className="text-xs text-gray-500">{assignedStudents.length} Member{assignedStudents.length !== 1 ? 's' : ''}</p>
+          </div>
+        );
+      }
+    },
     { 
       header: 'Guide', 
       render: (row) => {
-        const guideId = row.guideId || students.find(s => s.projectId === row.id)?.guideId;
-        const guide = guides.find(g => g.id === guideId);
-        return guide ? <span className="text-gray-900">{guide.name}</span> : <span className="text-gray-400 italic">Unassigned</span>;
+        const pKey = String(row.id || row.projectId || row.title || '').toLowerCase();
+        const assignedStudents = students.map(s => resolveStudentRelations(s, dataContext)).filter(s => {
+          const sPId = String(s.projectId || '').toLowerCase();
+          const sPTitle = String(s.projectTitle || '').toLowerCase();
+          return (sPId && sPId === pKey) || (sPTitle && sPTitle === pKey) || sPId === String(row.id).toLowerCase();
+        });
+
+        const guideName = assignedStudents[0]?.guideName || row.guideName || 'Unassigned';
+
+        return (
+          <span className={guideName !== 'Unassigned' ? "text-gray-900 font-medium" : "text-gray-400 italic"}>
+            {guideName}
+          </span>
+        );
+      }
+    },
+    { 
+      header: 'Classroom Faculty', 
+      render: (row) => {
+        const pKey = String(row.id || row.projectId || row.title || '').toLowerCase();
+        const assignedStudents = students.map(s => resolveStudentRelations(s, dataContext)).filter(s => {
+          const sPId = String(s.projectId || '').toLowerCase();
+          const sPTitle = String(s.projectTitle || '').toLowerCase();
+          return (sPId && sPId === pKey) || (sPTitle && sPTitle === pKey) || sPId === String(row.id).toLowerCase();
+        });
+
+        const facultyName = assignedStudents[0]?.facultyName || row.facultyName || 'Unassigned';
+
+        return (
+          <span className={facultyName !== 'Unassigned' ? "text-gray-900 font-medium" : "text-gray-400 italic"}>
+            {facultyName}
+          </span>
+        );
+      }
+    },
+    { 
+      header: 'Current Reviewer', 
+      render: (row) => {
+        const pKey = String(row.id || row.projectId || row.title || '').toLowerCase();
+        const assignedStudents = students.map(s => resolveStudentRelations(s, dataContext)).filter(s => {
+          const sPId = String(s.projectId || '').toLowerCase();
+          const sPTitle = String(s.projectTitle || '').toLowerCase();
+          return (sPId && sPId === pKey) || (sPTitle && sPTitle === pKey) || sPId === String(row.id).toLowerCase();
+        });
+
+        const reviewerName = assignedStudents[0]?.reviewerName || row.reviewerName || 'Unassigned';
+
+        return (
+          <span className={reviewerName !== 'Unassigned' ? "text-gray-900 font-medium" : "text-gray-400 italic"}>
+            {reviewerName}
+          </span>
+        );
       }
     },
     { 
       header: 'Status', 
       render: (row) => (
         <Badge variant={row.status === 'Completed' ? 'success' : row.status === 'Active' ? 'primary' : 'default'}>
-          {row.status || 'Pending'}
+          {row.status || 'Active'}
         </Badge>
       )
     },
@@ -171,6 +261,16 @@ const ProjectManagement = () => {
       ) 
     },
   ];
+
+  if (dataLoading) {
+    return (
+      <DashboardLayout navigationItems={navigationItems} title="KL CSE Capstone Portal - Project Administration">
+        <div className="flex h-64 items-center justify-center">
+          <Loader2 className="h-8 w-8 animate-spin text-primary-600" />
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout navigationItems={navigationItems} title="KL CSE Capstone Portal - Project Administration">
@@ -200,7 +300,7 @@ const ProjectManagement = () => {
         </div>
 
         <Card className="overflow-hidden p-0">
-          {contextLoading ? (
+          {dataLoading ? (
             <div className="flex justify-center items-center h-64">
               <Loader2 className="h-8 w-8 text-primary-500 animate-spin" />
             </div>

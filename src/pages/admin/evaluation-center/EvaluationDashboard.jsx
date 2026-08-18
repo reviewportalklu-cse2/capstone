@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { evaluationCenterService } from '@/firebase/services/evaluationCenterService';
+import { useEvaluationCenterData } from '@/hooks/useEvaluationCenterData';
 import Card from '@/components/common/Card';
 import StatCard from '@/components/common/StatCard';
 import { 
@@ -16,26 +16,10 @@ import {
 } from 'lucide-react';
 
 const EvaluationDashboard = () => {
-  const [teams, setTeams] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const { getTeamsWithEvaluations, dataLoading } = useEvaluationCenterData();
+  const teams = getTeamsWithEvaluations();
 
-  useEffect(() => {
-    fetchMetrics();
-  }, []);
-
-  const fetchMetrics = async () => {
-    setLoading(true);
-    try {
-      const data = await evaluationCenterService.getAllTeamsWithEvaluations();
-      setTeams(data);
-    } catch (err) {
-      console.error("Failed to load dashboard metrics:", err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  if (loading) {
+  if (dataLoading) {
     return (
       <div className="flex h-64 items-center justify-center">
         <Loader2 className="w-8 h-8 animate-spin text-primary-600" />

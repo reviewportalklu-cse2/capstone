@@ -1,6 +1,8 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import Login from '@/pages/auth/Login';
+import MFAVerification from '@/pages/auth/MFAVerification';
+import DeviceManagement from '@/pages/profile/DeviceManagement';
 import AdminRoutes from '@/pages/admin/AdminRoutes';
 import GuideRoutes from '@/pages/guide/GuideRoutes';
 import ReviewerRoutes from '@/pages/reviewer/ReviewerRoutes';
@@ -10,7 +12,8 @@ import ProtectedRoute from '@/components/common/ProtectedRoute';
 import { useAuth } from '@/contexts/AuthContext';
 
 const RootRedirect = () => {
-  const { currentUser, userRole, loading } = useAuth();
+  const { currentUser, activeRole, userRole, mfaRequired, mfaVerified, loading } = useAuth();
+  const currentRole = activeRole || userRole;
   
   if (loading) {
     return <div className="min-h-screen flex items-center justify-center"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div></div>;
@@ -18,15 +21,18 @@ const RootRedirect = () => {
   
   if (!currentUser) return <Navigate to="/login" replace />;
   
+  if (mfaRequired && !mfaVerified) return <Navigate to="/mfa-verification" replace />;
+
   const roleRoutes = {
     admin: '/admin',
     guide: '/guide',
     reviewer: '/reviewer',
+    classroom_faculty: '/faculty',
     faculty: '/faculty',
     student: '/student'
   };
   
-  return <Navigate to={roleRoutes[userRole] || '/login'} replace />;
+  return <Navigate to={roleRoutes[currentRole] || '/login'} replace />;
 };
 
 function App() {
@@ -34,7 +40,14 @@ function App() {
     <Router>
       <Routes>
         <Route path="/login" element={<Login />} />
+        <Route path="/mfa-verification" element={<MFAVerification />} />
         
+        <Route path="/devices" element={
+          <ProtectedRoute allowedRoles={['admin', 'guide', 'classroom_faculty', 'faculty', 'reviewer', 'student']}>
+            <DeviceManagement />
+          </ProtectedRoute>
+        } />
+
         <Route path="/admin/*" element={
           <ProtectedRoute allowedRoles={['admin']}>
             <AdminRoutes />
@@ -54,7 +67,7 @@ function App() {
         } />
         
         <Route path="/faculty/*" element={
-          <ProtectedRoute allowedRoles={['classroom_faculty']}>
+          <ProtectedRoute allowedRoles={['classroom_faculty', 'faculty']}>
             <FacultyRoutes />
           </ProtectedRoute>
         } />

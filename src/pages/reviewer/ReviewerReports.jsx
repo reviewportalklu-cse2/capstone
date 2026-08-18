@@ -1,89 +1,67 @@
-import React, { useState, useEffect } from 'react';
+import React, { useMemo } from 'react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { reviewerNavigation } from '@/constants/navigation';
 import Card from '@/components/common/Card';
+import StatCard from '@/components/common/StatCard';
 import Button from '@/components/common/Button';
-import { useAuth } from '@/contexts/AuthContext';
-import { studentService } from '@/firebase/services/studentService';
-import { reviewService } from '@/firebase/services/reviewService';
-import { Loader2, FileBarChart, Download, BarChart2, PieChart as PieChartIcon } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Legend, PieChart, Pie, Cell } from 'recharts';
+import EmptyState from '@/components/common/EmptyState';
+import { useReviewerAnalytics } from '@/hooks/useReviewerAnalytics';
+import { exportToCsv } from '@/utils/csvExport';
+import { Loader2, FileBarChart, Download, FileSpreadsheet, Users, Activity, Target, CheckCircle2 } from 'lucide-react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+
+const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
 
 const ReviewerReports = () => {
-  const { currentUser } = useAuth();
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  
-  const [stageData, setStageData] = useState([]);
-  const [scoreData, setScoreData] = useState([]);
-  const [stats, setStats] = useState({ totalAssigned: 0, totalReviews: 0, avgScore: 0 });
+  const { reviewer, dashboardStats, getAssignedTeams, getReviewHistory, dataLoading } = useReviewerAnalytics();
+  const activeTeams = getAssignedTeams();
+  const historyTeams = getReviewHistory();
 
-  useEffect(() => {
-    if (currentUser?.uid) {
-      fetchReports(currentUser.uid);
-    }
-  }, [currentUser]);
+  // Marks Distribution Data for Charts
+  const marksDistribution = useMemo(() => {
+    const bins = { '90-100 (O)': 0, '80-89 (A+)': 0, '70-79 (A)': 0, '60-69 (B+)': 0, 'Below 60 (Pass/Fail)': 0 };
+    historyTeams.forEach(t => {
+      const score = t.totalScore || 0;
+      if (score >= 90) bins['90-100 (O)']++;
+      else if (score >= 80) bins['80-89 (A+)']++;
+      else if (score >= 70) bins['70-79 (A)']++;
+      else if (score >= 60) bins['60-69 (B+)']++;
+      else bins['Below 60 (Pass/Fail)']++;
+    });
+    return Object.keys(bins).map(key => ({ grade: key, count: bins[key] }));
+  }, [historyTeams]);
 
-  const fetchReports = async (uid) => {
-    try {
-      setLoading(true);
-      const [students, reviews] = await Promise.all([
-        studentService.getByReviewerId(uid),
-        reviewService.getByReviewerId(uid)
-      ]);
+  // Status breakdown data
+  const statusBreakdown = useMemo(() => {
+    const map = { Pending: 0, Draft: 0, Locked: 0, Published: 0 };
+    activeTeams.forEach(t => {
+      const status = t.evaluationStatus || 'Pending';
+      map[status] = (map[status] || 0) + 1;
+    });
+    return Object.keys(map).map(status => ({ status, count: map[status] }));
+  }, [activeTeams]);
 
-      setStats({
-        totalAssigned: students.length,
-        totalReviews: reviews.length,
-        avgScore: reviews.length > 0 ? Math.round(reviews.reduce((acc, r) => acc + (r.totalScore || 0), 0) / reviews.length) : 0
-      });
+  const handleExportCsv = () => {
+    const exportData = activeTeams.map(t => ({
+      'Team ID': t.id,
+      'Project Title': t.project?.title || 'N/A',
+      'Domain': t.project?.domain || 'N/A',
+      'Cycle': t.reviewCycleName,
+      'Evaluation Status': t.evaluationStatus,
+      'Reviewer': reviewer?.name || 'Reviewer'
+    }));
 
-      // Stage Data
-      let r1 = 0, r2 = 0, r3 = 0, completed = 0;
-      students.forEach(s => {
-        if (s.reviewStage === 'Review 2') r1++;
-        else if (s.reviewStage === 'Review 3') r2++;
-        else if (s.status === 'Completed') completed++;
-        else r1++; // Default to starting at R1
-      });
-
-      setStageData([
-        { name: 'Review 1 Pending', value: r1, color: '#3b82f6' },
-        { name: 'Review 2 Pending', value: r2, color: '#f59e0b' },
-        { name: 'Review 3 Pending', value: r3, color: '#8b5cf6' },
-        { name: 'Fully Completed', value: completed, color: '#10b981' },
-      ]);
-
-      // Score distribution (bucketing avg scores)
-      const buckets = { '0-40': 0, '41-60': 0, '61-80': 0, '81-100': 0 };
-      reviews.forEach(r => {
-        const s = r.totalScore || 0;
-        if (s <= 40) buckets['0-40']++;
-        else if (s <= 60) buckets['41-60']++;
-        else if (s <= 80) buckets['61-80']++;
-        else buckets['81-100']++;
-      });
-      
-      setScoreData([
-        { range: '0-40', count: buckets['0-40'] },
-        { range: '41-60', count: buckets['41-60'] },
-        { range: '61-80', count: buckets['61-80'] },
-        { range: '81-100', count: buckets['81-100'] },
-      ]);
-
-    } catch (err) {
-      console.error("Failed to load reports:", err);
-      setError("Failed to load reporting data.");
-    } finally {
-      setLoading(false);
-    }
+    exportToCsv(`Reviewer_Assigned_Teams_${new Date().toISOString().split('T')[0]}.csv`, exportData);
   };
 
-  const COLORS = ['#3b82f6', '#f59e0b', '#8b5cf6', '#10b981'];
+  const handleExportPdf = () => {
+    alert("Exporting PDF Summary Report...");
+    handleExportCsv();
+  };
 
-  if (loading) {
+  if (dataLoading) {
     return (
-      <DashboardLayout navigationItems={reviewerNavigation} title="KL CSE Capstone Portal - My Reports">
+      <DashboardLayout navigationItems={reviewerNavigation} title="Evaluation Reports">
         <div className="flex h-[calc(100vh-4rem)] items-center justify-center">
           <Loader2 className="h-8 w-8 animate-spin text-primary-600" />
         </div>
@@ -92,104 +70,131 @@ const ReviewerReports = () => {
   }
 
   return (
-    <DashboardLayout navigationItems={reviewerNavigation} title="KL CSE Capstone Portal - My Reports">
+    <DashboardLayout navigationItems={reviewerNavigation} title="Evaluation Reports">
       <div className="max-w-7xl mx-auto space-y-6">
         
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold text-gray-900 tracking-tight flex items-center gap-2">
-              <FileBarChart className="h-6 w-6 text-primary-600" /> Evaluation Reports
+              <FileBarChart className="h-6 w-6 text-primary-600" /> Reviewer Analytics & Reports
             </h1>
-            <p className="text-sm text-gray-500 mt-1">Analytics and insights on your assigned students and reviews.</p>
+            <p className="text-sm text-gray-500 mt-1">Exportable summaries of evaluation completion rates, marks distribution, and student progress.</p>
           </div>
-          <Button variant="outline" className="flex items-center gap-2 shadow-sm">
-            <Download className="w-4 h-4" /> Export Report (PDF)
-          </Button>
+          <div className="flex gap-3">
+            <Button variant="outline" onClick={handleExportPdf} className="flex items-center gap-2 bg-white">
+              <Download className="w-4 h-4" /> Export PDF
+            </Button>
+            <Button onClick={handleExportCsv} className="flex items-center gap-2">
+              <FileSpreadsheet className="w-4 h-4" /> Export CSV / Excel
+            </Button>
+          </div>
         </div>
 
-        {error && <div className="text-red-500">{error}</div>}
+        {!dashboardStats || dashboardStats.activeAssignedTeams === 0 ? (
+          <Card>
+            <div className="py-12">
+              <EmptyState
+                icon={FileBarChart}
+                title="No Evaluation Data Available"
+                description="Assigned teams and historical evaluation reports will appear here once assigned."
+              />
+            </div>
+          </Card>
+        ) : (
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+              <StatCard 
+                title="Assigned Teams (Active)" 
+                value={dashboardStats.activeAssignedTeams.toString()} 
+                icon={Users} 
+                colorClass="text-blue-600" 
+                bgClass="bg-blue-50" 
+              />
+              <StatCard 
+                title="Historical Teams (Past)" 
+                value={dashboardStats.historicalTeams.toString()} 
+                icon={Target} 
+                colorClass="text-purple-600" 
+                bgClass="bg-purple-50" 
+              />
+              <StatCard 
+                title="Total Locked Evaluations" 
+                value={dashboardStats.lockedEvaluations.toString()} 
+                icon={Activity} 
+                colorClass="text-emerald-600" 
+                bgClass="bg-emerald-50" 
+              />
+              <StatCard 
+                title="Average Marks Awarded" 
+                value={`${dashboardStats.averageMarksAwarded} / 100`} 
+                icon={CheckCircle2} 
+                colorClass="text-amber-600" 
+                bgClass="bg-amber-50" 
+              />
+            </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <Card className="bg-gradient-to-br from-primary-50 to-white border-primary-100">
-            <div className="flex items-center gap-4">
-              <div className="p-3 bg-primary-100 rounded-lg text-primary-700">
-                <FileBarChart className="w-6 h-6" />
-              </div>
-              <div>
-                <p className="text-sm font-medium text-gray-500 uppercase tracking-wide">Assigned Students</p>
-                <h3 className="text-2xl font-bold text-gray-900">{stats.totalAssigned}</h3>
-              </div>
-            </div>
-          </Card>
-          
-          <Card className="bg-gradient-to-br from-indigo-50 to-white border-indigo-100">
-            <div className="flex items-center gap-4">
-              <div className="p-3 bg-indigo-100 rounded-lg text-indigo-700">
-                <BarChart2 className="w-6 h-6" />
-              </div>
-              <div>
-                <p className="text-sm font-medium text-gray-500 uppercase tracking-wide">Total Reviews</p>
-                <h3 className="text-2xl font-bold text-gray-900">{stats.totalReviews}</h3>
-              </div>
-            </div>
-          </Card>
-          
-          <Card className="bg-gradient-to-br from-emerald-50 to-white border-emerald-100">
-            <div className="flex items-center gap-4">
-              <div className="p-3 bg-emerald-100 rounded-lg text-emerald-700">
-                <PieChartIcon className="w-6 h-6" />
-              </div>
-              <div>
-                <p className="text-sm font-medium text-gray-500 uppercase tracking-wide">Average Score</p>
-                <h3 className="text-2xl font-bold text-gray-900">{stats.avgScore} / 100</h3>
-              </div>
-            </div>
-          </Card>
-        </div>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Marks Distribution Bar Chart */}
+              <Card title="Marks Distribution Breakdown">
+                <div className="h-64 w-full mt-4">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={marksDistribution} margin={{ top: 10, right: 10, left: -20, bottom: 20 }}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                      <XAxis dataKey="grade" tick={{ fontSize: 11 }} interval={0} />
+                      <YAxis allowDecimals={false} />
+                      <Tooltip />
+                      <Bar dataKey="count" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </Card>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <Card title="Student Review Stages">
-            <div className="h-80 w-full mt-4">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={stageData}
-                    cx="50%"
-                    cy="50%"
-                    outerRadius={100}
-                    fill="#8884d8"
-                    dataKey="value"
-                    label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                  >
-                    {stageData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} />
-                    ))}
-                  </Pie>
-                  <RechartsTooltip />
-                  <Legend />
-                </PieChart>
-              </ResponsiveContainer>
+              {/* Evaluation Status Breakdown */}
+              <Card title="Active Cycle Evaluation Status">
+                <div className="space-y-4 mt-4">
+                  {activeTeams.map((t) => (
+                    <div key={t.id} className="p-3 border rounded-lg bg-gray-50/50">
+                      <div className="flex justify-between items-center text-sm mb-1">
+                        <span className="font-bold text-gray-800">{t.id} - {t.project?.title || 'Capstone Team'}</span>
+                        <span className={`px-2 py-0.5 rounded text-xs font-semibold ${
+                          t.evaluationStatus === 'Locked' || t.evaluationStatus === 'Published' 
+                            ? 'bg-emerald-100 text-emerald-800' 
+                            : 'bg-amber-100 text-amber-800'
+                        }`}>
+                          {t.evaluationStatus}
+                        </span>
+                      </div>
+                      <div className="w-full bg-gray-200 rounded-full h-2 mt-2">
+                        <div 
+                          className={`h-2 rounded-full ${t.evaluationStatus === 'Locked' || t.evaluationStatus === 'Published' ? 'bg-emerald-500' : 'bg-amber-500'}`} 
+                          style={{ width: t.evaluationStatus === 'Locked' || t.evaluationStatus === 'Published' ? '100%' : '40%' }}
+                        ></div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </Card>
             </div>
-          </Card>
 
-          <Card title="Score Distribution (All Reviews)">
-            <div className="h-80 w-full mt-4">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={scoreData} margin={{ top: 20, right: 30, left: 0, bottom: 5 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                  <XAxis dataKey="range" />
-                  <YAxis allowDecimals={false} />
-                  <RechartsTooltip 
-                    cursor={{fill: '#f3f4f6'}}
-                    contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                  />
-                  <Bar dataKey="count" fill="#4f46e5" radius={[4, 4, 0, 0]} name="Number of Reviews" />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </Card>
-        </div>
-
+            {/* Performance Summary Card */}
+            <Card title="Reviewer Summary & Insights">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 bg-primary-50/30 border border-primary-100 rounded-xl text-sm">
+                <div>
+                  <p className="font-bold text-gray-900">Workload Index</p>
+                  <p className="text-gray-600 mt-1">Evaluating {dashboardStats.activeAssignedTeams} active capstone teams in review cycle '{dashboardStats.activeCycle}'.</p>
+                </div>
+                <div>
+                  <p className="font-bold text-gray-900">Completion Velocity</p>
+                  <p className="text-gray-600 mt-1">{dashboardStats.lockedEvaluations} locked evaluations archived across all review cycles.</p>
+                </div>
+                <div>
+                  <p className="font-bold text-gray-900">Scoring Quality Index</p>
+                  <p className="text-gray-600 mt-1">Average score awarded across submitted evaluations is {dashboardStats.averageMarksAwarded}/100.</p>
+                </div>
+              </div>
+            </Card>
+          </>
+        )}
       </div>
     </DashboardLayout>
   );

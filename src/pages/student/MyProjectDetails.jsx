@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
+import { useData } from '@/contexts/DataContext';
 import { projectService, studentService } from '@/firebase/services';
 import Card from '@/components/common/Card';
 import Badge from '@/components/common/Badge';
@@ -8,32 +9,22 @@ import { Book, Users, Calendar, Link as LinkIcon, FileText, CheckCircle } from '
 
 const MyProjectDetails = () => {
   const { currentUser } = useAuth();
-  const [project, setProject] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const { getStudentById, projects: allProjects, dataLoading: loading } = useData();
 
-  useEffect(() => {
-    const fetchProject = async () => {
-      try {
-        if (!currentUser?.uid) return;
-        const studentData = await studentService.getStudentById(currentUser.uid);
-        if (studentData?.projectId) {
-           const projectData = await projectService.getProjectById(studentData.projectId);
-           setProject(projectData);
-        } else {
-           // Maybe try to find project by teamName or student ID
-           const allProjects = await projectService.getAll();
-           const myProj = allProjects.find(p => p.studentIds?.includes(currentUser.uid) || p.teamName === studentData?.teamName);
-           setProject(myProj || null);
-        }
-      } catch (err) {
-        console.error('Error fetching project:', err);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchProject();
-  }, [currentUser]);
+  const project = React.useMemo(() => {
+    if (loading || !currentUser || !allProjects) return null;
+    const studentData = getStudentById(currentUser.uid);
+    if (!studentData) return null;
+    
+    if (studentData.projectId) {
+       const projectData = allProjects.find(p => p.id === studentData.projectId);
+       if (projectData) return projectData;
+    }
+    
+    // Maybe try to find project by teamName or student ID
+    const myProj = allProjects.find(p => p.studentIds?.includes(currentUser.uid) || (studentData.teamName && p.teamName === studentData.teamName));
+    return myProj || null;
+  }, [allProjects, loading, currentUser, getStudentById]);
 
   if (loading) {
     return (

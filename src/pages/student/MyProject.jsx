@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { studentNavigation } from '@/constants/navigation';
 import { useAuth } from '@/contexts/AuthContext';
+import { useData } from '@/contexts/DataContext';
 import { projectService } from '@/firebase/services/projectService';
 import { studentService } from '@/firebase/services/studentService';
 import Card from '@/components/common/Card';
@@ -9,12 +10,12 @@ import Badge from '@/components/common/Badge';
 import Input from '@/components/common/Input';
 import Button from '@/components/common/Button';
 import EmptyState from '@/components/common/EmptyState';
-import { Book, Users, Calendar, Link as LinkIcon, FileText, CheckCircle, Save, Loader2, Target, Code } from 'lucide-react';
+import { Book, Users, Calendar, Link as LinkIcon, FileText, CheckCircle, Save, Loader2, Target, Code, ShieldCheck } from 'lucide-react';
+import ReviewerRotationTimeline from '@/pages/admin/team-management/components/ReviewerRotationTimeline';
 
 const MyProject = () => {
   const { currentUser } = useAuth();
-  const [project, setProject] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const { getStudentById, projects: allProjects, teams, getReviewerHistory, getEvaluationsByTeam, dataLoading: loading } = useData();
   const [submitting, setSubmitting] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   
@@ -25,35 +26,41 @@ const MyProject = () => {
     technologies: ''
   });
 
-  useEffect(() => {
-    if (currentUser?.uid) {
-      fetchProject(currentUser.uid);
+  const project = React.useMemo(() => {
+    if (loading || !currentUser || !allProjects) return null;
+    const student = getStudentById(currentUser.uid);
+    if (!student) return null;
+    
+    if (student.projectId) {
+      const p = allProjects.find(p => p.id === student.projectId);
+      if (p) return p;
     }
-  }, [currentUser]);
+    
+    return allProjects.find(p => p.studentId === currentUser.uid || (student.teamId && p.teamId === student.teamId)) || null;
+  }, [allProjects, loading, currentUser, getStudentById]);
+  const team = React.useMemo(() => {
+    if (!project || !teams) return null;
+    return teams.find(t => t.projectId === project.id || t.id === project.teamId);
+  }, [project, teams]);
 
-  const fetchProject = async (uid) => {
-    try {
-      setLoading(true);
-      const studentData = await studentService.getById(uid);
-      if (studentData) {
-        const projects = await projectService.getByStudentId(uid);
-        if (projects.length > 0) {
-          const proj = projects[0];
-          setProject(proj);
-          setFormData({
-            description: proj.description || '',
-            repoLink: proj.repoLink || '',
-            docLink: proj.docLink || '',
-            technologies: proj.technologies || ''
-          });
-        }
-      }
-    } catch (err) {
-      console.error('Error fetching project:', err);
-    } finally {
-      setLoading(false);
+  const teamDataForTimeline = React.useMemo(() => {
+    if (!team) return null;
+    return {
+      reviewerHistory: getReviewerHistory(team.id),
+      evaluations: getEvaluationsByTeam(team.id)
+    };
+  }, [team, getReviewerHistory, getEvaluationsByTeam]);
+
+  useEffect(() => {
+    if (project && !isEditing) {
+      setFormData({
+        description: project.description || '',
+        repoLink: project.repoLink || '',
+        docLink: project.docLink || '',
+        technologies: project.technologies || ''
+      });
     }
-  };
+  }, [project, isEditing]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -68,7 +75,7 @@ const MyProject = () => {
         technologies: formData.technologies,
         updatedAt: new Date().toISOString()
       });
-      setProject(prev => ({ ...prev, ...formData }));
+      // setProject(prev => ({ ...prev, ...formData }));
       setIsEditing(false);
     } catch (err) {
       console.error("Failed to update project:", err);
@@ -265,6 +272,15 @@ const MyProject = () => {
                 )}
               </div>
             </Card>
+
+            {team && (
+              <Card title="Current Reviewer" icon={ShieldCheck}>
+                <div className="space-y-2 text-center p-2">
+                  <p className="text-xl font-bold text-gray-900">{team.currentReviewerName || 'Unassigned'}</p>
+                  <p className="text-sm font-medium text-primary-600">{team.currentReviewCycleName || 'No Active Cycle'}</p>
+                </div>
+              </Card>
+            )}
             
             <Card title="Project Dates">
               <div className="space-y-4">
@@ -284,6 +300,13 @@ const MyProject = () => {
             </Card>
           </div>
         </div>
+
+        {teamDataForTimeline && (
+          <div className="mt-8">
+             <ReviewerRotationTimeline teamData={teamDataForTimeline} />
+          </div>
+        )}
+
       </div>
     </DashboardLayout>
   );
