@@ -1,25 +1,28 @@
 import React, { useState, useEffect } from 'react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
-import { facultyNavigation } from '@/constants/navigation';
+import { guideNavigation } from '@/constants/navigation';
 import Card from '@/components/common/Card';
 import Input from '@/components/common/Input';
 import Button from '@/components/common/Button';
+import Badge from '@/components/common/Badge';
 import { useAuth } from '@/contexts/AuthContext';
-import { userService } from '@/firebase/services/userService';
+import { useData } from '@/contexts/DataContext';
+import { FirestoreService } from '@/firebase/services/firestore';
 import { Loader2, User, Mail, Phone, Building2, Shield, CheckCircle, AlertTriangle } from 'lucide-react';
 
-const FacultyProfile = () => {
+const GuideProfile = () => {
   const { currentUser, domainUser } = useAuth();
+  const { getGuideById, dataLoading } = useData();
+
   const [profile, setProfile] = useState({
     name: '',
     email: '',
     phone: '',
     department: '',
-    designation: 'Faculty',
+    designation: 'Project Guide',
     employeeId: ''
   });
-  
-  const [loading, setLoading] = useState(true);
+
   const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState(null);
@@ -31,36 +34,29 @@ const FacultyProfile = () => {
         email: domainUser.email || currentUser?.email || '',
         phone: domainUser.phone || '',
         department: domainUser.department || 'Computer Science',
-        designation: domainUser.designation || (domainUser.role === 'classroom_faculty' ? 'Classroom Faculty' : 'Faculty'),
-        employeeId: domainUser.employeeId || domainUser.facultyId || domainUser.id || 'F001'
+        designation: domainUser.designation || 'Project Guide',
+        employeeId: domainUser.employeeId || domainUser.guideId || domainUser.id || 'G001'
       });
-      setLoading(false);
-    } else if (currentUser?.uid) {
-      fetchProfile(currentUser.uid);
-    }
-  }, [currentUser, domainUser]);
-
-  const fetchProfile = async (uid) => {
-    try {
-      setLoading(true);
-      const data = await userService.getUserById(uid);
-      if (data) {
+    } else if (currentUser?.uid && !dataLoading) {
+      const guideData = getGuideById(currentUser.uid);
+      if (guideData) {
         setProfile({
-          name: data.name || '',
-          email: data.email || currentUser.email,
-          phone: data.phone || '',
-          department: data.department || 'Computer Science',
-          designation: data.role === 'classroom_faculty' ? 'Classroom Faculty' : data.role || 'Faculty',
-          employeeId: data.employeeId || (data.uid ? data.uid.substring(0, 8) : 'F001')
+          name: guideData.name || '',
+          email: guideData.email || currentUser.email,
+          phone: guideData.phone || '',
+          department: guideData.department || 'Computer Science',
+          designation: guideData.designation || 'Project Guide',
+          employeeId: guideData.employeeId || guideData.id
         });
+      } else {
+        setProfile(prev => ({
+          ...prev,
+          email: currentUser.email || '',
+          name: currentUser.displayName || currentUser.email.split('@')[0]
+        }));
       }
-    } catch (err) {
-      console.error("Error fetching profile:", err);
-      setError("Failed to load profile data.");
-    } finally {
-      setLoading(false);
     }
-  };
+  }, [domainUser, currentUser, getGuideById, dataLoading]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -72,26 +68,29 @@ const FacultyProfile = () => {
     setSaving(true);
     setSuccess(false);
     setError(null);
-    
+
     try {
-      await userService.updateUserProfile(currentUser.uid, {
-        name: profile.name,
-        phone: profile.phone,
-        department: profile.department
-      });
+      if (domainUser?.id) {
+        await FirestoreService.updateDocument('guides', domainUser.id, {
+          name: profile.name,
+          phone: profile.phone,
+          department: profile.department,
+          updatedAt: new Date().toISOString()
+        });
+      }
       setSuccess(true);
       setTimeout(() => setSuccess(false), 3000);
     } catch (err) {
-      console.error("Error updating profile:", err);
+      console.error("Error updating guide profile:", err);
       setError("Failed to update profile settings.");
     } finally {
       setSaving(false);
     }
   };
 
-  if (loading) {
+  if (dataLoading && !domainUser) {
     return (
-      <DashboardLayout navigationItems={facultyNavigation} title="KL CSE Capstone Portal - Profile & Settings">
+      <DashboardLayout navigationItems={guideNavigation} title="KL CSE Capstone Portal - Profile">
         <div className="flex h-[calc(100vh-4rem)] items-center justify-center">
           <Loader2 className="h-8 w-8 animate-spin text-primary-600" />
         </div>
@@ -100,18 +99,18 @@ const FacultyProfile = () => {
   }
 
   return (
-    <DashboardLayout navigationItems={facultyNavigation} title="KL CSE Capstone Portal - Profile & Settings">
-      <div className="max-w-4xl mx-auto space-y-6">
+    <DashboardLayout navigationItems={guideNavigation} title="KL CSE Capstone Portal - Profile">
+      <div className="max-w-4xl mx-auto space-y-6 font-sans">
         
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Profile & Settings</h1>
-          <p className="text-sm text-gray-500 mt-1">Manage your personal information and platform preferences.</p>
+          <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Guide Profile & Settings</h1>
+          <p className="text-sm text-gray-500 mt-1">Manage your supervisor details and account preferences.</p>
         </div>
 
         {error && (
-          <div className="bg-red-50 text-red-600 p-4 rounded-lg flex items-center gap-2 border border-red-100">
-            <AlertTriangle className="w-5 h-5" />
-            <p className="text-sm font-medium">{error}</p>
+          <div className="bg-red-50 text-red-600 p-4 rounded-lg flex items-center gap-2 border border-red-100 text-sm font-medium">
+            <AlertTriangle className="w-5 h-5 shrink-0" />
+            <p>{error}</p>
           </div>
         )}
 
@@ -119,21 +118,21 @@ const FacultyProfile = () => {
           <div className="md:col-span-1 space-y-6">
             <Card>
               <div className="flex flex-col items-center p-4">
-                <div className="w-24 h-24 bg-primary-100 text-primary-700 rounded-full flex items-center justify-center mb-4 border-4 border-white shadow-sm">
+                <div className="w-24 h-24 bg-primary-100 text-primary-700 rounded-full flex items-center justify-center mb-4 border-4 border-white shadow-sm font-bold text-xl">
                   <User className="w-10 h-10" />
                 </div>
-                <h3 className="font-bold text-lg text-gray-900">{profile.name}</h3>
+                <h3 className="font-bold text-lg text-gray-900">{profile.name || 'Guide Profile'}</h3>
                 <p className="text-sm font-medium text-gray-500 mb-4">{profile.designation}</p>
-                <Badge variant="primary" className="w-full justify-center py-1.5">
-                  ID: {profile.employeeId.toUpperCase()}
+                <Badge variant="primary" className="w-full justify-center py-1.5 font-mono">
+                  ID: {profile.employeeId ? profile.employeeId.toUpperCase() : 'GUIDE'}
                 </Badge>
               </div>
             </Card>
 
-            <Card title="Security">
+            <Card title="Security & Device">
               <div className="space-y-4 pt-2">
                 <Button variant="outline" className="w-full flex justify-center items-center gap-2 text-sm text-gray-700 border-gray-300">
-                  <Shield className="w-4 h-4" /> Change Password
+                  <Shield className="w-4 h-4" /> Manage MFA & Security
                 </Button>
               </div>
             </Card>
@@ -151,7 +150,7 @@ const FacultyProfile = () => {
                 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                   <div className="space-y-2">
-                    <label className="block text-sm font-medium text-gray-700">Full Name</label>
+                    <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider">Full Name</label>
                     <div className="relative">
                       <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                         <User className="h-4 w-4 text-gray-400" />
@@ -160,14 +159,14 @@ const FacultyProfile = () => {
                         name="name"
                         value={profile.name}
                         onChange={handleChange}
-                        className="pl-10"
+                        className="pl-10 text-sm"
                         required
                       />
                     </div>
                   </div>
 
                   <div className="space-y-2">
-                    <label className="block text-sm font-medium text-gray-700">Email Address</label>
+                    <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider">Email Address</label>
                     <div className="relative">
                       <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                         <Mail className="h-4 w-4 text-gray-400" />
@@ -176,13 +175,13 @@ const FacultyProfile = () => {
                         name="email"
                         value={profile.email}
                         disabled
-                        className="pl-10 bg-gray-50 text-gray-500"
+                        className="pl-10 bg-gray-50 text-gray-500 text-sm"
                       />
                     </div>
                   </div>
 
                   <div className="space-y-2">
-                    <label className="block text-sm font-medium text-gray-700">Phone Number</label>
+                    <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider">Phone Number</label>
                     <div className="relative">
                       <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                         <Phone className="h-4 w-4 text-gray-400" />
@@ -191,14 +190,14 @@ const FacultyProfile = () => {
                         name="phone"
                         value={profile.phone}
                         onChange={handleChange}
-                        className="pl-10"
-                        placeholder="e.g. +1 234 567 8900"
+                        className="pl-10 text-sm"
+                        placeholder="e.g. +91 98765 43210"
                       />
                     </div>
                   </div>
 
                   <div className="space-y-2">
-                    <label className="block text-sm font-medium text-gray-700">Department</label>
+                    <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider">Department</label>
                     <div className="relative">
                       <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                         <Building2 className="h-4 w-4 text-gray-400" />
@@ -207,7 +206,7 @@ const FacultyProfile = () => {
                         name="department"
                         value={profile.department}
                         onChange={handleChange}
-                        className="pl-10"
+                        className="pl-10 text-sm"
                       />
                     </div>
                   </div>
@@ -215,7 +214,7 @@ const FacultyProfile = () => {
 
                 <div className="flex justify-end pt-5 border-t border-gray-100 mt-6">
                   <Button type="submit" disabled={saving}>
-                    {saving ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Saving...</> : 'Save Changes'}
+                    {saving ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Saving...</> : 'Save Profile'}
                   </Button>
                 </div>
               </form>
@@ -228,4 +227,4 @@ const FacultyProfile = () => {
   );
 };
 
-export default FacultyProfile;
+export default GuideProfile;

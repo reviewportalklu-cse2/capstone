@@ -55,10 +55,14 @@ const AdminNotificationCenter = () => {
         category: formData.category,
         priority: formData.priority,
         recipientType: formData.recipientType,
+        targetAudience: formData.recipientType === 'global' ? 'everyone' : formData.recipientType,
+        targetRole: formData.recipientType === 'global' ? 'all' : (formData.roles.length > 0 ? formData.roles[0].toLowerCase() : 'all'),
+        targetRoles: formData.recipientType === 'role' ? formData.roles.map(r => r.toLowerCase()) : [],
         roleIds: formData.recipientType === 'role' ? formData.roles : [],
         teamIds: formData.recipientType === 'team' ? formData.targetTeams : [],
         senderId: 'ADMIN',
-        senderRole: 'Admin'
+        senderRole: 'Admin',
+        createdAt: new Date().toISOString()
       };
 
       await notificationService.broadcast(payload);

@@ -10,6 +10,7 @@ import Badge from '@/components/common/Badge';
 import Button from '@/components/common/Button';
 import Input from '@/components/common/Input';
 import { resolveTeamRelations, resolveStudentRelations, getEntityKeys } from '@/utils/relationshipResolver';
+import { ArrowLeft, Lock, ShieldCheck, AlertCircle, Calendar, Clock, CheckCircle } from 'lucide-react';
 
 const EvaluationWorkspace = () => {
   const { teamId } = useParams();
@@ -133,6 +134,41 @@ const EvaluationWorkspace = () => {
   const cycleConfig = useMemo(() => {
     return reviewCycles?.find(c => c.reviewName === selectedCycle || c.name === selectedCycle || c.id === selectedCycle);
   }, [reviewCycles, selectedCycle]);
+
+  const activeWindowStatus = useMemo(() => {
+    if (!cycleConfig) return { isAvailable: true, message: 'Active' };
+    const now = new Date();
+    
+    let startBoundary = null;
+    if (cycleConfig.startDate) {
+      const timeStr = cycleConfig.startTime || '00:00';
+      startBoundary = new Date(`${cycleConfig.startDate}T${timeStr}`);
+    }
+
+    let endBoundary = null;
+    if (cycleConfig.endDate) {
+      const timeStr = cycleConfig.endTime || '23:59';
+      endBoundary = new Date(`${cycleConfig.endDate}T${timeStr}`);
+    }
+
+    if (startBoundary && !isNaN(startBoundary) && now < startBoundary) {
+      return {
+        isAvailable: false,
+        statusLabel: 'Upcoming',
+        message: `Evaluation cycle opens on ${cycleConfig.startDate} at ${cycleConfig.startTime || '00:00'}.`
+      };
+    }
+
+    if (endBoundary && !isNaN(endBoundary) && now > endBoundary) {
+      return {
+        isAvailable: false,
+        statusLabel: 'Closed',
+        message: `Evaluation cycle closed on ${cycleConfig.endDate} at ${cycleConfig.endTime || '23:59'}.`
+      };
+    }
+
+    return { isAvailable: true, statusLabel: 'Active', message: 'Active Window' };
+  }, [cycleConfig]);
 
   const activeAssignment = useMemo(() => {
     if (!cycleConfig || !teamId || userRole !== 'reviewer') return null;
@@ -469,12 +505,22 @@ const EvaluationWorkspace = () => {
     );
   }
 
-  const isLocked = existingEvaluation?.status === 'Locked' || cycleConfig?.status === 'Closed' || cycleConfig?.status === 'Archived';
+  const isLocked = existingEvaluation?.status === 'Locked' || cycleConfig?.status === 'Closed' || cycleConfig?.status === 'Archived' || (!activeWindowStatus.isAvailable && userRole !== 'admin');
 
   return (
     <DashboardLayout navigationItems={navItems} title="Evaluation Workspace">
-      <div className="max-w-7xl mx-auto space-y-6 pb-20">
+      <div className="max-w-7xl mx-auto space-y-6 pb-20 font-sans">
         
+        {!activeWindowStatus.isAvailable && (
+          <div className="bg-amber-50 border border-amber-200 text-amber-800 px-4 py-3 rounded-xl flex items-center gap-3 text-xs font-semibold shadow-sm">
+            <AlertCircle className="w-5 h-5 text-amber-600 shrink-0" />
+            <div>
+              <span className="font-bold">{activeWindowStatus.statusLabel}: </span>
+              {activeWindowStatus.message} Evaluator submissions are currently read-only.
+            </div>
+          </div>
+        )}
+
         {/* Header */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-6 rounded-lg shadow-sm border border-gray-200">
           <div className="flex items-center gap-4">

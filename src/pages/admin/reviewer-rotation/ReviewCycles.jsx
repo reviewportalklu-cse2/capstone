@@ -8,7 +8,7 @@ import Card from '@/components/common/Card';
 import Button from '@/components/common/Button';
 import Badge from '@/components/common/Badge';
 import Input from '@/components/common/Input';
-import { CalendarDays, Play, Square, Archive, Plus, Edit2, Layers, ShieldCheck } from 'lucide-react';
+import { CalendarDays, Play, Square, Archive, Plus, Edit2, Layers, ShieldCheck, Clock } from 'lucide-react';
 
 const ReviewCycles = () => {
   const { reviewCycles, rubrics, dataLoading } = useData();
@@ -21,7 +21,9 @@ const ReviewCycles = () => {
     description: '',
     weekNumber: '',
     startDate: '',
+    startTime: '09:00',
     endDate: '',
+    endTime: '17:00',
     targetRole: 'all',
     rubricId: '',
     status: 'Draft'
@@ -34,7 +36,9 @@ const ReviewCycles = () => {
       description: '',
       weekNumber: '',
       startDate: '',
+      startTime: '09:00',
       endDate: '',
+      endTime: '17:00',
       targetRole: 'all',
       rubricId: '',
       status: 'Draft'
@@ -49,7 +53,9 @@ const ReviewCycles = () => {
       description: cycle.description || '',
       weekNumber: cycle.weekNumber || '',
       startDate: cycle.startDate || '',
+      startTime: cycle.startTime || '09:00',
       endDate: cycle.endDate || '',
+      endTime: cycle.endTime || '17:00',
       targetRole: cycle.targetRole || cycle.role || 'all',
       rubricId: cycle.rubricId || '',
       status: cycle.status || 'Draft'
@@ -68,7 +74,9 @@ const ReviewCycles = () => {
         description: formData.description.trim(),
         weekNumber: formData.weekNumber,
         startDate: formData.startDate,
+        startTime: formData.startTime || '00:00',
         endDate: formData.endDate,
+        endTime: formData.endTime || '23:59',
         targetRole: formData.targetRole,
         rubricId: formData.rubricId,
         status: formData.status,
@@ -172,7 +180,7 @@ const ReviewCycles = () => {
           <div>
             <h1 className="text-2xl font-bold text-gray-900 tracking-tight">University Review & Evaluation Cycles</h1>
             <p className="text-sm text-gray-500 mt-1">
-              Configure dynamic evaluation cycles, dates, roles, rubrics, and statuses (Review 1, Review 2, Review 3, Classroom Presentation).
+              Configure dynamic evaluation cycles, exact date & time bounds, roles, rubrics, and statuses (Review 1, Review 2, Review 3, Classroom Presentation).
             </p>
           </div>
           <Button onClick={handleOpenCreate} className="flex items-center gap-2">
@@ -184,6 +192,9 @@ const ReviewCycles = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {reviewCycles.map(cycle => {
             const linkedRubric = rubrics?.find(r => r.id === cycle.rubricId || r.rubricId === cycle.rubricId);
+            const startDisplay = cycle.startDate ? `${cycle.startDate} ${cycle.startTime || ''}`.trim() : 'N/A';
+            const endDisplay = cycle.endDate ? `${cycle.endDate} ${cycle.endTime || ''}`.trim() : 'N/A';
+
             return (
               <Card key={cycle.id} className="p-6 flex flex-col justify-between hover:shadow-card-hover transition-shadow">
                 <div>
@@ -211,12 +222,12 @@ const ReviewCycles = () => {
                       <span className="font-bold text-primary-700">{linkedRubric ? linkedRubric.title : (cycle.rubricId || 'Not Linked')}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="font-semibold text-gray-500">Start Date:</span>
-                      <span className="font-medium text-gray-800">{cycle.startDate || 'N/A'}</span>
+                      <span className="font-semibold text-gray-500">Active From:</span>
+                      <span className="font-medium text-gray-800">{startDisplay}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="font-semibold text-gray-500">End Date:</span>
-                      <span className="font-medium text-gray-800">{cycle.endDate || 'N/A'}</span>
+                      <span className="font-semibold text-gray-500">Active Until:</span>
+                      <span className="font-medium text-gray-800">{endDisplay}</span>
                     </div>
                   </div>
                 </div>
@@ -346,11 +357,30 @@ const ReviewCycles = () => {
                   />
                 </div>
                 <div>
+                  <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">Start Time</label>
+                  <Input 
+                    type="time" 
+                    value={formData.startTime} 
+                    onChange={e => setFormData({...formData, startTime: e.target.value})} 
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
                   <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">End Date</label>
                   <Input 
                     type="date" 
                     value={formData.endDate} 
                     onChange={e => setFormData({...formData, endDate: e.target.value})} 
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">End Time</label>
+                  <Input 
+                    type="time" 
+                    value={formData.endTime} 
+                    onChange={e => setFormData({...formData, endTime: e.target.value})} 
                   />
                 </div>
               </div>

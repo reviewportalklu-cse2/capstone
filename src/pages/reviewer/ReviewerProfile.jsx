@@ -10,7 +10,7 @@ import { reviewerService } from '@/firebase/services/reviewerService';
 import { Loader2, UserCog, Save, CheckCircle, AlertCircle } from 'lucide-react';
 
 const ReviewerProfile = () => {
-  const { currentUser } = useAuth();
+  const { currentUser, domainUser } = useAuth();
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
@@ -28,21 +28,32 @@ const ReviewerProfile = () => {
   const { getReviewerById, dataLoading } = useData();
 
   useEffect(() => {
+    if (domainUser) {
+      setFormData({
+        name: domainUser.name || '',
+        email: domainUser.email || currentUser?.email || '',
+        department: domainUser.department || 'Computer Science',
+        designation: domainUser.designation || 'External Assessor',
+        phone: domainUser.phone || '',
+        employeeId: domainUser.employeeId || domainUser.reviewerId || domainUser.id || 'R001'
+      });
+      return;
+    }
     if (dataLoading || !currentUser?.uid) return;
     const data = getReviewerById(currentUser.uid);
     if (data) {
       setFormData({
         name: data.name || '',
         email: data.email || currentUser.email || '',
-        department: data.department || '',
-        designation: data.designation || '',
+        department: data.department || 'Computer Science',
+        designation: data.designation || 'External Assessor',
         phone: data.phone || '',
-        employeeId: data.employeeId || ''
+        employeeId: data.employeeId || data.id || 'R001'
       });
     } else {
       setFormData(prev => ({ ...prev, email: currentUser.email || '' }));
     }
-  }, [currentUser, getReviewerById, dataLoading]);
+  }, [currentUser, domainUser, getReviewerById, dataLoading]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();

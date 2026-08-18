@@ -10,6 +10,7 @@ import GuideNotifications from './GuideNotifications';
 import GuideReports from './GuideReports';
 import GuideDownloads from './GuideDownloads';
 import GuideHelp from './GuideHelp';
+import GuideProfile from './GuideProfile';
 import EvaluationWorkspace from '@/pages/common/evaluation/EvaluationWorkspace';
 
 const GuideRoutes = () => {
@@ -28,6 +29,7 @@ const GuideRoutes = () => {
       <Route path="reports" element={<GuideReports />} />
       <Route path="downloads" element={<GuideDownloads />} />
       <Route path="help" element={<GuideHelp />} />
+      <Route path="profile" element={<GuideProfile />} />
       {/* Fallback */}
       <Route path="*" element={<Navigate to="/guide/dashboard" replace />} />
     </Routes>

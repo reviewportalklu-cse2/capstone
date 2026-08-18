@@ -159,23 +159,45 @@ export const DataProvider = ({ children }) => {
   const getTeamsByReviewer = (reviewerId) => data.teams.filter(t => t.reviewerId === reviewerId);
 
   const getNotificationsByRole = () => {
-    if (!domainUser) return [];
+    if (!domainUser && !currentUser) return [];
+    const userRoleLower = (currentRole || '').toLowerCase();
+    const domainId = domainUser?.domainId || domainUser?.id || currentUser?.uid;
+
     return data.notifications.filter(n => {
       if (n.archived) return false;
-      if (n.recipientType === 'global') return true;
-      if (n.recipientType === 'role' && n.roleIds?.includes(currentRole)) return true;
-      if (n.recipientType === 'individual' && n.recipientIds?.includes(domainUser.domainId)) return true;
-      if (n.recipientType === 'team') {
-        const userTeams = data.teams.filter(t => 
-          t.guideId === domainUser.domainId || 
-          t.facultyId === domainUser.domainId ||
-          data.reviewerAssignments.some(a => a.teamId === t.id && a.reviewerId === domainUser.domainId) ||
-          data.students.some(s => s.teamId === t.id && (s.id === domainUser.domainId || s.uid === currentUser.uid))
-        ).map(t => t.id);
-        return n.teamIds?.some(id => userTeams.includes(id));
+      
+      // 1. Global / Everyone broadcasts
+      if (n.recipientType === 'global' || n.targetAudience === 'everyone' || n.targetAudience === 'global' || n.targetRole === 'all' || n.targetRole === 'everyone') {
+        return true;
       }
+      
+      // 2. Role-targeted broadcasts
+      if (n.recipientType === 'role' || n.roleIds?.length > 0 || n.targetRoles?.length > 0) {
+        const rolesLower = [...(n.roleIds || []), ...(n.targetRoles || []), n.targetRole].filter(Boolean).map(r => String(r).toLowerCase());
+        if (rolesLower.includes('all') || rolesLower.includes('everyone') || rolesLower.includes(userRoleLower)) return true;
+        if (userRoleLower === 'classroom_faculty' && rolesLower.includes('faculty')) return true;
+      }
+
+      // 3. Individual broadcasts
+      if (n.recipientType === 'individual' || n.recipientIds?.length > 0 || n.recipientId) {
+        const recs = [...(n.recipientIds || []), n.recipientId].filter(Boolean);
+        if (recs.includes(domainId) || recs.includes(currentUser?.uid) || recs.includes(currentUser?.email)) return true;
+      }
+
+      // 4. Team-targeted broadcasts
+      if (n.recipientType === 'team' || n.teamIds?.length > 0 || n.targetTeam || n.teamId) {
+        const userTeams = data.teams.filter(t => 
+          t.guideId === domainId || 
+          t.facultyId === domainId ||
+          data.reviewerAssignments.some(a => a.teamId === t.id && a.reviewerId === domainId) ||
+          data.students.some(s => s.teamId === t.id && (s.id === domainId || s.uid === currentUser?.uid))
+        ).map(t => t.id);
+        const targetTeamIds = [...(n.teamIds || []), n.targetTeam, n.teamId].filter(Boolean);
+        return targetTeamIds.some(id => userTeams.includes(id));
+      }
+      
       // Legacy fallback
-      if (n.targetRole === 'all' || n.targetRole === currentRole || n.targetRole === domainUser.domainId || n.recipientId === domainUser.domainId) return true;
+      if (n.targetRole === 'all' || n.targetRole === 'everyone' || String(n.targetRole).toLowerCase() === userRoleLower || n.recipientId === domainId) return true;
       return false;
     }).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
   };
