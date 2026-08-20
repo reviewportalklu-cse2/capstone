@@ -116,7 +116,7 @@ const GuideDashboard = () => {
                         <p className="text-xs text-gray-600">{pending.projectTitle}</p>
                       </div>
                     </div>
-                    <Button size="sm" onClick={() => navigate('/guide/marks')} className="flex items-center">
+                    <Button size="sm" onClick={() => navigate(`/guide/evaluate/${pending.teamId}`)} className="flex items-center">
                       Evaluate <ArrowRight className="h-4 w-4 ml-1" />
                     </Button>
                   </div>

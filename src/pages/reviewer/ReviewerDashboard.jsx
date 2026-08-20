@@ -118,7 +118,7 @@ const ReviewerDashboard = () => {
                       </div>
                       <div className="text-right flex flex-col items-end">
                         <button 
-                          onClick={() => navigate('/reviewer/evaluations')}
+                          onClick={() => navigate(`/reviewer/evaluate/${team.id}`)}
                           className="text-xs font-bold text-primary-600 hover:text-primary-800 transition-colors"
                         >
                           Start Review &rarr;

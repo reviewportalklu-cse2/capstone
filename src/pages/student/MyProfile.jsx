@@ -28,7 +28,7 @@ const MyProfile = () => {
   });
 
   const { 
-    student, team, project, guide, classroomFaculty, currentReviewer, 
+    student, team, project, guide, classroomFaculty, 
     dashboardStats, dataLoading 
   } = useStudentAnalytics();
 
@@ -139,13 +139,9 @@ const MyProfile = () => {
                   <span className="text-sm text-gray-500 flex items-center gap-2"><UserCog className="w-4 h-4 text-blue-500"/> Guide</span>
                   <span className="text-sm font-bold text-gray-900">{guide?.name || 'N/A'}</span>
                 </div>
-                <div className="flex justify-between items-center border-b border-gray-100 pb-3">
+                <div className="flex justify-between items-center pb-1">
                   <span className="text-sm text-gray-500 flex items-center gap-2"><Users className="w-4 h-4 text-emerald-500"/> Faculty</span>
                   <span className="text-sm font-bold text-gray-900">{classroomFaculty?.name || 'N/A'}</span>
-                </div>
-                <div className="flex justify-between items-center pb-1">
-                  <span className="text-sm text-gray-500 flex items-center gap-2"><Award className="w-4 h-4 text-purple-500"/> Reviewer</span>
-                  <span className="text-sm font-bold text-gray-900">{currentReviewer?.name || 'N/A'}</span>
                 </div>
               </div>
             </Card>

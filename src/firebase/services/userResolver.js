@@ -69,7 +69,10 @@ export const userResolver = {
           const rEmail = String(r.email || r.Email || '').toLowerCase();
           const rPrefix = rEmail.includes('@') ? rEmail.split('@')[0] : '';
           if (rEmail && rEmail === email.toLowerCase()) return true;
-          if (rPrefix && emailPrefix && rPrefix === emailPrefix) return true;
+          if (rPrefix && emailPrefix) {
+            if (rPrefix === emailPrefix) return true;
+            if (rPrefix.replace(/0+/g, '') === emailPrefix.replace(/0+/g, '')) return true;
+          }
           if (r.id === firebaseUser.uid || r.uid === firebaseUser.uid) return true;
           const rKeys = getEntityKeys(r);
           return searchKeys.some(k => rKeys.includes(k));

@@ -46,7 +46,10 @@ export const userRoleService = {
               const rEmail = String(r.email || r.Email || '').toLowerCase();
               const rPrefix = rEmail.includes('@') ? rEmail.split('@')[0] : '';
               if (rEmail && rEmail === emailLower) return true;
-              if (rPrefix && emailPrefix && rPrefix === emailPrefix) return true;
+              if (rPrefix && emailPrefix) {
+                if (rPrefix === emailPrefix) return true;
+                if (rPrefix.replace(/0+/g, '') === emailPrefix.replace(/0+/g, '')) return true;
+              }
               const rKeys = getEntityKeys(r);
               return searchKeys.some(k => rKeys.includes(k));
             });

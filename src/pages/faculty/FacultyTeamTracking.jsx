@@ -114,8 +114,8 @@ const FacultyTeamTracking = () => {
 
                     <div className="pt-2 border-t border-gray-100 flex justify-between items-center">
                        <span className="text-sm text-gray-500 font-medium">{team.members?.length || 0} Students Assigned</span>
-                       <Button variant="ghost" size="sm" onClick={() => navigate(`/faculty/evaluations`)} className="text-primary-600">
-                         View Evaluations <ArrowRight className="w-4 h-4 ml-1" />
+                       <Button variant="ghost" size="sm" onClick={() => navigate(`/faculty/evaluate/${team.id}`)} className="text-primary-600">
+                         Evaluate <ArrowRight className="w-4 h-4 ml-1" />
                        </Button>
                     </div>
                   </div>

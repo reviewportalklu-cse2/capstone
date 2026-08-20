@@ -10,7 +10,7 @@ import Badge from '@/components/common/Badge';
 import Button from '@/components/common/Button';
 import Input from '@/components/common/Input';
 import { resolveTeamRelations, resolveStudentRelations, getEntityKeys } from '@/utils/relationshipResolver';
-import { ArrowLeft, Lock, ShieldCheck, AlertCircle, Calendar, Clock, CheckCircle } from 'lucide-react';
+import { ArrowLeft, Lock, Unlock, Save, ShieldCheck, AlertCircle, Calendar, Clock, CheckCircle, CheckCircle2 } from 'lucide-react';
 
 const EvaluationWorkspace = () => {
   const { teamId } = useParams();
@@ -91,13 +91,19 @@ const EvaluationWorkspace = () => {
 
   const teamData = useMemo(() => {
     if (!teamId || !teams) return null;
-    const t = teams.find(x => String(x.id || x.teamId).toLowerCase() === String(teamId).toLowerCase());
+    const cleanParamId = String(teamId).replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+    const t = teams.find(x => {
+      const rawId = String(x.id || x.teamId).toLowerCase();
+      const normId = rawId.replace(/[^a-zA-Z0-9]/g, '');
+      return rawId === String(teamId).toLowerCase() || normId === cleanParamId;
+    });
     if (!t) return null;
     const rel = resolveTeamRelations(t, { students, projects, guides, faculty: facultyList, reviewers, reviewCycles, reviewerAssignments, guideAssignments, facultyAssignments });
     
     const teamMembers = students?.filter(s => {
       const sRel = resolveStudentRelations(s, { teams, projects, guides, faculty: facultyList, reviewers, reviewCycles, reviewerAssignments });
-      return String(sRel.teamId).toLowerCase() === String(rel.teamId).toLowerCase();
+      const memberTeamId = String(sRel.teamId || s.teamId || '').toLowerCase();
+      return memberTeamId === String(rel.teamId).toLowerCase() || memberTeamId.replace(/[^a-zA-Z0-9]/g, '') === cleanParamId;
     }) || [];
 
     return {

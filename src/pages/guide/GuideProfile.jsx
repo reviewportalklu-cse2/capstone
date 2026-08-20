@@ -7,12 +7,19 @@ import Button from '@/components/common/Button';
 import Badge from '@/components/common/Badge';
 import { useAuth } from '@/contexts/AuthContext';
 import { useData } from '@/contexts/DataContext';
+import { useGuideAnalytics } from '@/hooks/useGuideAnalytics';
 import { FirestoreService } from '@/firebase/services/firestore';
-import { Loader2, User, Mail, Phone, Building2, Shield, CheckCircle, AlertTriangle } from 'lucide-react';
+import { Loader2, User, Mail, Phone, Building2, Shield, CheckCircle, AlertTriangle, Users, Target, BookOpen } from 'lucide-react';
 
 const GuideProfile = () => {
   const { currentUser, domainUser } = useAuth();
   const { getGuideById, dataLoading } = useData();
+  const { getSupervisedTeams } = useGuideAnalytics();
+
+  const supervisedTeams = getSupervisedTeams() || [];
+  const assignedTeamsCount = supervisedTeams.length;
+  const assignedStudentsCount = supervisedTeams.reduce((sum, t) => sum + (t.members?.length || 0), 0);
+  const assignedProjectsCount = supervisedTeams.filter(t => t.project?.title || t.projectId).length;
 
   const [profile, setProfile] = useState({
     name: '',
@@ -126,6 +133,26 @@ const GuideProfile = () => {
                 <Badge variant="primary" className="w-full justify-center py-1.5 font-mono">
                   ID: {profile.employeeId ? profile.employeeId.toUpperCase() : 'GUIDE'}
                 </Badge>
+              </div>
+            </Card>
+
+            <Card title="Supervision Statistics">
+              <div className="grid grid-cols-3 gap-3 pt-2 text-center">
+                <div className="bg-primary-50 p-3 rounded-lg border border-primary-100">
+                  <Users className="w-5 h-5 text-primary-600 mx-auto mb-1" />
+                  <p className="text-xs text-gray-500 uppercase font-semibold">Teams</p>
+                  <p className="text-lg font-bold text-gray-900">{assignedTeamsCount}</p>
+                </div>
+                <div className="bg-blue-50 p-3 rounded-lg border border-blue-100">
+                  <User className="w-5 h-5 text-blue-600 mx-auto mb-1" />
+                  <p className="text-xs text-gray-500 uppercase font-semibold">Students</p>
+                  <p className="text-lg font-bold text-gray-900">{assignedStudentsCount}</p>
+                </div>
+                <div className="bg-green-50 p-3 rounded-lg border border-green-100">
+                  <Target className="w-5 h-5 text-green-600 mx-auto mb-1" />
+                  <p className="text-xs text-gray-500 uppercase font-semibold">Projects</p>
+                  <p className="text-lg font-bold text-gray-900">{assignedProjectsCount}</p>
+                </div>
               </div>
             </Card>
 

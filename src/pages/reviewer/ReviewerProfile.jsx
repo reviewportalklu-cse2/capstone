@@ -4,13 +4,21 @@ import { reviewerNavigation } from '@/constants/navigation';
 import Card from '@/components/common/Card';
 import Input from '@/components/common/Input';
 import Button from '@/components/common/Button';
+import Badge from '@/components/common/Badge';
 import { useAuth } from '@/contexts/AuthContext';
 import { useData } from '@/contexts/DataContext';
+import { useReviewerAnalytics } from '@/hooks/useReviewerAnalytics';
 import { reviewerService } from '@/firebase/services/reviewerService';
-import { Loader2, UserCog, Save, CheckCircle, AlertCircle } from 'lucide-react';
+import { Loader2, User, UserCog, Save, CheckCircle, AlertCircle, Users, Target } from 'lucide-react';
 
 const ReviewerProfile = () => {
   const { currentUser, domainUser } = useAuth();
+  const { getAssignedTeams } = useReviewerAnalytics();
+
+  const assignedTeams = getAssignedTeams() || [];
+  const assignedTeamsCount = assignedTeams.length;
+  const assignedStudentsCount = assignedTeams.reduce((sum, t) => sum + (t.members?.length || 0), 0);
+  const assignedProjectsCount = assignedTeams.filter(t => t.project?.title || t.projectId).length;
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
@@ -115,6 +123,26 @@ const ReviewerProfile = () => {
             <p className="text-sm font-medium">{success}</p>
           </div>
         )}
+
+        <Card title="Panel Review Statistics">
+          <div className="grid grid-cols-3 gap-3 pt-2 text-center">
+            <div className="bg-primary-50 p-3 rounded-lg border border-primary-100">
+              <Users className="w-5 h-5 text-primary-600 mx-auto mb-1" />
+              <p className="text-xs text-gray-500 uppercase font-semibold">Teams</p>
+              <p className="text-lg font-bold text-gray-900">{assignedTeamsCount}</p>
+            </div>
+            <div className="bg-blue-50 p-3 rounded-lg border border-blue-100">
+              <User className="w-5 h-5 text-blue-600 mx-auto mb-1" />
+              <p className="text-xs text-gray-500 uppercase font-semibold">Students</p>
+              <p className="text-lg font-bold text-gray-900">{assignedStudentsCount}</p>
+            </div>
+            <div className="bg-green-50 p-3 rounded-lg border border-green-100">
+              <Target className="w-5 h-5 text-green-600 mx-auto mb-1" />
+              <p className="text-xs text-gray-500 uppercase font-semibold">Projects</p>
+              <p className="text-lg font-bold text-gray-900">{assignedProjectsCount}</p>
+            </div>
+          </div>
+        </Card>
 
         <Card>
           <form onSubmit={handleSubmit} className="space-y-6">

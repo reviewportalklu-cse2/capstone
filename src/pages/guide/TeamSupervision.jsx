@@ -57,7 +57,7 @@ const TeamSupervision = () => {
                       <Button variant="outline" onClick={() => navigate('/guide/meetings')}>
                         <Clock className="w-4 h-4 mr-2" /> Log Meeting
                       </Button>
-                      <Button onClick={() => navigate('/guide/marks')}>
+                      <Button onClick={() => navigate(`/guide/evaluate/${team.id}`)}>
                         Evaluate <ArrowRight className="w-4 h-4 ml-2" />
                       </Button>
                     </div>

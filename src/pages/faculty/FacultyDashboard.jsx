@@ -120,7 +120,7 @@ const FacultyDashboard = () => {
                           <Clock className="w-3 h-3"/> {task.deadline === 'End of Cycle' ? 'Cycle End' : new Date(task.deadline).toLocaleDateString()}
                         </span>
                         <button 
-                          onClick={() => navigate('/faculty/evaluations')}
+                          onClick={() => navigate(`/faculty/evaluate/${task.teamId}`)}
                           className="text-xs font-bold text-primary-600 hover:text-primary-800 transition-colors"
                         >
                           Evaluate &rarr;
