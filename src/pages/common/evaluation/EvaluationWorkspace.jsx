@@ -117,24 +117,41 @@ const EvaluationWorkspace = () => {
   }, [teamId, teams, projects, students, facultyList, guides, reviewers, reviewCycles, reviewerAssignments, guideAssignments, facultyAssignments, getGuideById, getFacultyById, getReviewerById]);
 
   const activeRubric = useMemo(() => {
-    if (!rubrics || rubrics.length === 0) return null;
-    const cycleName = (selectedCycle || activeCycle?.name || activeCycle?.reviewName || 'Review 1').trim().toLowerCase();
-    const cycleId = (activeCycle?.id || activeCycle?.reviewCycleId || activeCycle?.cycleId || '').trim().toLowerCase();
+    if (rubrics && rubrics.length > 0) {
+      const cycleName = (selectedCycle || activeCycle?.name || activeCycle?.reviewName || 'Review 1').trim().toLowerCase();
+      const cycleId = (activeCycle?.id || activeCycle?.reviewCycleId || activeCycle?.cycleId || '').trim().toLowerCase();
 
-    const matchesCycle = (r) => {
-      const rCycleName = String(r.reviewCycle || r.reviewCycleName || '').trim().toLowerCase();
-      const rCycleId = String(r.reviewCycleId || r.cycleId || r.id || '').trim().toLowerCase();
-      return (rCycleName && rCycleName === cycleName) || (cycleId && rCycleId === cycleId);
+      const matchesCycle = (r) => {
+        const rCycleName = String(r.reviewCycle || r.reviewCycleName || '').trim().toLowerCase();
+        const rCycleId = String(r.reviewCycleId || r.cycleId || r.id || '').trim().toLowerCase();
+        return (rCycleName && rCycleName === cycleName) || (cycleId && rCycleId === cycleId);
+      };
+
+      const publishedMatch = rubrics.find(r => matchesCycle(r) && (r.status === 'Published' || r.status === 'Active'));
+      if (publishedMatch) return publishedMatch;
+
+      const anyMatch = rubrics.find(r => matchesCycle(r));
+      if (anyMatch) return anyMatch;
+
+      const anyPublished = rubrics.find(r => r.status === 'Published' || r.status === 'Active');
+      if (anyPublished) return anyPublished;
+    }
+
+    // Default Fallback Rubric Object (Guarantees evaluation workspace ALWAYS renders criteria & input controls)
+    return {
+      id: `rubric_default_${(selectedCycle || 'review_1').toLowerCase().replace(/\s+/g, '_')}`,
+      rubricId: `R001`,
+      title: `${selectedCycle || 'Review 1'} Evaluation Rubric`,
+      version: '1.0',
+      status: 'Published',
+      reviewCycle: selectedCycle || 'Review 1',
+      criteria: [
+        { id: 'crit_tech', title: 'Technical Knowledge', description: 'Technical implementation & concept clarity', maximumMarks: 25, displayOrder: 1 },
+        { id: 'crit_pres', title: 'Presentation', description: 'Slide quality & oral presentation skills', maximumMarks: 25, displayOrder: 2 },
+        { id: 'crit_impl', title: 'Implementation & Demo', description: 'Working project demo & execution', maximumMarks: 25, displayOrder: 3 },
+        { id: 'crit_viva', title: 'Viva & Q&A', description: 'Responses to evaluator questions', maximumMarks: 25, displayOrder: 4 }
+      ]
     };
-
-    const publishedMatch = rubrics.find(r => matchesCycle(r) && (r.status === 'Published' || r.status === 'Active'));
-    if (publishedMatch) return publishedMatch;
-
-    const anyMatch = rubrics.find(r => matchesCycle(r));
-    if (anyMatch) return anyMatch;
-
-    // Fall back to any published rubric, or null (do not fall back to unmatching draft rubrics)
-    return rubrics.find(r => r.status === 'Published' || r.status === 'Active') || null;
   }, [rubrics, selectedCycle, activeCycle]);
 
   const cycleConfig = useMemo(() => {
@@ -182,19 +199,91 @@ const EvaluationWorkspace = () => {
   }, [cycleConfig, teamId, userRole, reviewerAssignments]);
 
   const activeCriteria = useMemo(() => {
-    if (!activeRubric || !rubricCriteria) return [];
-    return rubricCriteria.filter(c => String(c.rubricId).toLowerCase() === String(activeRubric.id || activeRubric.rubricId).toLowerCase()).sort((a, b) => a.displayOrder - b.displayOrder);
+    let result = [];
+
+    if (activeRubric) {
+      // 1. Check embedded criteria array in activeRubric
+      if (Array.isArray(activeRubric.criteria) && activeRubric.criteria.length > 0) {
+        result = [...activeRubric.criteria].map((c, idx) => ({
+          id: c.id || `crit_${idx + 1}`,
+          title: c.title || c.name || `Criterion ${idx + 1}`,
+          description: c.description || '',
+          maximumMarks: Number(c.maximumMarks || c.maxMarks || 25),
+          displayOrder: c.displayOrder || idx + 1
+        }));
+      } else if (rubricCriteria && rubricCriteria.length > 0) {
+        // 2. Filter from rubricCriteria collection
+        const rKeys = getEntityKeys({
+          id: activeRubric.id,
+          rubricId: activeRubric.rubricId,
+          title: activeRubric.title
+        });
+
+        const filtered = rubricCriteria.filter(c => {
+          const cKeys = getEntityKeys({ rubricId: c.rubricId });
+          return rKeys.some(k => cKeys.includes(k)) || 
+            String(c.rubricId || '').toLowerCase() === String(activeRubric.id || activeRubric.rubricId || '').toLowerCase();
+        });
+
+        if (filtered.length > 0) {
+          result = filtered.map((c, idx) => ({
+            id: c.id || `crit_${idx + 1}`,
+            title: c.title || c.name || `Criterion ${idx + 1}`,
+            description: c.description || '',
+            maximumMarks: Number(c.maximumMarks || c.maxMarks || 25),
+            displayOrder: c.displayOrder || idx + 1
+          }));
+        }
+      }
+    }
+
+    // 3. Fallback: If result is empty, generate standard evaluation criteria (Technical Knowledge, Presentation, Implementation, Viva)
+    if (result.length === 0) {
+      result = [
+        { id: 'crit_tech', title: 'Technical Knowledge', description: 'Technical implementation & concept clarity', maximumMarks: 25, displayOrder: 1 },
+        { id: 'crit_pres', title: 'Presentation', description: 'Slide quality & oral presentation skills', maximumMarks: 25, displayOrder: 2 },
+        { id: 'crit_impl', title: 'Implementation & Demo', description: 'Working project demo & execution', maximumMarks: 25, displayOrder: 3 },
+        { id: 'crit_viva', title: 'Viva & Q&A', description: 'Responses to evaluator questions', maximumMarks: 25, displayOrder: 4 }
+      ];
+    }
+
+    return result.sort((a, b) => a.displayOrder - b.displayOrder);
   }, [activeRubric, rubricCriteria]);
+
+  const userKeys = useMemo(() => getEntityKeys(domainUser || currentUser), [domainUser, currentUser]);
 
   const existingEvaluation = useMemo(() => {
     if (!evaluations || !teamId) return null;
-    const evalRole = (userRole === 'classroom_faculty' || userRole === 'faculty') ? 'faculty' : userRole;
-    return evaluations.find(e => 
-      String(e.teamId || e.team).toLowerCase() === String(teamId).toLowerCase() && 
-      (e.reviewCycle === selectedCycle || e.reviewCycleId === activeCycle?.id) && 
-      (e.role === evalRole || e.evaluatorId === currentUser?.uid)
-    );
-  }, [evaluations, teamId, selectedCycle, activeCycle, userRole, currentUser]);
+    const cleanParamId = String(teamId).replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+    const isFacRole = userRole === 'classroom_faculty' || userRole === 'faculty';
+    const evalRole = isFacRole ? 'faculty' : String(userRole).toLowerCase();
+
+    return evaluations.find(e => {
+      const eTeamId = String(e.teamId || e.team || '').replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+      if (eTeamId !== cleanParamId) return false;
+
+      const eCycle = String(e.reviewCycle || e.reviewCycleId || '').trim().toLowerCase();
+      const sCycle = String(selectedCycle || '').trim().toLowerCase();
+      const aCycleId = String(activeCycle?.id || activeCycle?.reviewCycleId || '').trim().toLowerCase();
+      const cycleMatch = !eCycle || eCycle === sCycle || (aCycleId && eCycle === aCycleId);
+      if (!cycleMatch) return false;
+
+      const eRole = String(e.role || '').toLowerCase();
+      const isEFac = eRole === 'faculty' || eRole === 'classroom_faculty';
+
+      if (isFacRole && isEFac) return true;
+      if (eRole === evalRole) return true;
+
+      const eKeys = getEntityKeys({
+        evaluatorId: e.evaluatorId,
+        evaluatorEmployeeId: e.evaluatorEmployeeId,
+        evaluatorEmail: e.evaluatorEmail,
+        evaluatorName: e.evaluatorName
+      });
+
+      return userKeys.some(k => eKeys.includes(k));
+    }) || null;
+  }, [evaluations, teamId, selectedCycle, activeCycle, userRole, userKeys, domainUser, currentUser]);
   
   const allEvaluationsForCycle = useMemo(() => {
     if (!evaluations || !teamId) return [];
@@ -220,6 +309,14 @@ const EvaluationWorkspace = () => {
   }, [existingEvaluation, teamData]);
 
   const handleMarkChange = (studentId, criterionId, value) => {
+    if (value === '' || value === null || value === undefined) {
+      setMarks(prev => ({
+        ...prev,
+        [`${studentId}_${criterionId}`]: ''
+      }));
+      return;
+    }
+
     const rawVal = Number(value);
     const criterion = activeCriteria.find(c => String(c.id) === String(criterionId));
     const max = criterion ? (Number(criterion.maximumMarks) || 100) : 100;
@@ -245,11 +342,15 @@ const EvaluationWorkspace = () => {
       // Calculate totals
       let totalMarks = 0;
       const studentTotals = {};
+      const sanitizedMarks = {};
       
       teamData.members.forEach(student => {
         let stuTotal = 0;
         activeCriteria.forEach(c => {
-          stuTotal += (marks[`${student.id}_${c.id}`] || 0);
+          const rawVal = marks[`${student.id}_${c.id}`];
+          const numVal = Number(rawVal) || 0;
+          sanitizedMarks[`${student.id}_${c.id}`] = numVal;
+          stuTotal += numVal;
         });
         studentTotals[student.id] = stuTotal;
         totalMarks += stuTotal;
@@ -276,7 +377,7 @@ const EvaluationWorkspace = () => {
         evaluatorId: currentUser.uid,
         evaluatorName: currentUser.displayName || currentUser.email,
         role: evalRole,
-        marks,
+        marks: sanitizedMarks,
         remarks,
         attendance,
         studentTotals,
@@ -362,11 +463,15 @@ const EvaluationWorkspace = () => {
     try {
       let totalMarks = 0;
       const studentTotals = {};
+      const sanitizedMarks = {};
       
       teamData.members.forEach(student => {
         let stuTotal = 0;
         activeCriteria.forEach(c => {
-          stuTotal += (marks[`${student.id}_${c.id}`] || 0);
+          const rawVal = marks[`${student.id}_${c.id}`];
+          const numVal = Number(rawVal) || 0;
+          sanitizedMarks[`${student.id}_${c.id}`] = numVal;
+          stuTotal += numVal;
         });
         studentTotals[student.id] = stuTotal;
         totalMarks += stuTotal;
@@ -393,7 +498,7 @@ const EvaluationWorkspace = () => {
         evaluatorId: currentUser.uid,
         evaluatorName: currentUser.displayName || currentUser.email,
         role: evalRole,
-        marks,
+        marks: sanitizedMarks,
         remarks,
         attendance,
         studentTotals,
@@ -632,16 +737,18 @@ const EvaluationWorkspace = () => {
                           {attendance[student.id] === 'Absent' && <Badge variant="danger" className="text-[10px] mt-1">Absent</Badge>}
                         </td>
                         {activeCriteria.map(c => {
-                          const val = marks[`${student.id}_${c.id}`] || 0;
-                          studentTotal += val;
+                          const rawVal = marks[`${student.id}_${c.id}`];
+                          const displayVal = rawVal === undefined || rawVal === null ? (existingEvaluation ? 0 : 0) : rawVal;
+                          const numVal = Number(rawVal) || 0;
+                          studentTotal += numVal;
                           return (
                             <td key={c.id} className="px-3 py-4 whitespace-nowrap text-center">
                               <Input
                                 type="number"
                                 min={0}
                                 max={c.maximumMarks}
-                                className="w-20 text-center mx-auto"
-                                value={val}
+                                className="w-20 text-center mx-auto font-medium"
+                                value={displayVal}
                                 onChange={(e) => handleMarkChange(student.id, c.id, e.target.value)}
                                 disabled={isLocked || attendance[student.id] === 'Absent'}
                               />
@@ -688,7 +795,13 @@ const EvaluationWorkspace = () => {
               <div className="mt-8 pt-8 border-t border-gray-200">
                 <h3 className="text-lg font-bold text-gray-900 mb-4">Other Evaluators ({selectedCycle})</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {allEvaluationsForCycle.filter(e => e.evaluatorId !== currentUser.uid).map(e => (
+                  {allEvaluationsForCycle.filter(e => {
+                    const eRole = String(e.role || '').toLowerCase();
+                    const uRole = (userRole === 'classroom_faculty' || userRole === 'faculty') ? 'faculty' : String(userRole).toLowerCase();
+                    if (uRole === 'faculty' && (eRole === 'faculty' || eRole === 'classroom_faculty')) return false;
+                    if (eRole === uRole) return false;
+                    return true;
+                  }).map(e => (
                     <div key={e.id} className="border border-gray-200 bg-gray-50 rounded-lg p-4">
                       <div className="flex justify-between items-start mb-3">
                         <div>
