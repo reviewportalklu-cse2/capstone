@@ -39,16 +39,17 @@ const StudentManagement = () => {
 
   const handleOpenEdit = (student) => {
     setIsEdit(true);
+    const rel = resolveStudentRelations(student, { teams, projects, guides, faculty, reviewers, reviewCycles, reviewerAssignments });
     setFormData({
       id: student.id,
-      rollNo: student.rollNo || student.rollNumber || '',
-      name: student.name || '',
-      email: student.email || '',
-      guideId: student.guideId || '',
-      facultyId: student.facultyId || '',
-      reviewerId: student.reviewerId || '',
-      teamId: student.teamId || '',
-      projectId: student.projectId || ''
+      rollNo: student.rollNo || student.rollNumber || student['Roll Number'] || '',
+      name: student.name || student['Student Name'] || '',
+      email: student.email || student.Email || '',
+      guideId: student.guideId || rel.guideId || '',
+      facultyId: student.facultyId || rel.facultyId || '',
+      reviewerId: student.reviewerId || rel.reviewerId || '',
+      teamId: student.teamId || rel.teamId || '',
+      projectId: student.projectId || rel.projectId || ''
     });
     setIsModalOpen(true);
   };
@@ -73,15 +74,16 @@ const StudentManagement = () => {
 
       if (isEdit) {
         prevData = students.find(s => s.id === formData.id);
-        await studentService.updateStudent(formData.id, payload);
-        await auditService.log(currentUser.uid, 'UPDATE_STUDENT', 'students', formData.id, { before: prevData, after: payload });
+        await adminService.assignStudent(formData.id, payload);
+        await auditService.log(currentUser?.uid || 'admin', 'UPDATE_STUDENT', 'students', formData.id, { before: prevData, after: payload });
       } else {
         const newId = await studentService.createStudent(payload);
-        await auditService.log(currentUser.uid, 'CREATE_STUDENT', 'students', newId, { after: payload });
+        await auditService.log(currentUser?.uid || 'admin', 'CREATE_STUDENT', 'students', newId, { after: payload });
       }
       setIsModalOpen(false);
     } catch (err) {
       console.error(err);
+      alert("Failed to save student: " + err.message);
     } finally {
       setSubmitting(false);
     }

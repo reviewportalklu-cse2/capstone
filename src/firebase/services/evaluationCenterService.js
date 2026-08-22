@@ -1,13 +1,13 @@
-import { FirestoreService } from './firestore';
-import { studentService } from './studentService';
-import { projectService } from './projectService';
-import { guideService } from './guideService';
-import { reviewerService } from './reviewerService';
-import { facultyService } from './facultyService';
-import { reviewService } from './reviewService';
-import { marksService } from './marksService';
-import { notificationService } from './notificationService';
-import { auditService } from './auditService';
+import { FirestoreService } from './firestore.js';
+import { studentService } from './studentService.js';
+import { projectService } from './projectService.js';
+import { guideService } from './guideService.js';
+import { reviewerService } from './reviewerService.js';
+import { facultyService } from './facultyService.js';
+import { reviewService } from './reviewService.js';
+import { marksService } from './marksService.js';
+import { notificationService } from './notificationService.js';
+import { auditService } from './auditService.js';
 
 export const evaluationCenterService = {
   // Configurable weightages (Default 20% each)
@@ -33,7 +33,7 @@ export const evaluationCenterService = {
   // Get all teams with complete aggregated evaluation metadata
   getAllTeamsWithEvaluations: async () => {
     try {
-      const [projects, students, guides, reviewers, faculty, reviews, guideMarks, facultyMarks, evaluationsDocs] = await Promise.all([
+      const [projects = [], students = [], guides = [], reviewers = [], faculty = [], reviews = [], guideMarks = [], facultyMarks = [], evaluationsDocs = [], teamsDocs = []] = await Promise.all([
         projectService.getAll(),
         studentService.getAll(),
         guideService.getAll(),
@@ -42,25 +42,44 @@ export const evaluationCenterService = {
         reviewService.getAll(),
         marksService.getGuideMarks(),
         marksService.getFacultyMarks(),
-        FirestoreService.getAll('evaluations')
+        FirestoreService.getAll('evaluations'),
+        FirestoreService.getAll('teams')
       ]);
 
       const guideMap = new Map(guides.map(g => [g.id, g]));
       const reviewerMap = new Map(reviewers.map(r => [r.id, r]));
       const facultyMap = new Map(faculty.map(f => [f.id, f]));
 
-      return projects.map((project, index) => {
-        const teamId = project.id || `TEAM${String(index + 1).padStart(3, '0')}`;
-        
-        // Members assigned to this project
-        const members = students.filter(s => 
-          s.projectId === project.id || 
-          s.teamId === project.id || 
-          s.projectTitle === project.title
-        );
+      // Combine projects and teams collection
+      const teamMap = new Map();
+      (projects || []).forEach(p => {
+        const id = p.id || p.teamId;
+        if (id) teamMap.set(String(id).toLowerCase(), { ...p, teamId: id, title: p.title || p.projectTitle || `Project ${id}` });
+      });
+      (teamsDocs || []).forEach(t => {
+        const id = t.id || t.teamId;
+        if (id && !teamMap.has(String(id).toLowerCase())) {
+          teamMap.set(String(id).toLowerCase(), { ...t, id, teamId: id, title: t.projectTitle || t.title || `Project ${id}` });
+        }
+      });
+
+      const combinedList = Array.from(teamMap.values());
+
+      return combinedList.map((project, index) => {
+        const teamId = project.id || project.teamId || `TEAM${String(index + 1).padStart(3, '0')}`;
+        const cleanTeamId = String(teamId).replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+
+        // Members assigned to this team / project
+        const members = students.filter(s => {
+          const sTeamId = String(s.teamId || s.team || s.projectId || '').replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+          return sTeamId === cleanTeamId || String(s.projectId || '').toLowerCase() === String(project.id).toLowerCase();
+        });
 
         // Fetch evaluations for this team
-        const teamEvals = evaluationsDocs.filter(e => e.teamId === project.id || e.teamId === teamId);
+        const teamEvals = evaluationsDocs.filter(e => {
+          const eTeamId = String(e.teamId || e.team || '').replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+          return eTeamId === cleanTeamId;
+        });
 
         const guideEval = teamEvals.find(e => e.role === 'guide');
         const facultyEval = teamEvals.find(e => e.role === 'classroom_faculty' || e.role === 'faculty');
