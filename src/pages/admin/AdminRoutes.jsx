@@ -41,6 +41,8 @@ const AdminRoutes = () => {
         <Route path="projects" element={<ProjectManagement />} />
         <Route path="teams" element={<TeamManagement />} />
         <Route path="teams/:teamId" element={<TeamDetails />} />
+        <Route path="groups" element={<TeamManagement />} />
+        <Route path="groups/:teamId" element={<TeamDetails />} />
         <Route path="submissions" element={<SubmissionsManagement />} />
         
         {/* Academic Settings */}

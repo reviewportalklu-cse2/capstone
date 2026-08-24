@@ -38,6 +38,7 @@ export const AuthProvider = ({ children }) => {
   const [isTrustedDevice, setIsTrustedDevice] = useState(false);
   const [lastGeneratedOtp, setLastGeneratedOtp] = useState(null);
 
+  const [requiresPasswordChange, setRequiresPasswordChange] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -46,8 +47,9 @@ export const AuthProvider = ({ children }) => {
       if (user) {
         setLoading(true);
         try {
-          // 1. Fetch available roles from userRoleService (or auto-discover)
-          const { availableRoles: roles, defaultRole } = await userRoleService.getUserRoles(user.uid, user.email);
+          // 1. Fetch available roles & password change requirement from userRoleService
+          const { availableRoles: roles, defaultRole, requiresPasswordChange: reqPass } = await userRoleService.getUserRoles(user.uid, user.email);
+          setRequiresPasswordChange(reqPass === true);
           
           let finalRoles = roles;
           if (finalRoles.length === 0 || (finalRoles.length === 1 && finalRoles[0] === 'student')) {
@@ -99,7 +101,7 @@ export const AuthProvider = ({ children }) => {
           }
 
           setCurrentUser(user);
-          console.log("[AUTH_RUNTIME] Auth resolved:", user.email, "| Role:", initialRole);
+          console.log("[AUTH_RUNTIME] Auth resolved:", user.email, "| Role:", initialRole, "| ReqPassChange:", reqPass);
         } catch (error) {
           console.error("[AUTH_RUNTIME] Error resolving auth state:", error);
           setCurrentUser(user);
@@ -107,6 +109,7 @@ export const AuthProvider = ({ children }) => {
           setActiveRoleState('student');
           setDomainUser(null);
           setMfaVerified(true);
+          setRequiresPasswordChange(false);
         } finally {
           setLoading(false);
         }
@@ -119,6 +122,7 @@ export const AuthProvider = ({ children }) => {
         setMfaVerified(false);
         setIsTrustedDevice(false);
         setLastGeneratedOtp(null);
+        setRequiresPasswordChange(false);
         localStorage.removeItem(STORAGE_KEY_ACTIVE_ROLE);
         sessionStorage.removeItem(SESSION_KEY_MFA_VERIFIED);
         setLoading(false);
@@ -243,6 +247,26 @@ export const AuthProvider = ({ children }) => {
     await authService.logout();
   };
 
+  const completePasswordChange = useCallback(async () => {
+    if (!currentUser) return;
+    try {
+      await FirestoreService.set('userRoles', currentUser.uid, {
+        requiresPasswordChange: false,
+        passwordChangedAt: new Date().toISOString()
+      }, { merge: true });
+
+      await FirestoreService.set('users', currentUser.uid, {
+        requiresPasswordChange: false,
+        passwordChangedAt: new Date().toISOString()
+      }, { merge: true });
+
+      setRequiresPasswordChange(false);
+    } catch (e) {
+      console.error("Error updating requiresPasswordChange in Firestore:", e);
+      setRequiresPasswordChange(false);
+    }
+  }, [currentUser]);
+
   const value = {
     currentUser,
     userRole: activeRole, // Mapped for backward compatibility
@@ -251,6 +275,8 @@ export const AuthProvider = ({ children }) => {
     domainUser,
     mfaRequired,
     mfaVerified,
+    requiresPasswordChange,
+    completePasswordChange,
     isTrustedDevice,
     lastGeneratedOtp,
     requestMfaOTP,

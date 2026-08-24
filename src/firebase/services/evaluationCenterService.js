@@ -75,20 +75,20 @@ export const evaluationCenterService = {
           return sTeamId === cleanTeamId || String(s.projectId || '').toLowerCase() === String(project.id).toLowerCase();
         });
 
-        // Fetch evaluations for this team
+        // Fetch evaluations for this team sorted by timestamp descending
         const teamEvals = evaluationsDocs.filter(e => {
           const eTeamId = String(e.teamId || e.team || '').replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
           return eTeamId === cleanTeamId;
-        });
+        }).sort((a, b) => new Date(b.submittedAt || b.updatedAt || b.createdAt || 0) - new Date(a.submittedAt || a.updatedAt || a.createdAt || 0));
 
         const guideEval = teamEvals.find(e => e.role === 'guide');
         const facultyEval = teamEvals.find(e => e.role === 'classroom_faculty' || e.role === 'faculty');
         const reviewerEval = teamEvals.find(e => e.role === 'reviewer');
 
         // Mentor details
-        const guide = guideMap.get(project.guideId) || { name: project.guideName || (guideEval?.evaluatorName || 'Dr. Ramesh (Assigned)') };
-        const reviewer = reviewerMap.get(project.reviewerId) || { name: project.reviewerName || (reviewerEval?.evaluatorName || 'Dr. Kiran (Assigned)') };
-        const facultyPanel = facultyMap.get(project.facultyId) || { name: project.facultyName || (facultyEval?.evaluatorName || 'Faculty Panel A') };
+        const guide = guideMap.get(project.guideId) || { name: project.guideName || guideEval?.evaluatorName || 'Unassigned' };
+        const reviewer = reviewerMap.get(project.reviewerId) || { name: project.reviewerName || reviewerEval?.evaluatorName || 'Unassigned' };
+        const facultyPanel = facultyMap.get(project.facultyId) || { name: project.facultyName || facultyEval?.evaluatorName || 'Unassigned' };
 
         // Evaluation Scores derivation
         const teamReviews = reviews.filter(r => 
@@ -239,44 +239,28 @@ export const evaluationCenterService = {
 
       // Faculty Panel details
       const facultyPanelDetails = {
-        name: team.facultyPanelName,
-        chairperson: 'Dr. Srinivas (HOD - CSE)',
-        members: ['Dr. Lakshmi', 'Dr. Ravi', 'Dr. Naveen', 'Dr. Mahesh'],
-        department: team.department
+        name: team.facultyPanelName || team.facultyName || 'Unassigned',
+        chairperson: team.facultyName || 'Unassigned',
+        members: team.facultyName ? [team.facultyName] : [],
+        department: team.department || 'CSE'
       };
 
       // Project Documents
-      const documents = [
-        { name: 'Project Proposal', type: 'PDF', size: '1.2 MB', url: '#', date: '2026-01-15' },
-        { name: 'Architecture Synopsis', type: 'PDF', size: '2.4 MB', url: '#', date: '2026-02-10' },
-        { name: 'Interim Review Presentation', type: 'PPTX', size: '5.8 MB', url: '#', date: '2026-03-20' },
-        { name: 'Final Project Report', type: 'PDF', size: '8.1 MB', url: '#', date: '2026-04-12' },
-        { name: 'GitHub Repository Code', type: 'ZIP', size: '14.5 MB', url: team.repoUrl || 'https://github.com/capstone', date: '2026-04-18' }
+      const documents = team.documents || [
+        { name: 'GitHub Repository Code', type: 'ZIP', size: 'Active', url: team.repoUrl || team.githubUrl || '#', date: team.updatedAt || 'N/A' }
       ];
 
-      // Marks Version History
-      const marksHistory = team.marksHistory || [
-        {
-          id: 'v1',
-          date: '2026-03-10',
-          time: '11:30 AM',
-          updatedBy: 'Dr. Ramesh',
-          role: 'Guide',
-          previousScore: 15,
-          updatedScore: team.guideMarks,
-          reason: 'Initial guide evaluation score awarded after code review.'
-        },
-        {
-          id: 'v2',
-          date: '2026-04-02',
-          time: '02:15 PM',
-          updatedBy: 'Dr. Kiran',
-          role: 'Reviewer',
-          previousScore: 78,
-          updatedScore: team.review2Score,
-          reason: 'Revised Review 2 presentation score post Q&A defense.'
-        }
-      ];
+      // Marks Version History derived from team evaluations
+      const marksHistory = (team.evaluations || []).map((e, idx) => ({
+        id: e.id || `v${idx + 1}`,
+        date: e.submittedAt ? new Date(e.submittedAt).toLocaleDateString() : 'N/A',
+        time: e.submittedAt ? new Date(e.submittedAt).toLocaleTimeString() : '',
+        updatedBy: e.evaluatorName || e.evaluatorId || 'Evaluator',
+        role: e.role ? e.role.toUpperCase() : 'EVALUATOR',
+        previousScore: 0,
+        updatedScore: e.teamAverage || e.totalScore || 0,
+        reason: `${e.role || 'Evaluation'} score recorded for ${e.reviewCycle || 'Review'}.`
+      }));
 
       // Timeline events
       const timeline = [

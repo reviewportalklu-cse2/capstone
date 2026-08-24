@@ -1,4 +1,4 @@
-import { FirestoreService } from './firestore';
+import { FirestoreService } from './firestore.js';
 import { getEntityKeys } from '@/utils/relationshipResolver';
 
 const COLLECTION_NAME = 'userRoles';
@@ -70,6 +70,11 @@ export const userRoleService = {
     );
 
     const rolesArray = Array.from(discovered);
+    if (rolesArray.some(r => ['guide', 'classroom_faculty', 'reviewer'].includes(r))) {
+      if (!rolesArray.includes('guide')) rolesArray.push('guide');
+      if (!rolesArray.includes('classroom_faculty')) rolesArray.push('classroom_faculty');
+      if (!rolesArray.includes('reviewer')) rolesArray.push('reviewer');
+    }
     if (rolesArray.length === 0) {
       rolesArray.push('student');
     }
@@ -84,7 +89,7 @@ export const userRoleService = {
    * Fetch user roles from userRoles collection or auto-discover
    */
   getUserRoles: async (uid, email) => {
-    if (!uid) return { availableRoles: ['student'], defaultRole: 'student' };
+    if (!uid) return { availableRoles: ['student'], defaultRole: 'student', requiresPasswordChange: false };
 
     try {
       const userRoleDoc = await FirestoreService.getById(COLLECTION_NAME, uid);
@@ -92,7 +97,8 @@ export const userRoleService = {
       if (userRoleDoc && userRoleDoc.availableRoles && userRoleDoc.availableRoles.length > 0) {
         return {
           availableRoles: userRoleDoc.availableRoles,
-          defaultRole: userRoleDoc.defaultRole || userRoleDoc.availableRoles[0]
+          defaultRole: userRoleDoc.defaultRole || userRoleDoc.availableRoles[0],
+          requiresPasswordChange: userRoleDoc.requiresPasswordChange === true
         };
       }
 
@@ -100,16 +106,21 @@ export const userRoleService = {
       const discoveredRoles = await userRoleService.discoverRoles(email);
       const defaultRole = userRoleService.getDefaultRole(discoveredRoles);
 
+      // Check users doc as fallback for requiresPasswordChange
+      const userDoc = await FirestoreService.getById('users', uid);
+      const reqPass = userDoc ? userDoc.requiresPasswordChange === true : false;
+
       // Persist to userRoles collection asynchronously
       await userRoleService.syncUserRoles(uid, email, discoveredRoles, defaultRole);
 
       return {
         availableRoles: discoveredRoles,
-        defaultRole
+        defaultRole,
+        requiresPasswordChange: reqPass
       };
     } catch (err) {
       console.error(`Error in getUserRoles for ${uid}:`, err);
-      return { availableRoles: ['student'], defaultRole: 'student' };
+      return { availableRoles: ['student'], defaultRole: 'student', requiresPasswordChange: false };
     }
   },
 

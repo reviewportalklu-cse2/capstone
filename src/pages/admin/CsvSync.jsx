@@ -33,6 +33,15 @@ const REQUIRED_HEADERS = {
   classroomFaculty: ['Faculty ID', 'facultyId', 'FacultyID', 'Employee ID', 'employeeId', 'Emp ID', 'EmpID', 'Faculty Name', 'Name', 'Email', 'email'],
   reviewer: ['Reviewer ID', 'reviewerId', 'ReviewerID', 'Employee ID', 'employeeId', 'Emp ID', 'EmpID', 'Reviewer Name', 'Name', 'Email', 'email'],
   reviewers: ['Reviewer ID', 'reviewerId', 'ReviewerID', 'Employee ID', 'employeeId', 'Emp ID', 'EmpID', 'Reviewer Name', 'Name', 'Email', 'email'],
+  guide_assignments: ['Guide ID', 'guideId', 'Guide Email', 'guideEmail', 'Team ID', 'teamId', 'Employee ID', 'employeeId', 'Guide Name', 'guideName'],
+  faculty_assignments: ['Faculty ID', 'facultyId', 'Faculty Email', 'facultyEmail', 'Team ID', 'teamId', 'Employee ID', 'employeeId', 'Faculty Name', 'facultyName'],
+  reviewer_assignments: ['Reviewer ID', 'reviewerId', 'Reviewer Email', 'reviewerEmail', 'Team ID', 'teamId', 'Employee ID', 'employeeId', 'Reviewer Name', 'reviewerName'],
+  team_assignments: ['Team ID', 'teamId', 'Roll Number', 'rollNumber', 'Student ID', 'studentId'],
+  project_assignments: ['Project ID', 'projectId', 'Team ID', 'teamId'],
+  rubrics: ['Rubric ID', 'rubricId', 'Rubric Title', 'title', 'name', 'Review Cycle', 'reviewCycle', 'Total Marks', 'totalMarks'],
+  rubric_criteria: ['Rubric ID', 'rubricId', 'Criterion ID', 'criterionId', 'Criterion Name', 'criterionName', 'Max Marks', 'maxMarks'],
+  review_cycles: ['Review Cycle ID', 'reviewCycleId', 'Review Cycle Name', 'reviewName', 'name', 'Start Date', 'startDate', 'End Date', 'endDate'],
+  evaluation_schedule: ['Review Cycle ID', 'reviewCycleId', 'Review Cycle Name', 'reviewName', 'name', 'Start Date', 'startDate', 'End Date', 'endDate']
 };
 
 const CsvSync = () => {
@@ -122,12 +131,12 @@ const CsvSync = () => {
       case 'master': {
         const wb = XLSX.utils.book_new();
         const sheets = {
-          Students: [{'Student Name': 'Alice Smith', 'Roll Number': '2026CS101', 'Email': 'alice@kluniversity.in', 'Phone': '+91 9876543210', 'Department': 'Computer Science & Engineering', 'Batch': '2026', 'Section': 'A', 'Year': '2026-27', 'Semester': 'Odd', 'Status': 'Active'}],
-          Guides: [{'Guide Name': 'Dr. Robert Vance', 'Employee ID': 'EMP301', 'Email': 'robert@kluniversity.in', 'Phone': '+91 9876543211', 'Department': 'Computer Science & Engineering', 'Designation': 'Professor', 'Status': 'Active'}],
-          Faculty: [{'Faculty ID': 'FAC401', 'Employee ID': 'EMP401', 'Faculty Name': 'Prof. Sarah Jenkins', 'Email': 'sarah@kluniversity.in', 'Phone': '+91 9876543212', 'Department': 'Computer Science & Engineering', 'Designation': 'Associate Professor', 'Section': 'Section A', 'Specialization': 'Machine Learning', 'Status': 'Active'}],
-          Reviewers: [{'Reviewer ID': 'REV501', 'Employee ID': 'EMP501', 'Reviewer Name': 'Dr. Alan Turing', 'Email': 'alan@kluniversity.in', 'Phone': '+91 9876543213', 'Organization': 'KL University', 'Designation': 'Senior Evaluator', 'Reviewer Type': 'Internal', 'Expertise': 'AI & Data Science', 'Department': 'Computer Science & Engineering', 'Assigned Batch': '2026', 'Status': 'Active'}],
-          Teams: [{'Team ID': 'T-101', 'Team Name': 'AI Research Group', 'Project Title': 'Autonomous Drone System', 'Guide Name': 'Dr. Robert Vance', 'Faculty Name': 'Prof. Sarah Jenkins', 'Reviewer Name': 'Dr. Alan Turing'}],
-          Assignments: [{'Team ID': 'T-101', 'Student Roll Number': '2026CS101', 'Guide Name': 'Dr. Robert Vance', 'Faculty Name': 'Prof. Sarah Jenkins', 'Reviewer Name': 'Dr. Alan Turing'}]
+          Students: [{'Student Name': 'Alice Smith', 'Roll Number': '2200030001', 'Email': 'alice@kluniversity.in', 'Phone': '+91 9876543210', 'Department': 'Computer Science & Engineering', 'Batch': '2026', 'Section': 'A', 'Year': '2026-27', 'Semester': 'Odd', 'Status': 'Active'}],
+          Guides: [{'Guide ID': 'G001', 'Employee ID': '1379', 'Guide Name': 'Dr. K.V.DURGA KIRAN', 'Email': 'kiran_cse@kluniversity.in', 'Phone': '+91 9876543211', 'Department': 'Computer Science & Engineering', 'Designation': 'Professor', 'Status': 'Active'}],
+          Faculty: [{'Faculty ID': 'F001', 'Employee ID': '1379', 'Faculty Name': 'Dr. K.V.DURGA KIRAN', 'Email': 'kiran_cse@kluniversity.in', 'Phone': '+91 9876543212', 'Department': 'Computer Science & Engineering', 'Designation': 'Associate Professor', 'Section': 'Section A', 'Specialization': 'Machine Learning', 'Status': 'Active'}],
+          Reviewers: [{'Reviewer ID': 'R001', 'Employee ID': '1379', 'Reviewer Name': 'Dr. K.V.DURGA KIRAN', 'Email': 'kiran_cse@kluniversity.in', 'Phone': '+91 9876543213', 'Organization': 'KL University', 'Designation': 'Senior Evaluator', 'Reviewer Type': 'Internal', 'Expertise': 'AI & Data Science', 'Department': 'Computer Science & Engineering', 'Assigned Batch': '2026', 'Status': 'Active'}],
+          Teams: [{'Team ID': 'T001', 'Team Name': 'AI Research Group', 'Project Title': 'Autonomous Drone System', 'Guide Name': 'Dr. K.V.DURGA KIRAN', 'Faculty Name': 'Dr. K.V.DURGA KIRAN', 'Reviewer Name': 'Dr. K.V.DURGA KIRAN'}],
+          Assignments: [{'Team ID': 'T001', 'Student Roll Number': '2200030001', 'Guide Name': 'Dr. K.V.DURGA KIRAN', 'Faculty Name': 'Dr. K.V.DURGA KIRAN', 'Reviewer Name': 'Dr. K.V.DURGA KIRAN'}]
         };
         Object.keys(sheets).forEach(s => {
           const ws = XLSX.utils.json_to_sheet(sheets[s]);
@@ -137,49 +146,56 @@ const CsvSync = () => {
         return;
       }
       case 'students':
-        data = [{'Student ID': '2026CS101', 'Roll Number': '2026CS101', 'Student Name': 'Alice Smith', 'Email': 'alice@kluniversity.in', 'Phone': '+91 9876543210', 'Department': 'Computer Science & Engineering', 'Section': 'A', 'Year': '2026-27', 'Semester': 'Odd', 'Status': 'Active'}];
+        data = [{'Student ID': '2200030001', 'Roll Number': '2200030001', 'Student Name': 'Alice Smith', 'Email': 'alice@kluniversity.in', 'Phone': '+91 9876543210', 'Department': 'Computer Science & Engineering', 'Section': 'A', 'Year': '2026-27', 'Semester': 'Odd', 'Status': 'Active'}];
         break;
       case 'projects':
-        data = [{'Project ID': 'PRJ-101', 'Project Title': 'Autonomous Drone System', 'Description': 'Computer Vision for Navigation', 'Domain': 'Machine Learning', 'Team ID': 'T-101'}];
+        data = [{'Project ID': 'PRJ-001', 'Project Title': 'Autonomous Drone System', 'Description': 'Computer Vision for Navigation', 'Domain': 'Machine Learning', 'Team ID': 'T001'}];
         break;
       case 'teams':
-        data = [{'Team ID': 'T-101', 'Team Name': 'AI Research Group', 'Project Title': 'Autonomous Drone System', 'Guide Name': 'Dr. Robert Vance'}];
+        data = [{'Team ID': 'T001', 'Team Name': 'AI Research Group', 'Project Title': 'Autonomous Drone System', 'Guide Name': 'Dr. K.V.DURGA KIRAN'}];
         break;
       case 'guides':
-        data = [{'Guide ID': 'GDE301', 'Employee ID': 'EMP301', 'Guide Name': 'Dr. Robert Vance', 'Email': 'robert@kluniversity.in', 'Phone': '+91 9876543211', 'Department': 'Computer Science & Engineering', 'Designation': 'Professor', 'Status': 'Active'}];
+        data = [{'Guide ID': 'G001', 'Employee ID': '1379', 'Guide Name': 'Dr. K.V.DURGA KIRAN', 'Email': 'kiran_cse@kluniversity.in', 'Phone': '+91 9876543211', 'Department': 'Computer Science & Engineering', 'Designation': 'Professor', 'Status': 'Active'}];
         break;
       case 'faculty':
-        data = [{'Faculty ID': 'FAC401', 'Employee ID': 'EMP401', 'Faculty Name': 'Prof. Sarah Jenkins', 'Email': 'sarah@kluniversity.in', 'Phone': '+91 9876543212', 'Department': 'Computer Science & Engineering', 'Designation': 'Associate Professor', 'Section': 'Section A', 'Specialization': 'Machine Learning', 'Status': 'Active'}];
+        data = [{'Faculty ID': 'F001', 'Employee ID': '1379', 'Faculty Name': 'Dr. K.V.DURGA KIRAN', 'Email': 'kiran_cse@kluniversity.in', 'Phone': '+91 9876543212', 'Department': 'Computer Science & Engineering', 'Designation': 'Associate Professor', 'Section': 'Section A', 'Specialization': 'Machine Learning', 'Status': 'Active'}];
         break;
       case 'reviewers':
-        data = [{'Reviewer ID': 'REV501', 'Employee ID': 'EMP501', 'Reviewer Name': 'Dr. Alan Turing', 'Email': 'alan@kluniversity.in', 'Phone': '+91 9876543213', 'Organization': 'KL University', 'Designation': 'Senior Evaluator', 'Reviewer Type': 'Internal', 'Expertise': 'AI & Data Science', 'Department': 'Computer Science & Engineering', 'Assigned Batch': '2026', 'Status': 'Active'}];
+        data = [{'Reviewer ID': 'R001', 'Employee ID': '1379', 'Reviewer Name': 'Dr. K.V.DURGA KIRAN', 'Email': 'kiran_cse@kluniversity.in', 'Phone': '+91 9876543213', 'Organization': 'KL University', 'Designation': 'Senior Evaluator', 'Reviewer Type': 'Internal', 'Expertise': 'AI & Data Science', 'Department': 'Computer Science & Engineering', 'Assigned Batch': '2026', 'Status': 'Active'}];
         break;
       case 'guide_assignments':
-        data = [{'Guide Name': 'Dr. Robert Vance', 'Team ID': 'T-101', 'Student Roll Numbers': '2026CS101, 2026CS102'}];
+        data = [{'Guide ID': 'G001', 'Guide Email': 'kiran_cse@kluniversity.in', 'Team ID': 'T001', 'Project ID': 'PRJ-001', 'Student IDs': '2200030001, 2200030002', 'Review Cycle ID': 'cycle-1', 'Status': 'Active'}];
         break;
       case 'faculty_assignments':
-        data = [{'Faculty Name': 'Prof. Sarah Jenkins', 'Section': 'Section A', 'Batch': '2026'}];
+        data = [{'Faculty ID': 'F001', 'Faculty Email': 'kiran_cse@kluniversity.in', 'Team ID': 'T001', 'Project ID': 'PRJ-001', 'Student IDs': '2200030001, 2200030002', 'Review Cycle ID': 'cycle-1', 'Status': 'Active'}];
         break;
       case 'reviewer_assignments':
-        data = [{'Reviewer Name': 'Dr. Alan Turing', 'Review Cycle Name': 'Review Cycle 1', 'Assigned Team IDs': 'T-101, T-102'}];
+        data = [{'Reviewer ID': 'R001', 'Reviewer Email': 'kiran_cse@kluniversity.in', 'Team ID': 'T001', 'Project ID': 'PRJ-001', 'Student IDs': '2200030001, 2200030002', 'Review Cycle ID': 'cycle-1', 'Status': 'Active'}];
         break;
       case 'team_assignments':
-        data = [{'Team ID': 'T-101', 'Student Roll Number': '2026CS101', 'Role': 'Leader'}];
+        data = [{'Team ID': 'T001', 'Student Roll Number': '2200030001', 'Role': 'Leader'}];
+        break;
+      case 'project_assignments':
+        data = [{'Project ID': 'PRJ-001', 'Team ID': 'T001', 'Status': 'Active'}];
         break;
       case 'review_cycles':
-        data = [{'Review Cycle Name': 'Review Cycle 1', 'Start Date': '2026-08-01', 'End Date': '2026-08-15', 'Status': 'Active'}];
+      case 'evaluation_schedule':
+        data = [{'Review Cycle ID': 'cycle-1', 'Review Cycle Name': 'Review 1', 'Start Date': '2026-08-01', 'End Date': '2026-08-31', 'Evaluation Type': 'Standard', 'Status': 'Active', 'Description': 'Phase 1 Progress & Architecture Evaluation'}];
         break;
       case 'rubrics':
-        data = [{'Rubric Title': 'Review 1 Rubric', 'Max Marks': '100', 'Academic Year': '2026'}];
+        data = [{'Rubric ID': 'R1', 'Rubric Title': 'Review 1 Master Rubric', 'Version': '1.0', 'Review Cycle': 'Review 1', 'Review Cycle ID': 'cycle-1', 'Total Marks': '100', 'Status': 'Published'}];
+        break;
+      case 'rubric_criteria':
+        data = [{'Rubric ID': 'R1', 'Criterion ID': 'c1', 'Criterion Name': 'Literature Review & System Architecture', 'Description': 'Depth of technical design and methodology', 'Max Marks': '25', 'Weight': '1.0', 'Order': '1'}];
         break;
       case 'attendance':
-        data = [{'Student Roll Number': '2026CS101', 'Meeting Date': '2026-08-05', 'Status': 'Present'}];
+        data = [{'Student Roll Number': '2200030001', 'Meeting Date': '2026-08-05', 'Status': 'Present'}];
         break;
       case 'meetings':
-        data = [{'Team ID': 'T-101', 'Meeting Date': '2026-08-05', 'Topic': 'Architecture Review', 'Notes': 'Progress approved'}];
+        data = [{'Team ID': 'T001', 'Meeting Date': '2026-08-05', 'Topic': 'Architecture Review', 'Notes': 'Progress approved'}];
         break;
       case 'submissions':
-        data = [{'Team ID': 'T-101', 'Deliverable Type': 'SRS Document', 'File URL': 'https://github.com/capstone/docs', 'Submission Date': '2026-08-10'}];
+        data = [{'Team ID': 'T001', 'Deliverable Type': 'SRS Document', 'File URL': 'https://github.com/capstone/docs', 'Submission Date': '2026-08-10'}];
         break;
       default:
         data = [{'ID': '1', 'Name': 'Sample Data'}];
@@ -529,10 +545,32 @@ const CsvSync = () => {
           rowsImported += (result.imported || 0);
           rowsSkipped += (result.skipped || 0);
           rowsFailed += (result.failed || 0);
+        } else if (uploadType === 'rubrics') {
+          const result = await syncService.syncRubrics(records);
+          totalWrites += (result.totalWrites || result.imported || 0);
+          rowsImported += (result.imported || 0);
+          rowsSkipped += (result.skipped || 0);
+          rowsFailed += (result.failed || 0);
+          if (result.errors) writeErrors.push(...result.errors);
+        } else if (uploadType === 'rubric_criteria') {
+          const result = await syncService.syncRubricCriteria(records);
+          totalWrites += (result.totalWrites || result.imported || 0);
+          rowsImported += (result.imported || 0);
+          rowsSkipped += (result.skipped || 0);
+          rowsFailed += (result.failed || 0);
+          if (result.errors) writeErrors.push(...result.errors);
+        } else if (uploadType === 'evaluation_schedule' || uploadType === 'review_cycles') {
+          const result = await syncService.syncEvaluationSchedule(records);
+          totalWrites += (result.totalWrites || result.imported || 0);
+          rowsImported += (result.imported || 0);
+          rowsSkipped += (result.skipped || 0);
+          rowsFailed += (result.failed || 0);
+          if (result.errors) writeErrors.push(...result.errors);
         } else if (uploadType === 'teams') {
           const result = await syncService.syncTeams(records);
           totalWrites += result.created + result.updated;
           rowsImported += result.created + result.updated;
+          if (result.errors) writeErrors.push(...result.errors);
         } else {
           let colName = 'students';
           if (uploadType === 'guide' || uploadType === 'guides') colName = 'guides';
@@ -891,7 +929,7 @@ const CsvSync = () => {
                 </div>
               </div>
 
-              {/* SECTION 3: ASSIGNMENT IMPORTS (4 Grid Cards) */}
+              {/* SECTION 3: ASSIGNMENT IMPORTS (5 Grid Cards) */}
               <div className="space-y-4 pt-2">
                 <h3 className="text-sm font-bold uppercase tracking-wider text-gray-500 flex items-center gap-2">
                   <Layers className="w-4 h-4 text-primary-600" /> Section 2: Relational Assignments
@@ -901,8 +939,9 @@ const CsvSync = () => {
                   {[
                     { id: 'team_assignments', name: 'Team Assignments', desc: 'Map students to team groups', icon: Users, color: 'text-indigo-600', bg: 'bg-indigo-50' },
                     { id: 'guide_assignments', name: 'Guide Assignments', desc: 'Assign mentors to teams', icon: UserCheck, color: 'text-emerald-600', bg: 'bg-emerald-50' },
-                    { id: 'faculty_assignments', name: 'Faculty Assignments', desc: 'Map classroom faculty to sections', icon: BookOpen, color: 'text-teal-600', bg: 'bg-teal-50' },
+                    { id: 'faculty_assignments', name: 'Classroom Faculty Assignments', desc: 'Map classroom faculty to teams & students', icon: BookOpen, color: 'text-teal-600', bg: 'bg-teal-50' },
                     { id: 'reviewer_assignments', name: 'Reviewer Assignments', desc: 'Map panel reviewers to review cycles', icon: ShieldCheck, color: 'text-purple-600', bg: 'bg-purple-50' },
+                    { id: 'project_assignments', name: 'Project Assignments', desc: 'Map projects to team groups', icon: FileText, color: 'text-blue-600', bg: 'bg-blue-50' },
                   ].map(card => {
                     const CardIcon = card.icon;
                     return (
@@ -955,8 +994,9 @@ const CsvSync = () => {
 
                   <div className="space-y-3">
                     {[
-                      { id: 'review_cycles', name: 'Review Cycles', icon: Clock },
+                      { id: 'evaluation_schedule', name: 'Evaluation Schedule', icon: Clock },
                       { id: 'rubrics', name: 'Rubrics Engine', icon: ClipboardList },
+                      { id: 'rubric_criteria', name: 'Rubric Criteria', icon: FileCheck },
                     ].map(item => {
                       const Icon = item.icon;
                       return (

@@ -61,7 +61,8 @@ const TeamDetails = () => {
       reviewerAssignments,
       evaluations: dataContext?.evaluations || [],
       guideMarks: dataContext?.guideMarks || [],
-      facultyMarks: dataContext?.facultyMarks || []
+      facultyMarks: dataContext?.facultyMarks || [],
+      reviews: dataContext?.reviews || []
     });
 
     return {

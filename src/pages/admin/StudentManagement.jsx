@@ -40,16 +40,26 @@ const StudentManagement = () => {
   const handleOpenEdit = (student) => {
     setIsEdit(true);
     const rel = resolveStudentRelations(student, { teams, projects, guides, faculty, reviewers, reviewCycles, reviewerAssignments });
+    
+    // Find matching entity option IDs from lists
+    const matchedGuide = guides.find(g => getEntityKeys(g).some(k => getEntityKeys(rel.guideId || rel.guideObj).includes(k)));
+    const matchedFaculty = faculty.find(f => getEntityKeys(f).some(k => getEntityKeys(rel.facultyId || rel.facultyObj).includes(k)));
+    const matchedReviewer = reviewers.find(r => getEntityKeys(r).some(k => getEntityKeys(rel.reviewerId || rel.reviewerObj).includes(k)));
+    const matchedProject = projects.find(p => getEntityKeys(p).some(k => getEntityKeys(rel.projectId || rel.projectTitle).includes(k)));
+    const matchedTeam = teams.find(t => getEntityKeys(t).some(k => getEntityKeys(rel.teamId).includes(k)));
+
     setFormData({
       id: student.id,
       rollNo: student.rollNo || student.rollNumber || student['Roll Number'] || '',
       name: student.name || student['Student Name'] || '',
       email: student.email || student.Email || '',
-      guideId: student.guideId || rel.guideId || '',
-      facultyId: student.facultyId || rel.facultyId || '',
-      reviewerId: student.reviewerId || rel.reviewerId || '',
-      teamId: student.teamId || rel.teamId || '',
-      projectId: student.projectId || rel.projectId || ''
+      batch: student.batch || rel.batch || '2026',
+      section: student.section || rel.section || 'A',
+      guideId: matchedGuide?.id || student.guideId || rel.guideId || '',
+      facultyId: matchedFaculty?.id || student.facultyId || rel.facultyId || '',
+      reviewerId: matchedReviewer?.id || student.reviewerId || rel.reviewerId || '',
+      teamId: matchedTeam?.id || student.teamId || rel.teamId || '',
+      projectId: matchedProject?.id || student.projectId || rel.projectId || ''
     });
     setIsModalOpen(true);
   };

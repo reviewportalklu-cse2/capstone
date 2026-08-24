@@ -1,5 +1,5 @@
-import { FirestoreService } from './firestore';
-import { db } from '../config';
+import { FirestoreService } from './firestore.js';
+import { db } from '../config.js';
 import { collection, writeBatch, doc } from 'firebase/firestore';
 
 export const syncService = {
@@ -801,6 +801,9 @@ export const syncService = {
     let imported = 0;
     let skipped = 0;
     let failed = 0;
+    const errors = [];
+    const warnings = [];
+
     const getValue = (row, aliases) => {
       for (const key of aliases) {
         if (row[key] !== undefined && row[key] !== null && String(row[key]).trim() !== "") {
@@ -810,42 +813,76 @@ export const syncService = {
       return '';
     };
 
+    const allGuides = await FirestoreService.getAll('guides');
+
     const batch = writeBatch(db);
     const now = new Date().toISOString();
 
     for (let i = 0; i < records.length; i++) {
       const row = records[i];
-      const guideId = getValue(row, ['Guide ID', 'guideId', 'GuideID', 'Employee ID', 'employeeId', 'Emp ID', 'EmpID', 'Guide Email', 'guideEmail', 'Email', 'email']);
-      const guideName = getValue(row, ['Guide Name', 'guideName', 'Name', 'name']);
-      const teamId = getValue(row, ['Team ID', 'teamId', 'TeamNo', 'Team No', 'team']);
-      const projectId = getValue(row, ['Project ID', 'projectId', 'Project Title', 'projectTitle']);
+      const guideIdKey = getValue(row, ['Guide ID', 'guideId', 'GuideID', 'Employee ID', 'employeeId', 'Emp ID', 'EmpID', 'Guide Email', 'guideEmail', 'Email', 'email', 'Guide Name', 'guideName']);
+      const teamIdKey = getValue(row, ['Team ID', 'teamId', 'TeamNo', 'Team No', 'team']);
+      const projectIdKey = getValue(row, ['Project ID', 'projectId', 'Project Title', 'projectTitle']);
       const membersRaw = getValue(row, ['Student IDs', 'studentIds', 'Members', 'members', 'Students', 'students']);
+      const reviewCycleId = getValue(row, ['Review Cycle ID', 'reviewCycleId', 'Review Cycle', 'reviewCycle']) || 'cycle-1';
+      const status = getValue(row, ['Status', 'status']) || 'Active';
 
-      if ((!guideId && !guideName) || !teamId) {
-        skipped++;
+      if (!guideIdKey || !teamIdKey) {
+        errors.push(`Row ${i + 1}: Missing required Guide ID/Email or Team ID.`);
+        failed++;
         continue;
       }
 
-      const cleanGuideId = (guideId || guideName).toLowerCase().replace(/[^a-z0-9_-]/g, '');
-      const cleanTeamId = teamId.toLowerCase().replace(/[^a-z0-9_-]/g, '');
+      // Resolve guide strictly
+      const matchedGuide = allGuides.find(g => {
+        const id = (g.id || '').toLowerCase();
+        const gid = (g.guideId || '').toLowerCase();
+        const emp = (g.employeeId || '').toLowerCase();
+        const email = (g.email || '').toLowerCase();
+        const name = (g.name || g['Guide Name'] || '').toLowerCase();
+        const key = guideIdKey.toLowerCase();
+        return id === key || gid === key || emp === key || email === key || name === key ||
+               key.replace(/[-_\s0]/g, '') === id.replace(/[-_\s0]/g, '') ||
+               key.replace(/[-_\s0]/g, '') === emp.replace(/[-_\s0]/g, '');
+      });
+
+      if (!matchedGuide) {
+        errors.push(`Row ${i + 1}: Guide '${guideIdKey}' does not exist in master guides collection.`);
+        failed++;
+        continue;
+      }
+
+      const cleanGuideId = (matchedGuide.guideId || matchedGuide.employeeId || matchedGuide.id).toLowerCase().replace(/[^a-z0-9_-]/g, '');
+      const cleanTeamId = teamIdKey.toLowerCase().replace(/[^a-z0-9_-]/g, '');
       const docId = `gasm-${cleanGuideId}-${cleanTeamId}`;
 
       const studentIds = membersRaw ? (Array.isArray(membersRaw) ? membersRaw : String(membersRaw).split(',').map(s => s.trim()).filter(Boolean)) : [];
 
       const docData = {
         id: docId,
-        guideId: guideId || guideName,
-        guideName: guideName || guideId,
-        teamId,
-        projectId: projectId || `PRJ-${teamId}`,
+        guideId: matchedGuide.guideId || matchedGuide.employeeId || matchedGuide.id,
+        guideEmail: matchedGuide.email || '',
+        guideName: matchedGuide.name || matchedGuide['Guide Name'] || '',
+        teamId: teamIdKey,
+        projectId: projectIdKey || `PRJ-${teamIdKey}`,
         studentIds,
         members: studentIds,
-        status: 'Active',
+        reviewCycleId,
+        status,
         createdAt: now,
         updatedAt: now
       };
 
       batch.set(doc(db, 'guideAssignments', docId), docData, { merge: true });
+
+      // Update team & students for consistency
+      const teamRef = doc(db, 'teams', teamIdKey);
+      batch.set(teamRef, {
+        guideId: matchedGuide.id || matchedGuide.guideId,
+        guideName: matchedGuide.name || matchedGuide['Guide Name'] || '',
+        updatedAt: now
+      }, { merge: true });
+
       imported++;
     }
 
@@ -853,13 +890,16 @@ export const syncService = {
       await batch.commit();
     }
 
-    return { imported, skipped, failed, totalWrites: imported };
+    return { imported, skipped, failed, totalWrites: imported, errors, warnings };
   },
 
   syncFacultyAssignments: async (records) => {
     let imported = 0;
     let skipped = 0;
     let failed = 0;
+    const errors = [];
+    const warnings = [];
+
     const getValue = (row, aliases) => {
       for (const key of aliases) {
         if (row[key] !== undefined && row[key] !== null && String(row[key]).trim() !== "") {
@@ -869,42 +909,76 @@ export const syncService = {
       return '';
     };
 
+    const allFaculty = await FirestoreService.getAll('classroomFaculty');
+
     const batch = writeBatch(db);
     const now = new Date().toISOString();
 
     for (let i = 0; i < records.length; i++) {
       const row = records[i];
-      const facultyId = getValue(row, ['Faculty ID', 'facultyId', 'FacultyID', 'Employee ID', 'employeeId', 'Emp ID', 'EmpID', 'Faculty Email', 'facultyEmail', 'Email', 'email']);
-      const facultyName = getValue(row, ['Faculty Name', 'facultyName', 'Name', 'name']);
-      const teamId = getValue(row, ['Team ID', 'teamId', 'TeamNo', 'Team No', 'team']);
-      const projectId = getValue(row, ['Project ID', 'projectId', 'Project Title', 'projectTitle']);
+      const facultyIdKey = getValue(row, ['Faculty ID', 'facultyId', 'FacultyID', 'Employee ID', 'employeeId', 'Emp ID', 'EmpID', 'Faculty Email', 'facultyEmail', 'Email', 'email', 'Faculty Name', 'facultyName']);
+      const teamIdKey = getValue(row, ['Team ID', 'teamId', 'TeamNo', 'Team No', 'team']);
+      const projectIdKey = getValue(row, ['Project ID', 'projectId', 'Project Title', 'projectTitle']);
       const membersRaw = getValue(row, ['Student IDs', 'studentIds', 'Members', 'members', 'Students', 'students']);
+      const reviewCycleId = getValue(row, ['Review Cycle ID', 'reviewCycleId', 'Review Cycle', 'reviewCycle']) || 'cycle-1';
+      const status = getValue(row, ['Status', 'status']) || 'Active';
 
-      if ((!facultyId && !facultyName) || !teamId) {
-        skipped++;
+      if (!facultyIdKey || !teamIdKey) {
+        errors.push(`Row ${i + 1}: Missing required Faculty ID/Email or Team ID.`);
+        failed++;
         continue;
       }
 
-      const cleanFacId = (facultyId || facultyName).toLowerCase().replace(/[^a-z0-9_-]/g, '');
-      const cleanTeamId = teamId.toLowerCase().replace(/[^a-z0-9_-]/g, '');
+      // Resolve Faculty strictly
+      const matchedFaculty = allFaculty.find(f => {
+        const id = (f.id || '').toLowerCase();
+        const fid = (f.facultyId || '').toLowerCase();
+        const emp = (f.employeeId || '').toLowerCase();
+        const email = (f.email || '').toLowerCase();
+        const name = (f.name || f['Faculty Name'] || '').toLowerCase();
+        const key = facultyIdKey.toLowerCase();
+        return id === key || fid === key || emp === key || email === key || name === key ||
+               key.replace(/[-_\s0]/g, '') === id.replace(/[-_\s0]/g, '') ||
+               key.replace(/[-_\s0]/g, '') === emp.replace(/[-_\s0]/g, '');
+      });
+
+      if (!matchedFaculty) {
+        errors.push(`Row ${i + 1}: Classroom Faculty '${facultyIdKey}' does not exist in master records.`);
+        failed++;
+        continue;
+      }
+
+      const cleanFacId = (matchedFaculty.facultyId || matchedFaculty.employeeId || matchedFaculty.id).toLowerCase().replace(/[^a-z0-9_-]/g, '');
+      const cleanTeamId = teamIdKey.toLowerCase().replace(/[^a-z0-9_-]/g, '');
       const docId = `fasm-${cleanFacId}-${cleanTeamId}`;
 
       const studentIds = membersRaw ? (Array.isArray(membersRaw) ? membersRaw : String(membersRaw).split(',').map(s => s.trim()).filter(Boolean)) : [];
 
       const docData = {
         id: docId,
-        facultyId: facultyId || facultyName,
-        facultyName: facultyName || facultyId,
-        teamId,
-        projectId: projectId || `PRJ-${teamId}`,
+        facultyId: matchedFaculty.facultyId || matchedFaculty.employeeId || matchedFaculty.id,
+        facultyEmail: matchedFaculty.email || '',
+        facultyName: matchedFaculty.name || matchedFaculty['Faculty Name'] || '',
+        teamId: teamIdKey,
+        projectId: projectIdKey || `PRJ-${teamIdKey}`,
         studentIds,
         members: studentIds,
-        status: 'Active',
+        reviewCycleId,
+        status,
         createdAt: now,
         updatedAt: now
       };
 
       batch.set(doc(db, 'facultyAssignments', docId), docData, { merge: true });
+
+      // Update Team & Students for consistency
+      const teamRef = doc(db, 'teams', teamIdKey);
+      batch.set(teamRef, {
+        facultyId: matchedFaculty.id || matchedFaculty.facultyId,
+        facultyName: matchedFaculty.name || matchedFaculty['Faculty Name'] || '',
+        updatedAt: now
+      }, { merge: true });
+
       imported++;
     }
 
@@ -912,13 +986,16 @@ export const syncService = {
       await batch.commit();
     }
 
-    return { imported, skipped, failed, totalWrites: imported };
+    return { imported, skipped, failed, totalWrites: imported, errors, warnings };
   },
 
   syncReviewerAssignments: async (records) => {
     let imported = 0;
     let skipped = 0;
     let failed = 0;
+    const errors = [];
+    const warnings = [];
+
     const getValue = (row, aliases) => {
       for (const key of aliases) {
         if (row[key] !== undefined && row[key] !== null && String(row[key]).trim() !== "") {
@@ -928,37 +1005,68 @@ export const syncService = {
       return '';
     };
 
+    const allReviewers = await FirestoreService.getAll('reviewers');
+
     const batch = writeBatch(db);
     const now = new Date().toISOString();
 
     for (let i = 0; i < records.length; i++) {
       const row = records[i];
-      const reviewerId = getValue(row, ['Reviewer ID', 'reviewerId', 'ReviewerID', 'Employee ID', 'employeeId', 'Emp ID', 'EmpID', 'Reviewer Email', 'reviewerEmail', 'Email', 'email']);
-      const reviewerName = getValue(row, ['Reviewer Name', 'reviewerName', 'Name', 'name']);
-      const teamId = getValue(row, ['Team ID', 'teamId', 'TeamNo', 'Team No', 'team']);
-      const reviewCycleId = getValue(row, ['Review Cycle', 'reviewCycle', 'Cycle ID', 'cycleId']) || 'cycle-1';
+      const reviewerIdKey = getValue(row, ['Reviewer ID', 'reviewerId', 'ReviewerID', 'Employee ID', 'employeeId', 'Emp ID', 'EmpID', 'Reviewer Email', 'reviewerEmail', 'Email', 'email', 'Reviewer Name', 'reviewerName']);
+      const teamIdKey = getValue(row, ['Team ID', 'teamId', 'TeamNo', 'Team No', 'team']);
+      const reviewCycleId = getValue(row, ['Review Cycle ID', 'reviewCycleId', 'Review Cycle', 'reviewCycle', 'Cycle ID', 'cycleId']) || 'cycle-1';
+      const status = getValue(row, ['Status', 'status']) || 'Active';
 
-      if ((!reviewerId && !reviewerName) || !teamId) {
-        skipped++;
+      if (!reviewerIdKey || !teamIdKey) {
+        errors.push(`Row ${i + 1}: Missing required Reviewer ID/Email or Team ID.`);
+        failed++;
         continue;
       }
 
-      const cleanRevId = (reviewerId || reviewerName).toLowerCase().replace(/[^a-z0-9_-]/g, '');
-      const cleanTeamId = teamId.toLowerCase().replace(/[^a-z0-9_-]/g, '');
+      const matchedReviewer = allReviewers.find(r => {
+        const id = (r.id || '').toLowerCase();
+        const rid = (r.reviewerId || '').toLowerCase();
+        const emp = (r.employeeId || '').toLowerCase();
+        const email = (r.email || '').toLowerCase();
+        const name = (r.name || r['Reviewer Name'] || '').toLowerCase();
+        const key = reviewerIdKey.toLowerCase();
+        return id === key || rid === key || emp === key || email === key || name === key ||
+               key.replace(/[-_\s0]/g, '') === id.replace(/[-_\s0]/g, '') ||
+               key.replace(/[-_\s0]/g, '') === emp.replace(/[-_\s0]/g, '');
+      });
+
+      if (!matchedReviewer) {
+        errors.push(`Row ${i + 1}: Reviewer '${reviewerIdKey}' does not exist in master reviewers collection.`);
+        failed++;
+        continue;
+      }
+
+      const cleanRevId = (matchedReviewer.reviewerId || matchedReviewer.employeeId || matchedReviewer.id).toLowerCase().replace(/[^a-z0-9_-]/g, '');
+      const cleanTeamId = teamIdKey.toLowerCase().replace(/[^a-z0-9_-]/g, '');
       const docId = `rasm-${cleanRevId}-${cleanTeamId}`;
 
       const docData = {
         id: docId,
-        reviewerId: reviewerId || reviewerName,
-        reviewerName: reviewerName || reviewerId,
-        teamId,
+        reviewerId: matchedReviewer.reviewerId || matchedReviewer.employeeId || matchedReviewer.id,
+        reviewerEmail: matchedReviewer.email || '',
+        reviewerName: matchedReviewer.name || matchedReviewer['Reviewer Name'] || '',
+        teamId: teamIdKey,
         reviewCycleId,
-        status: 'Active',
+        status,
         createdAt: now,
         updatedAt: now
       };
 
       batch.set(doc(db, 'reviewerAssignments', docId), docData, { merge: true });
+
+      // Update Team for consistency
+      const teamRef = doc(db, 'teams', teamIdKey);
+      batch.set(teamRef, {
+        reviewerId: matchedReviewer.id || matchedReviewer.reviewerId,
+        reviewerName: matchedReviewer.name || matchedReviewer['Reviewer Name'] || '',
+        updatedAt: now
+      }, { merge: true });
+
       imported++;
     }
 
@@ -966,7 +1074,7 @@ export const syncService = {
       await batch.commit();
     }
 
-    return { imported, skipped, failed, totalWrites: imported };
+    return { imported, skipped, failed, totalWrites: imported, errors, warnings };
   },
 
   syncTeamAssignments: async (records) => {
@@ -1068,5 +1176,254 @@ export const syncService = {
     }
 
     return { imported, skipped, failed, totalWrites: imported };
+  },
+
+  syncRubrics: async (records) => {
+    let imported = 0;
+    let skipped = 0;
+    let failed = 0;
+    const errors = [];
+    const warnings = [];
+
+    const getValue = (row, aliases) => {
+      for (const key of aliases) {
+        if (row[key] !== undefined && row[key] !== null && String(row[key]).trim() !== "") {
+          return String(row[key]).trim();
+        }
+      }
+      return '';
+    };
+
+    const batch = writeBatch(db);
+    const now = new Date().toISOString();
+
+    for (let i = 0; i < records.length; i++) {
+      const row = records[i];
+      const rubricId = getValue(row, ['Rubric ID', 'rubricId', 'ID', 'id', 'Rubric Title', 'title', 'name']);
+      const title = getValue(row, ['Rubric Title', 'title', 'name', 'Rubric Name', 'RubricID', 'rubricId']);
+      const version = getValue(row, ['Version', 'version']) || '1.0';
+      const reviewCycle = getValue(row, ['Review Cycle', 'reviewCycle', 'Cycle', 'cycle']) || 'Review 1';
+      const reviewCycleId = getValue(row, ['Review Cycle ID', 'reviewCycleId', 'cycleId']) || 'cycle-1';
+      const status = getValue(row, ['Status', 'status']) || 'Published';
+      const totalMarksVal = getValue(row, ['Total Marks', 'totalMarks', 'Max Marks', 'maxMarks']);
+      const totalMarks = totalMarksVal ? (isNaN(Number(totalMarksVal)) ? 100 : Number(totalMarksVal)) : 100;
+
+      if (!rubricId && !title) {
+        errors.push(`Row ${i + 1}: Missing Rubric ID or Title.`);
+        failed++;
+        continue;
+      }
+
+      const cleanDocId = (rubricId || title).toLowerCase().replace(/[^a-z0-9_-]/g, '');
+      const docRef = doc(db, 'rubrics', cleanDocId);
+
+      const docData = {
+        id: cleanDocId,
+        rubricId: cleanDocId,
+        title: title || `Rubric ${cleanDocId}`,
+        name: title || `Rubric ${cleanDocId}`,
+        version,
+        reviewCycle,
+        reviewCycleId,
+        status,
+        totalMarks,
+        createdAt: now,
+        updatedAt: now
+      };
+
+      batch.set(docRef, docData, { merge: true });
+      imported++;
+    }
+
+    if (imported > 0) {
+      await batch.commit();
+    }
+
+    return { imported, skipped, failed, totalWrites: imported, errors, warnings };
+  },
+
+  syncRubricCriteria: async (records) => {
+    let imported = 0;
+    let skipped = 0;
+    let failed = 0;
+    const errors = [];
+    const warnings = [];
+
+    const getValue = (row, aliases) => {
+      for (const key of aliases) {
+        if (row[key] !== undefined && row[key] !== null && String(row[key]).trim() !== "") {
+          return String(row[key]).trim();
+        }
+      }
+      return '';
+    };
+
+    const allRubrics = await FirestoreService.getAll('rubrics');
+
+    const batch = writeBatch(db);
+    const now = new Date().toISOString();
+    const rubricTotalsMap = new Map();
+
+    for (let i = 0; i < records.length; i++) {
+      const row = records[i];
+      const rubricIdKey = getValue(row, ['Rubric ID', 'rubricId', 'RubricID', 'Rubric Title', 'title']);
+      const criterionIdKey = getValue(row, ['Criterion ID', 'criterionId', 'CriterionID', 'ID', 'id']);
+      const criterionName = getValue(row, ['Criterion Name', 'criterionName', 'Name', 'name', 'Title', 'title']);
+      const description = getValue(row, ['Description', 'description', 'Details', 'details']) || '';
+      const maxMarksVal = getValue(row, ['Max Marks', 'maxMarks', 'Marks', 'marks', 'Score', 'score']);
+      const weightVal = getValue(row, ['Weight', 'weight', 'Weightage', 'weightage']);
+      const orderVal = getValue(row, ['Order', 'order', 'Seq', 'seq']);
+
+      if (!rubricIdKey) {
+        errors.push(`Row ${i + 1}: Missing Rubric ID.`);
+        failed++;
+        continue;
+      }
+
+      const cleanRubricId = rubricIdKey.toLowerCase().replace(/[^a-z0-9_-]/g, '');
+
+      // Verify Parent Rubric Exists
+      const parentRubricExists = allRubrics.some(r => {
+        const id = (r.id || '').toLowerCase();
+        const rid = (r.rubricId || '').toLowerCase();
+        const title = (r.title || r.name || '').toLowerCase();
+        return id === cleanRubricId || rid === cleanRubricId || title === cleanRubricId;
+      });
+
+      if (!parentRubricExists) {
+        errors.push(`Row ${i + 1}: Parent Rubric '${rubricIdKey}' does not exist. (Row rejected to prevent orphan criteria).`);
+        failed++;
+        continue;
+      }
+
+      const cleanCritId = (criterionIdKey || criterionName || `c${i+1}`).toLowerCase().replace(/[^a-z0-9_-]/g, '');
+      const docId = `crit-${cleanRubricId}-${cleanCritId}`;
+      const maxMarks = maxMarksVal ? (isNaN(Number(maxMarksVal)) ? 10 : Number(maxMarksVal)) : 10;
+      const weight = weightVal ? (isNaN(Number(weightVal)) ? 1 : Number(weightVal)) : 1;
+      const order = orderVal ? (isNaN(Number(orderVal)) ? i + 1 : Number(orderVal)) : i + 1;
+
+      const docData = {
+        id: docId,
+        criterionId: cleanCritId,
+        rubricId: cleanRubricId,
+        criterionName: criterionName || `Criterion ${cleanCritId}`,
+        name: criterionName || `Criterion ${cleanCritId}`,
+        description,
+        maxMarks,
+        weight,
+        order,
+        createdAt: now,
+        updatedAt: now
+      };
+
+      batch.set(doc(db, 'rubricCriteria', docId), docData, { merge: true });
+      imported++;
+
+      // Track total criteria marks for parent rubric
+      const currentTotal = rubricTotalsMap.get(cleanRubricId) || 0;
+      rubricTotalsMap.set(cleanRubricId, currentTotal + maxMarks);
+    }
+
+    if (imported > 0) {
+      await batch.commit();
+
+      // Recalculate parent rubrics' totalMarks
+      const updateBatch = writeBatch(db);
+      rubricTotalsMap.forEach((totalMarks, rubId) => {
+        updateBatch.set(doc(db, 'rubrics', rubId), { totalMarks, updatedAt: now }, { merge: true });
+      });
+      await updateBatch.commit();
+    }
+
+    return { imported, skipped, failed, totalWrites: imported, errors, warnings };
+  },
+
+  syncEvaluationSchedule: async (records) => {
+    let imported = 0;
+    let skipped = 0;
+    let failed = 0;
+    const errors = [];
+    const warnings = [];
+
+    const getValue = (row, aliases) => {
+      for (const key of aliases) {
+        if (row[key] !== undefined && row[key] !== null && String(row[key]).trim() !== "") {
+          return String(row[key]).trim();
+        }
+      }
+      return '';
+    };
+
+    const normalizeExcelDate = (val) => {
+      if (!val) return '';
+      if (typeof val === 'number') {
+        const date = new Date(Math.round((val - (25567 + 2)) * 86400 * 1000));
+        return date.toISOString().split('T')[0];
+      }
+      const str = String(val).trim();
+      if (/^\d{4}-\d{2}-\d{2}/.test(str)) {
+        return str.split('T')[0];
+      }
+      const parsed = new Date(str);
+      if (!isNaN(parsed.getTime())) {
+        return parsed.toISOString().split('T')[0];
+      }
+      return str;
+    };
+
+    const batch = writeBatch(db);
+    const now = new Date().toISOString();
+
+    for (let i = 0; i < records.length; i++) {
+      const row = records[i];
+      const reviewCycleIdKey = getValue(row, ['Review Cycle ID', 'reviewCycleId', 'Cycle ID', 'cycleId', 'ID', 'id', 'Review Cycle Name', 'reviewName', 'name']);
+      const reviewName = getValue(row, ['Review Cycle Name', 'reviewName', 'Name', 'name', 'Review Cycle', 'reviewCycle']);
+      const rawStart = getValue(row, ['Start Date', 'startDate', 'Start', 'start']);
+      const rawEnd = getValue(row, ['End Date', 'endDate', 'End', 'end']);
+      const status = getValue(row, ['Status', 'status']) || 'Active';
+      const evaluationType = getValue(row, ['Evaluation Type', 'evaluationType', 'Type', 'type']) || 'Standard';
+      const description = getValue(row, ['Description', 'description']) || '';
+
+      if (!reviewCycleIdKey && !reviewName) {
+        errors.push(`Row ${i + 1}: Missing Review Cycle ID or Name.`);
+        failed++;
+        continue;
+      }
+
+      const startDate = normalizeExcelDate(rawStart);
+      const endDate = normalizeExcelDate(rawEnd);
+
+      if (startDate && endDate && new Date(startDate) >= new Date(endDate)) {
+        errors.push(`Row ${i + 1}: End Date (${endDate}) must be strictly after Start Date (${startDate}).`);
+        failed++;
+        continue;
+      }
+
+      const cleanCycleId = (reviewCycleIdKey || reviewName).toLowerCase().replace(/[^a-z0-9_-]/g, '');
+      const docRef = doc(db, 'reviewCycles', cleanCycleId);
+
+      const docData = {
+        id: cleanCycleId,
+        reviewCycleId: cleanCycleId,
+        reviewName: reviewName || `Review Cycle ${cleanCycleId}`,
+        name: reviewName || `Review Cycle ${cleanCycleId}`,
+        startDate: startDate || new Date().toISOString().split('T')[0],
+        endDate: endDate || new Date(Date.now() + 14 * 86400 * 1000).toISOString().split('T')[0],
+        status,
+        evaluationType,
+        description,
+        createdAt: now,
+        updatedAt: now
+      };
+
+      batch.set(docRef, docData, { merge: true });
+      imported++;
+    }
+
+    if (imported > 0) {
+      await batch.commit();
+    }
+
+    return { imported, skipped, failed, totalWrites: imported, errors, warnings };
   }
 };

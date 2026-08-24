@@ -452,10 +452,13 @@ export const resolveTeamRelations = (team, contextData = {}) => {
     faculty = [],
     reviewers = [],
     reviewCycles = [],
+    guideAssignments = [],
+    facultyAssignments = [],
     reviewerAssignments = [],
     evaluations = [],
     guideMarks = [],
-    facultyMarks = []
+    facultyMarks = [],
+    reviews = []
   } = contextData;
 
   const teamIdentifier = String(team.teamId || team.id || team.TeamID || '').trim().toLowerCase();
@@ -492,15 +495,35 @@ export const resolveTeamRelations = (team, contextData = {}) => {
     project = projects.find(p => String(p.teamId || p.team || '').trim().toLowerCase() === teamIdentifier) || null;
   }
 
-  // 3. Resolve Guide
-  const guideKey = team.guideId || team.guideName || team['Guide ID'] || getMemberValue(['guideId', 'guideName', 'guide', 'Guide ID', 'Guide Name', 'assignedGuideId', 'guideCode']);
-  const guide = resolveEntityMatch(guides, guideKey);
-  const guideName = guide?.name || guide?.['Guide Name'] || team.guideName || (guideKey && !guideKey.startsWith('gde-') ? guideKey : 'Unassigned');
+  // 3. Resolve Guide (Check active guideAssignments first, then team/member guideKey)
+  let guide = null;
+  const activeGuideAssignment = guideAssignments?.find(a => 
+    String(a.teamId || a.team || '').trim().toLowerCase() === teamIdentifier && 
+    (a.status === 'Active' || !a.status)
+  );
+  if (activeGuideAssignment) {
+    guide = resolveEntityMatch(guides, activeGuideAssignment.guideId || activeGuideAssignment.employeeId);
+  }
+  if (!guide) {
+    const guideKey = team.guideId || team.guideName || team['Guide ID'] || getMemberValue(['guideId', 'guideName', 'guide', 'Guide ID', 'Guide Name', 'assignedGuideId', 'guideCode']);
+    guide = resolveEntityMatch(guides, guideKey);
+  }
+  const guideName = guide?.name || guide?.['Guide Name'] || team.guideName || (team.guideId && !team.guideId.startsWith('gde-') ? team.guideId : 'Unassigned');
 
-  // 4. Resolve Faculty
-  const facultyKey = team.facultyId || team.facultyName || team['Faculty ID'] || getMemberValue(['facultyId', 'facultyName', 'faculty', 'Faculty ID', 'Faculty Name', 'assignedFacultyId', 'facultyCode']);
-  const facultyObj = resolveEntityMatch(faculty, facultyKey);
-  const facultyName = facultyObj?.name || facultyObj?.['Faculty Name'] || team.facultyName || (facultyKey && !facultyKey.startsWith('fac-') ? facultyKey : 'Unassigned');
+  // 4. Resolve Faculty (Check active facultyAssignments first, then team/member facultyKey)
+  let facultyObj = null;
+  const activeFacultyAssignment = facultyAssignments?.find(a => 
+    String(a.teamId || a.team || '').trim().toLowerCase() === teamIdentifier && 
+    (a.status === 'Active' || !a.status)
+  );
+  if (activeFacultyAssignment) {
+    facultyObj = resolveEntityMatch(faculty, activeFacultyAssignment.facultyId || activeFacultyAssignment.employeeId);
+  }
+  if (!facultyObj) {
+    const facultyKey = team.facultyId || team.facultyName || team['Faculty ID'] || getMemberValue(['facultyId', 'facultyName', 'faculty', 'Faculty ID', 'Faculty Name', 'assignedFacultyId', 'facultyCode']);
+    facultyObj = resolveEntityMatch(faculty, facultyKey);
+  }
+  const facultyName = facultyObj?.name || facultyObj?.['Faculty Name'] || team.facultyName || (team.facultyId && !team.facultyId.startsWith('fac-') ? team.facultyId : 'Unassigned');
 
   // 5. Resolve Reviewer (Check Active Review Cycle Assignment first, then fallback to team/member reviewerKey)
   let reviewer = null;
@@ -509,10 +532,10 @@ export const resolveTeamRelations = (team, contextData = {}) => {
   if (activeCycle) {
     const activeAssignment = reviewerAssignments?.find(a => 
       String(a.teamId || a.team || '').trim().toLowerCase() === teamIdentifier && 
-      (a.reviewCycleId === activeCycle.id || a.reviewCycleId === activeCycle.reviewCycleId || a.status === 'Active')
+      (a.reviewCycleId === activeCycle.id || a.reviewCycleId === activeCycle.reviewCycleId || a.status === 'Active' || !a.status)
     );
     if (activeAssignment) {
-      reviewer = resolveEntityMatch(reviewers, activeAssignment.reviewerId);
+      reviewer = resolveEntityMatch(reviewers, activeAssignment.reviewerId || activeAssignment.employeeId);
     }
   }
 
@@ -526,9 +549,23 @@ export const resolveTeamRelations = (team, contextData = {}) => {
   const memberStudentIds = memberList.map(m => m.id);
   const memberRolls = memberList.map(m => m.rollNumber || m.rollNo);
 
-  const teamEvaluations = evaluations.filter(e => String(e.teamId || e.team || '').trim().toLowerCase() === teamIdentifier);
+  const cleanTeamId = String(team.teamId || team.id || '').replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+
+  const teamEvaluations = evaluations.filter(e => {
+    const eTeamId = String(e.teamId || e.team || '').replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+    return eTeamId === cleanTeamId;
+  }).sort((a, b) => new Date(b.submittedAt || b.updatedAt || b.createdAt || 0) - new Date(a.submittedAt || a.updatedAt || a.createdAt || 0));
+
+  const guideEval = teamEvaluations.find(e => e.role === 'guide');
+  const facultyEval = teamEvaluations.find(e => e.role === 'classroom_faculty' || e.role === 'faculty');
+  const reviewerEval = teamEvaluations.find(e => e.role === 'reviewer');
+
   const teamGuideMarks = guideMarks.filter(m => memberStudentIds.includes(m.studentId) || memberRolls.includes(m.rollNumber));
   const teamFacultyMarks = facultyMarks.filter(m => memberStudentIds.includes(m.studentId) || memberRolls.includes(m.rollNumber));
+  const teamReviews = reviews.filter(r => {
+    const rTeamId = String(r.teamId || r.team || '').replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+    return rTeamId === cleanTeamId || memberStudentIds.includes(r.studentId) || memberRolls.includes(r.rollNumber);
+  });
 
   const calcAvg = (arr, key = 'score') => {
     if (!arr || arr.length === 0) return 0;
@@ -536,10 +573,12 @@ export const resolveTeamRelations = (team, contextData = {}) => {
     return Math.round(sum / arr.length);
   };
 
-  const guideScore = team.guideScore || calcAvg(teamGuideMarks) || 85;
-  const facultyScore = team.facultyScore || calcAvg(teamFacultyMarks) || 82;
-  const reviewerScore = team.reviewerScore || calcAvg(teamEvaluations, 'totalScore') || 88;
-  const avgMarks = Math.round((guideScore + facultyScore + reviewerScore) / 3);
+  const guideScore = guideEval ? (guideEval.teamAverage ?? guideEval.totalScore ?? 0) : (teamGuideMarks.length > 0 ? calcAvg(teamGuideMarks) : null);
+  const facultyScore = facultyEval ? (facultyEval.teamAverage ?? facultyEval.totalScore ?? 0) : (teamFacultyMarks.length > 0 ? calcAvg(teamFacultyMarks) : null);
+  const reviewerScore = reviewerEval ? (reviewerEval.teamAverage ?? reviewerEval.totalScore ?? 0) : (teamReviews.length > 0 ? calcAvg(teamReviews, 'totalScore') : null);
+
+  const validScores = [guideScore, facultyScore, reviewerScore].filter(s => s !== null && s !== undefined);
+  const avgMarks = validScores.length > 0 ? Math.round(validScores.reduce((a, b) => a + b, 0) / validScores.length) : null;
 
   return {
     ...team,

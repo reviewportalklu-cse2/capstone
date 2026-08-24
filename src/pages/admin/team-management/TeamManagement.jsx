@@ -12,7 +12,7 @@ import Table from '@/components/common/Table';
 import Modal from '@/components/common/Modal';
 import { 
   Users, Search, Download, Filter, Target, Eye, LayoutGrid, List, 
-  UserCheck, GraduationCap, UserCog, BookOpen, BarChart3, ChevronRight, Activity
+  UserCheck, GraduationCap, UserCog, BookOpen, BarChart3, ChevronRight, Activity, Loader2
 } from 'lucide-react';
 import { generateTeamPDF } from '@/utils/teamPdfExport';
 import TeamWorkspaceView from './components/TeamWorkspaceView';
@@ -64,6 +64,25 @@ const TeamManagement = () => {
       }
     });
 
+    // 3. Discover team IDs from assignments & projects
+    const collectionsToScan = [
+      ...(dataContext?.guideAssignments || []),
+      ...(dataContext?.facultyAssignments || []),
+      ...(dataContext?.reviewerAssignments || []),
+      ...(projects || [])
+    ];
+    collectionsToScan.forEach(item => {
+      const itemTeamId = item?.teamId || item?.team || item?.['Team ID'];
+      if (itemTeamId && !allTeamMap.has(String(itemTeamId).toLowerCase())) {
+        allTeamMap.set(String(itemTeamId).toLowerCase(), {
+          id: itemTeamId,
+          teamId: itemTeamId,
+          batch: item.batch || '2026',
+          section: item.section || 'A'
+        });
+      }
+    });
+
     const combinedTeams = Array.from(allTeamMap.values());
 
     return combinedTeams.map(team => {
@@ -77,14 +96,22 @@ const TeamManagement = () => {
         reviewerAssignments,
         evaluations: dataContext?.evaluations || [],
         guideMarks: dataContext?.guideMarks || [],
-        facultyMarks: dataContext?.facultyMarks || []
+        facultyMarks: dataContext?.facultyMarks || [],
+        reviews: dataContext?.reviews || []
       });
 
       const studentNames = (rel.members || []).map(s => s.name || s.rollNumber).join(', ');
-      const avgMarks = rel.avgMarks || 85;
-      const health = avgMarks >= 75 ? { label: 'Healthy', variant: 'success', bg: 'bg-emerald-50 text-emerald-800 border-emerald-200' } :
-                     avgMarks >= 50 ? { label: 'Attention', variant: 'warning', bg: 'bg-amber-50 text-amber-800 border-amber-200' } :
-                     { label: 'Critical', variant: 'danger', bg: 'bg-red-50 text-red-800 border-red-200' };
+      const avgMarks = rel?.avgMarks ?? 0;
+      const cleanTId = String(team.teamId || team.id || '').replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+      const hasEvaluations = (dataContext?.evaluations || []).some(e => String(e.teamId || e.team || '').replace(/[^a-zA-Z0-9]/g, '').toLowerCase() === cleanTId);
+
+      const health = !hasEvaluations
+        ? { label: 'Not Evaluated', variant: 'secondary', bg: 'bg-gray-100 text-gray-700 border-gray-200' }
+        : avgMarks >= 75
+        ? { label: 'Healthy', variant: 'success', bg: 'bg-emerald-50 text-emerald-800 border-emerald-200' }
+        : avgMarks >= 50
+        ? { label: 'Attention', variant: 'warning', bg: 'bg-amber-50 text-amber-800 border-amber-200' }
+        : { label: 'Critical', variant: 'danger', bg: 'bg-red-50 text-red-800 border-red-200' };
 
       return {
         ...rel,
@@ -163,6 +190,19 @@ const TeamManagement = () => {
       ) 
     }
   ];
+
+  if (dataLoading) {
+    return (
+      <DashboardLayout navigationItems={navigationItems} title="KL CSE Capstone Portal - Team & Group Workspace">
+        <div className="flex h-64 items-center justify-center">
+          <div className="text-center space-y-3">
+            <Loader2 className="h-8 w-8 animate-spin text-primary-600 mx-auto" />
+            <p className="text-sm font-semibold text-gray-600">Loading Teams & Groups...</p>
+          </div>
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout navigationItems={navigationItems} title="KL CSE Capstone Portal - Team Workspace Browser">

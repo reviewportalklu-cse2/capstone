@@ -93,15 +93,23 @@ export const DataProvider = ({ children }) => {
       { key: 'settings', path: 'settings' }
     ];
 
+    const coreKeys = new Set(['students', 'guides', 'faculty', 'reviewers', 'teams', 'projects', 'rubrics', 'reviewCycles', 'evaluations']);
     const loadedKeys = new Set();
     let hasError = false;
     const unsubs = [];
     const expectedCount = collectionsToSubscribe.length;
 
+    const safetyTimer = setTimeout(() => {
+      if (!hasError) {
+        setLoading(false);
+      }
+    }, 1200);
+
     const handleData = (key, incomingData) => {
       setData(prev => ({ ...prev, [key]: incomingData }));
       loadedKeys.add(key);
-      if (loadedKeys.size >= expectedCount && !hasError) {
+      const hasCoreLoaded = Array.from(coreKeys).every(k => loadedKeys.has(k));
+      if ((loadedKeys.size >= expectedCount || hasCoreLoaded) && !hasError) {
         setLoading(false);
       }
     };
@@ -126,6 +134,7 @@ export const DataProvider = ({ children }) => {
     });
 
     return () => {
+      clearTimeout(safetyTimer);
       unsubs.forEach(unsub => {
         if (typeof unsub === 'function') unsub();
       });
@@ -160,7 +169,7 @@ export const DataProvider = ({ children }) => {
 
   const getNotificationsByRole = () => {
     if (!domainUser && !currentUser) return [];
-    const userRoleLower = (currentRole || '').toLowerCase();
+    const userRoleLower = (currentRole || userRole || domainUser?.role || '').toLowerCase();
     const domainId = domainUser?.domainId || domainUser?.id || currentUser?.uid;
 
     return data.notifications.filter(n => {
@@ -172,11 +181,11 @@ export const DataProvider = ({ children }) => {
       }
       
       // 2. Role-targeted broadcasts
-      if (n.recipientType === 'role' || n.roleIds?.length > 0 || n.targetRoles?.length > 0) {
-        const rolesLower = [...(n.roleIds || []), ...(n.targetRoles || []), n.targetRole].filter(Boolean).map(r => String(r).toLowerCase());
-        if (rolesLower.includes('all') || rolesLower.includes('everyone') || rolesLower.includes(userRoleLower)) return true;
-        if (userRoleLower === 'classroom_faculty' && rolesLower.includes('faculty')) return true;
-      }
+      const targetRoleStr = String(n.targetRole || n.targetAudience || '').toLowerCase();
+      const rolesLower = [...(n.roleIds || []), ...(n.targetRoles || []), targetRoleStr].filter(Boolean).map(r => String(r).toLowerCase());
+
+      if (rolesLower.includes('all') || rolesLower.includes('everyone') || rolesLower.includes(userRoleLower)) return true;
+      if ((userRoleLower === 'classroom_faculty' || userRoleLower === 'faculty') && (rolesLower.includes('faculty') || rolesLower.includes('classroom_faculty'))) return true;
 
       // 3. Individual broadcasts
       if (n.recipientType === 'individual' || n.recipientIds?.length > 0 || n.recipientId) {

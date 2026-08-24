@@ -9,15 +9,36 @@ const TeamMembers = ({ teamData }) => {
       <div className="space-y-4">
         {teamData.students.length > 0 ? (
           teamData.students.map((student) => {
-            // Find individual attendance
-            const studentAttendance = teamData.attendance.filter(a => a.studentId === student.id);
-            const presentCount = studentAttendance.filter(a => a.status === 'Present').length;
-            const totalAttendance = studentAttendance.length;
-            const attendancePct = totalAttendance > 0 ? Math.round((presentCount / totalAttendance) * 100) : 0;
+            // Find individual attendance from evaluations + raw attendance
+            const evals = teamData.evaluations || [];
+            let presentCount = 0;
+            let absentCount = 0;
+            let latestStatus = null;
+
+            evals.forEach(e => {
+              if (e.attendance && e.attendance[student.id]) {
+                const st = e.attendance[student.id];
+                if (!latestStatus) latestStatus = st;
+                if (st === 'Present') presentCount++;
+                if (st === 'Absent') absentCount++;
+              }
+            });
+
+            const rawAttendance = (teamData.attendance || []).filter(a => a.studentId === student.id);
+            rawAttendance.forEach(a => {
+              const st = a.status || a.attendance;
+              if (st === 'Present') presentCount++;
+              if (st === 'Absent') absentCount++;
+              if (!latestStatus) latestStatus = st;
+            });
+
+            const totalAttendance = presentCount + absentCount;
+            const attendancePct = totalAttendance > 0 ? Math.round((presentCount / totalAttendance) * 100) : null;
 
             // Find individual marks (Faculty)
-            const studentMarks = teamData.facultyMarks.filter(m => m.studentId === student.id);
-            const avgMarks = studentMarks.length > 0 ? Math.round(studentMarks.reduce((acc, m) => acc + (m.marks || 0), 0) / studentMarks.length) : 'N/A';
+            const facultyEval = evals.find(e => e.role === 'faculty' || e.role === 'classroom_faculty');
+            const studentTotalMark = facultyEval?.studentTotals?.[student.id];
+            const avgMarks = studentTotalMark !== undefined ? studentTotalMark : (teamData.facultyMarks?.find(m => m.studentId === student.id)?.marks ?? 'N/A');
 
             return (
               <div key={student.id} className="p-4 bg-gray-50 rounded-lg border border-gray-100 flex flex-col md:flex-row md:items-center justify-between gap-4 transition-colors hover:border-gray-200 hover:bg-gray-100/50">
@@ -38,9 +59,13 @@ const TeamMembers = ({ teamData }) => {
                 <div className="flex gap-4 items-center">
                   <div className="text-right">
                     <p className="text-[10px] uppercase font-bold text-gray-400">Attendance</p>
-                    <Badge variant={attendancePct >= 75 ? 'success' : (attendancePct > 0 ? 'warning' : 'default')}>
-                      {attendancePct}% ({presentCount}/{totalAttendance})
-                    </Badge>
+                    {totalAttendance > 0 ? (
+                      <Badge variant={latestStatus === 'Present' ? 'success' : 'danger'}>
+                        {latestStatus} ({attendancePct}%)
+                      </Badge>
+                    ) : (
+                      <Badge variant="default" className="text-xs font-semibold">Not Evaluated</Badge>
+                    )}
                   </div>
                   <div className="text-right">
                     <p className="text-[10px] uppercase font-bold text-gray-400">Faculty Marks</p>

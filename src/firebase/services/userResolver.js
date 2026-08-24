@@ -1,4 +1,4 @@
-import { FirestoreService } from './firestore';
+import { FirestoreService } from './firestore.js';
 import { getEntityKeys } from '@/utils/relationshipResolver';
 
 const ROLE_COLLECTION_MAP = {
@@ -59,25 +59,31 @@ export const userResolver = {
         ]);
       }
 
-      // 4. Case-insensitive & normalized key fallback search
+      // 4. Case-insensitive & normalized key fallback search across primary and evaluator collections
       if (domainRecords.length === 0) {
-        const allRecords = await FirestoreService.getAll(collectionName);
-        const emailPrefix = email ? email.split('@')[0].toLowerCase() : '';
-        const searchKeys = [email, firebaseUser.uid, firebaseUser.displayName, emailPrefix].filter(Boolean).flatMap(k => getEntityKeys(k));
+        const collectionsToTry = [collectionName, 'guides', 'classroomFaculty', 'reviewers'].filter((c, idx, arr) => arr.indexOf(c) === idx);
+        for (const targetColl of collectionsToTry) {
+          const allRecords = await FirestoreService.getAll(targetColl);
+          const emailPrefix = email ? email.split('@')[0].toLowerCase() : '';
+          const searchKeys = [email, firebaseUser.uid, firebaseUser.displayName, emailPrefix].filter(Boolean).flatMap(k => getEntityKeys(k));
 
-        const match = allRecords.find(r => {
-          const rEmail = String(r.email || r.Email || '').toLowerCase();
-          const rPrefix = rEmail.includes('@') ? rEmail.split('@')[0] : '';
-          if (rEmail && rEmail === email.toLowerCase()) return true;
-          if (rPrefix && emailPrefix) {
-            if (rPrefix === emailPrefix) return true;
-            if (rPrefix.replace(/0+/g, '') === emailPrefix.replace(/0+/g, '')) return true;
+          const match = allRecords.find(r => {
+            const rEmail = String(r.email || r.Email || '').toLowerCase();
+            const rPrefix = rEmail.includes('@') ? rEmail.split('@')[0] : '';
+            if (rEmail && rEmail === email.toLowerCase()) return true;
+            if (rPrefix && emailPrefix) {
+              if (rPrefix === emailPrefix) return true;
+              if (rPrefix.replace(/0+/g, '') === emailPrefix.replace(/0+/g, '')) return true;
+            }
+            if (r.id === firebaseUser.uid || r.uid === firebaseUser.uid) return true;
+            const rKeys = getEntityKeys(r);
+            return searchKeys.some(k => rKeys.includes(k));
+          });
+          if (match) {
+            domainRecords = [match];
+            break;
           }
-          if (r.id === firebaseUser.uid || r.uid === firebaseUser.uid) return true;
-          const rKeys = getEntityKeys(r);
-          return searchKeys.some(k => rKeys.includes(k));
-        });
-        if (match) domainRecords = [match];
+        }
       }
 
       let domainRecord = domainRecords[0];

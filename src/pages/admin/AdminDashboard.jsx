@@ -35,10 +35,9 @@ const AdminDashboard = () => {
     attendance = [],
     auditLogs = [],
     activeCycle,
-    dataLoading 
+    dataLoading,
+    dataError
   } = useData() || {};
-
-  const analytics = useAnalytics();
 
   const dynamicAttendanceRate = useMemo(() => {
     if (!attendance || attendance.length === 0) return '0%';
@@ -126,6 +125,25 @@ const AdminDashboard = () => {
           <div className="text-center space-y-3">
             <Loader2 className="h-10 w-10 animate-spin text-primary-600 mx-auto" />
             <p className="text-sm font-semibold text-gray-600">Loading Enterprise Control Center...</p>
+          </div>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  if (dataError) {
+    return (
+      <DashboardLayout navigationItems={navigationItems} title="Enterprise Admin Control Center">
+        <div className="flex h-[calc(100vh-4rem)] items-center justify-center p-4">
+          <div className="text-center space-y-4 max-w-md bg-red-50 border border-red-200 p-6 rounded-2xl shadow-sm">
+            <AlertTriangle className="h-10 w-10 text-red-600 mx-auto" />
+            <div>
+              <h3 className="text-lg font-bold text-red-900">Control Center Data Sync Issue</h3>
+              <p className="text-xs text-red-700 mt-1">{dataError}</p>
+            </div>
+            <Button onClick={() => window.location.reload()} variant="primary" className="text-xs flex items-center justify-center gap-2 mx-auto">
+              <RefreshCw className="w-4 h-4" /> Retry Data Connection
+            </Button>
           </div>
         </div>
       </DashboardLayout>

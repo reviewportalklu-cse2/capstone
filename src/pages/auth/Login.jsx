@@ -19,7 +19,7 @@ const ROLE_ROUTES = {
 };
 
 const Login = () => {
-  const { currentUser, activeRole, mfaRequired, mfaVerified, loading: authLoading } = useAuth();
+  const { currentUser, activeRole, requiresPasswordChange, mfaRequired, mfaVerified, loading: authLoading } = useAuth();
   const navigate = useNavigate();
 
   const [email, setEmail] = useState('');
@@ -35,13 +35,15 @@ const Login = () => {
   // Redirect if user is already authenticated
   useEffect(() => {
     if (!authLoading && currentUser) {
-      if (mfaRequired && !mfaVerified) {
+      if (requiresPasswordChange === true) {
+        navigate('/first-login-password-change');
+      } else if (mfaRequired && !mfaVerified) {
         navigate('/mfa-verification');
       } else if (activeRole && ROLE_ROUTES[activeRole]) {
         navigate(ROLE_ROUTES[activeRole]);
       }
     }
-  }, [currentUser, activeRole, mfaRequired, mfaVerified, authLoading, navigate]);
+  }, [currentUser, activeRole, requiresPasswordChange, mfaRequired, mfaVerified, authLoading, navigate]);
 
   const handleFormSubmit = async (e) => {
     if (e) e.preventDefault();

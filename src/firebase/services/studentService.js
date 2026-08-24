@@ -1,4 +1,4 @@
-import { FirestoreService } from './firestore';
+import { FirestoreService } from './firestore.js';
 
 const COLLECTION_NAME = 'students';
 

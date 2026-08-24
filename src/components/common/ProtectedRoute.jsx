@@ -3,7 +3,7 @@ import { Navigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 
 const ProtectedRoute = ({ children, allowedRoles }) => {
-  const { currentUser, activeRole, userRole, mfaRequired, mfaVerified, loading } = useAuth();
+  const { currentUser, activeRole, userRole, mfaRequired, mfaVerified, requiresPasswordChange, loading } = useAuth();
   const currentRole = activeRole || userRole;
 
   if (loading) {
@@ -16,6 +16,10 @@ const ProtectedRoute = ({ children, allowedRoles }) => {
 
   if (!currentUser) {
     return <Navigate to="/login" replace />;
+  }
+
+  if (requiresPasswordChange === true) {
+    return <Navigate to="/first-login-password-change" replace />;
   }
 
   // Enforce MFA verification before granting portal access

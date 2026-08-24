@@ -9,8 +9,9 @@ import Card from '@/components/common/Card';
 import Badge from '@/components/common/Badge';
 import Button from '@/components/common/Button';
 import Input from '@/components/common/Input';
+import Modal from '@/components/common/Modal';
 import { resolveTeamRelations, resolveStudentRelations, getEntityKeys } from '@/utils/relationshipResolver';
-import { ArrowLeft, Lock, Unlock, Save, ShieldCheck, AlertCircle, Calendar, Clock, CheckCircle, CheckCircle2 } from 'lucide-react';
+import { ArrowLeft, Lock, Unlock, Save, ShieldCheck, AlertCircle, Calendar, Clock, CheckCircle, CheckCircle2, Eye, AlertTriangle } from 'lucide-react';
 
 const EvaluationWorkspace = () => {
   const { teamId } = useParams();
@@ -38,6 +39,7 @@ const EvaluationWorkspace = () => {
   const [attendance, setAttendance] = useState({});
   
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showPreviewModal, setShowPreviewModal] = useState(false);
 
   // Determine which navigation to use
   const navItems = useMemo(() => {
@@ -335,20 +337,64 @@ const EvaluationWorkspace = () => {
     }));
   };
 
-  const handleSubmit = async () => {
+  const previewStats = useMemo(() => {
+    if (!teamData || !activeCriteria) return { totalMarks: 0, studentTotals: {}, teamAvg: 0, presentCount: 0, absentCount: 0, maxPossibleStudent: 0 };
+
+    let totalMarks = 0;
+    let presentCount = 0;
+    let absentCount = 0;
+    const studentTotals = {};
+
+    const maxPossibleStudent = activeCriteria.reduce((sum, c) => sum + (Number(c.maximumMarks) || 0), 0);
+
+    teamData.members.forEach(student => {
+      let stuTotal = 0;
+      const isAbsent = attendance[student.id] === 'Absent';
+      if (isAbsent) {
+        absentCount++;
+      } else {
+        presentCount++;
+      }
+
+      activeCriteria.forEach(c => {
+        const rawVal = marks[`${student.id}_${c.id}`];
+        const numVal = isAbsent ? 0 : (Number(rawVal) || 0);
+        stuTotal += numVal;
+      });
+      studentTotals[student.id] = stuTotal;
+      totalMarks += stuTotal;
+    });
+
+    const teamAvg = Math.round(totalMarks / (teamData.members.length || 1));
+
+    return {
+      totalMarks,
+      studentTotals,
+      teamAvg,
+      presentCount,
+      absentCount,
+      maxPossibleStudent
+    };
+  }, [teamData, activeCriteria, marks, attendance]);
+
+  const handleOpenPreview = () => {
+    if (!activeRubric || !teamData) return;
+    setShowPreviewModal(true);
+  };
+
+  const handleConfirmSubmit = async () => {
     setIsSubmitting(true);
     try {
-      
-      // Calculate totals
       let totalMarks = 0;
       const studentTotals = {};
       const sanitizedMarks = {};
       
       teamData.members.forEach(student => {
         let stuTotal = 0;
+        const isAbsent = attendance[student.id] === 'Absent';
         activeCriteria.forEach(c => {
           const rawVal = marks[`${student.id}_${c.id}`];
-          const numVal = Number(rawVal) || 0;
+          const numVal = isAbsent ? 0 : (Number(rawVal) || 0);
           sanitizedMarks[`${student.id}_${c.id}`] = numVal;
           stuTotal += numVal;
         });
@@ -445,6 +491,7 @@ const EvaluationWorkspace = () => {
         }
       });
       
+      setShowPreviewModal(false);
       alert('Evaluation submitted successfully and locked.');
       const targetPath = userRole === 'classroom_faculty' ? 'faculty' : userRole;
       navigate(`/${targetPath}/dashboard`);
@@ -672,8 +719,8 @@ const EvaluationWorkspace = () => {
               </Button>
             )}
             
-            <Button onClick={handleSubmit} disabled={isLocked || isSubmitting || !activeRubric} className="flex items-center gap-2">
-              {isSubmitting ? 'Submitting...' : (isLocked ? 'Locked' : <><Save className="w-4 h-4"/> Submit Evaluation</>)}
+            <Button onClick={handleOpenPreview} disabled={isLocked || isSubmitting || !activeRubric} className="flex items-center gap-2">
+              {isSubmitting ? 'Submitting...' : (isLocked ? 'Locked' : <><Eye className="w-4 h-4"/> Preview & Submit</>)}
             </Button>
           </div>
         </div>
@@ -790,57 +837,183 @@ const EvaluationWorkspace = () => {
               </div>
             </Card>
             
-            {/* Read-Only Visibility of other evaluators */}
-            {allEvaluationsForCycle.length > 0 && (
-              <div className="mt-8 pt-8 border-t border-gray-200">
-                <h3 className="text-lg font-bold text-gray-900 mb-4">Other Evaluators ({selectedCycle})</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {allEvaluationsForCycle.filter(e => {
-                    const eRole = String(e.role || '').toLowerCase();
-                    const uRole = (userRole === 'classroom_faculty' || userRole === 'faculty') ? 'faculty' : String(userRole).toLowerCase();
-                    if (uRole === 'faculty' && (eRole === 'faculty' || eRole === 'classroom_faculty')) return false;
-                    if (eRole === uRole) return false;
-                    return true;
-                  }).map(e => (
-                    <div key={e.id} className="border border-gray-200 bg-gray-50 rounded-lg p-4">
+            {/* Read-Only Visibility of All 3 Evaluators for Current Team & Cycle */}
+            <div className="mt-8 pt-8 border-t border-gray-200">
+              <h3 className="text-lg font-bold text-gray-900 mb-4">Evaluator Panel Summary ({selectedCycle})</h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {[
+                  { roleKey: 'guide', roleTitle: 'Guide Evaluation', evalObj: allEvaluationsForCycle.find(e => e.role === 'guide') },
+                  { roleKey: 'faculty', roleTitle: 'Classroom Faculty Evaluation', evalObj: allEvaluationsForCycle.find(e => e.role === 'faculty' || e.role === 'classroom_faculty') },
+                  { roleKey: 'reviewer', roleTitle: 'Reviewer Evaluation', evalObj: allEvaluationsForCycle.find(e => e.role === 'reviewer') }
+                ].map(({ roleKey, roleTitle, evalObj }) => {
+                  const isCurrentRole = (userRole === 'classroom_faculty' || userRole === 'faculty') ? roleKey === 'faculty' : userRole === roleKey;
+                  return (
+                    <div key={roleKey} className={`border rounded-lg p-4 ${isCurrentRole ? 'bg-blue-50/60 border-blue-200 ring-1 ring-blue-300' : 'bg-gray-50 border-gray-200'}`}>
                       <div className="flex justify-between items-start mb-3">
                         <div>
-                          <p className="font-bold text-gray-900">{e.evaluatorName}</p>
-                          <Badge variant="primary" className="mt-1">{e.role.toUpperCase()}</Badge>
+                          <p className="font-bold text-gray-900 text-sm">{roleTitle}</p>
+                          <p className="text-xs text-gray-500 mt-0.5">{evalObj?.evaluatorName || (isCurrentRole ? (currentUser?.displayName || currentUser?.email) : 'Unassigned')}</p>
                         </div>
-                        <div className="text-right">
-                          <p className="text-xs text-gray-500">Team Avg</p>
-                          <p className="text-xl font-bold text-primary-600">{e.teamAverage}</p>
+                        <Badge variant={evalObj ? (evalObj.status === 'Locked' ? 'success' : 'primary') : 'secondary'}>
+                          {evalObj ? (evalObj.status || 'Submitted') : 'PENDING'}
+                        </Badge>
+                      </div>
+                      
+                      <div className="text-2xl font-black text-gray-900 mt-2">
+                        {evalObj && evalObj.teamAverage !== undefined && evalObj.teamAverage !== null ? `${evalObj.teamAverage} / 100` : <span className="text-sm font-bold text-amber-600 italic">PENDING</span>}
+                      </div>
+
+                      {evalObj?.remarks && (
+                        <div className="text-xs text-gray-600 mt-3 pt-2 border-t border-gray-200/80 space-y-1">
+                          {evalObj.remarks.strengths && <p><span className="font-bold">Strengths:</span> {evalObj.remarks.strengths}</p>}
+                          {evalObj.remarks.weaknesses && <p><span className="font-bold">Improvement:</span> {evalObj.remarks.weaknesses}</p>}
                         </div>
-                      </div>
-                      <div className="text-sm text-gray-600 mt-2">
-                        <p><span className="font-medium">Strengths:</span> {e.remarks?.strengths || 'N/A'}</p>
-                        <p className="mt-1"><span className="font-medium">Improvement:</span> {e.remarks?.weaknesses || 'N/A'}</p>
-                      </div>
-                      <div className="mt-4 border-t border-gray-200 pt-3">
-                        <p className="text-xs font-bold text-gray-500 uppercase mb-2">Detailed Marks</p>
-                        <div className="space-y-2">
-                          {teamData.members.map(student => (
-                            <div key={student.id} className="text-xs flex flex-col gap-1 border-b border-gray-100 pb-2">
-                              <span className="font-medium text-gray-800">{student.name}</span>
-                              <div className="flex flex-wrap gap-2">
-                                {activeCriteria.map(c => (
-                                  <span key={c.id} className="bg-gray-100 px-2 py-1 rounded text-gray-600">
-                                    {c.title}: <span className="font-bold text-gray-900">{e.marks[`${student.id}_${c.id}`] || 0}</span>/{c.maximumMarks}
-                                  </span>
-                                ))}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
+                      )}
                     </div>
-                  ))}
-                </div>
+                  );
+                })}
               </div>
-            )}
+            </div>
           </>
         )}
+
+        {/* Pre-Submission Preview Modal */}
+        <Modal
+          isOpen={showPreviewModal}
+          onClose={() => setShowPreviewModal(false)}
+          title="Pre-Submission Evaluation Review"
+          maxWidth="max-w-4xl"
+        >
+          <div className="space-y-6 text-sm font-sans p-1">
+            {/* Header Details */}
+            <div className="bg-slate-900 text-white p-5 rounded-xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xl font-bold">{teamData.id}</span>
+                  <Badge variant="primary">{userRole.toUpperCase()}</Badge>
+                  <Badge variant="secondary">{selectedCycle}</Badge>
+                </div>
+                <p className="text-xs text-slate-300 mt-1">{teamData.project?.title || 'No Project Title'}</p>
+              </div>
+              <div className="text-xs text-slate-300 sm:text-right">
+                <p className="font-medium">Evaluator: <span className="font-bold text-white">{currentUser?.displayName || currentUser?.email}</span></p>
+                <p className="text-[11px] text-slate-400 mt-0.5">{new Date().toLocaleString()}</p>
+              </div>
+            </div>
+
+            {/* Student Marks & Attendance Breakdown Table */}
+            <div className="border border-gray-200 rounded-xl overflow-hidden shadow-sm">
+              <div className="bg-gray-100 px-4 py-2 border-b font-bold text-gray-800 text-xs uppercase tracking-wider flex justify-between items-center">
+                <span>Student Score Breakdown</span>
+                <span className="text-primary-700 font-extrabold">Rubric Max per Student: {previewStats.maxPossibleStudent} Marks</span>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500 uppercase">Student</th>
+                      <th className="px-3 py-2 text-center text-xs font-semibold text-gray-500 uppercase">Attendance</th>
+                      {activeCriteria.map(c => (
+                        <th key={c.id} className="px-3 py-2 text-center text-xs font-semibold text-gray-500 uppercase min-w-[100px]">
+                          {c.title} ({c.maximumMarks})
+                        </th>
+                      ))}
+                      <th className="px-3 py-2 text-center text-xs font-bold text-gray-900 uppercase bg-gray-100">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200 text-xs">
+                    {teamData.members.map(student => {
+                      const isAbsent = attendance[student.id] === 'Absent';
+                      const stuTotal = previewStats.studentTotals[student.id] || 0;
+                      return (
+                        <tr key={student.id} className={isAbsent ? 'bg-red-50/50' : ''}>
+                          <td className="px-3 py-3 font-medium text-gray-900">
+                            <div>{student.name}</div>
+                            <div className="text-[10px] text-gray-500">{student.rollNumber || student.id}</div>
+                          </td>
+                          <td className="px-3 py-3 text-center">
+                            <Badge variant={isAbsent ? 'danger' : 'success'}>
+                              {isAbsent ? 'Absent' : 'Present'}
+                            </Badge>
+                          </td>
+                          {activeCriteria.map(c => {
+                            const val = isAbsent ? 0 : (marks[`${student.id}_${c.id}`] || 0);
+                            return (
+                              <td key={c.id} className="px-3 py-3 text-center font-semibold text-gray-700">
+                                {val} / {c.maximumMarks}
+                              </td>
+                            );
+                          })}
+                          <td className="px-3 py-3 text-center font-bold text-sm text-primary-700 bg-gray-50">
+                            {stuTotal}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Team Summary Cards */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="bg-gray-50 p-3 rounded-lg border text-center">
+                <span className="text-[11px] font-semibold text-gray-500 block uppercase">Total Students</span>
+                <span className="text-lg font-bold text-gray-900">{teamData.members.length}</span>
+              </div>
+              <div className="bg-emerald-50 p-3 rounded-lg border border-emerald-200 text-center">
+                <span className="text-[11px] font-semibold text-emerald-700 block uppercase">Present</span>
+                <span className="text-lg font-bold text-emerald-800">{previewStats.presentCount}</span>
+              </div>
+              <div className="bg-red-50 p-3 rounded-lg border border-red-200 text-center">
+                <span className="text-[11px] font-semibold text-red-700 block uppercase">Absent</span>
+                <span className="text-lg font-bold text-red-800">{previewStats.absentCount}</span>
+              </div>
+              <div className="bg-primary-50 p-3 rounded-lg border border-primary-200 text-center">
+                <span className="text-[11px] font-semibold text-primary-700 block uppercase">Team Average</span>
+                <span className="text-lg font-bold text-primary-800">{previewStats.teamAvg}</span>
+              </div>
+            </div>
+
+            {/* Remarks Summary */}
+            <div className="bg-gray-50 p-4 rounded-xl border border-gray-200 space-y-2 text-xs">
+              <p className="font-bold text-gray-900 uppercase">Remarks & Feedback</p>
+              <p><span className="font-semibold text-gray-700">Strengths:</span> {remarks.strengths || 'N/A'}</p>
+              <p><span className="font-semibold text-gray-700">Areas for Improvement:</span> {remarks.weaknesses || 'N/A'}</p>
+            </div>
+
+            {/* Warning Confirmation Alert */}
+            <div className="bg-amber-50 border border-amber-200 p-4 rounded-xl flex items-start gap-3 text-amber-900 text-xs shadow-sm">
+              <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-bold">Submission Confirmation Notice</p>
+                <p className="mt-0.5">
+                  You are about to submit the evaluation for Team <strong>{teamData.id}</strong> ({selectedCycle}). Once submitted, your evaluation will become <strong>LOCKED</strong> and cannot be modified.
+                </p>
+              </div>
+            </div>
+
+            {/* Modal Actions */}
+            <div className="flex justify-end items-center gap-3 border-t pt-4">
+              <Button
+                variant="outline"
+                onClick={() => setShowPreviewModal(false)}
+                disabled={isSubmitting}
+              >
+                Back to Edit
+              </Button>
+              <Button
+                variant="primary"
+                onClick={handleConfirmSubmit}
+                disabled={isSubmitting}
+                disabled={isSubmitting}
+                className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700"
+              >
+                {isSubmitting ? 'Locking Evaluation...' : <><ShieldCheck className="w-4 h-4"/> Confirm & Lock Submission</>}
+              </Button>
+            </div>
+          </div>
+        </Modal>
       </div>
     </DashboardLayout>
   );

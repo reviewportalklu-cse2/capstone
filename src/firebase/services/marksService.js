@@ -1,4 +1,4 @@
-import { FirestoreService } from './firestore';
+import { FirestoreService } from './firestore.js';
 
 export const marksService = {
   // guideMarks

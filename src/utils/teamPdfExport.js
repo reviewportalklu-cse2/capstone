@@ -102,10 +102,10 @@ export const generateTeamPDF = (team) => {
     startY: y,
     head: [['Guide Marks', 'Faculty Marks', 'Reviewer Marks', 'Average Total Score', 'Grade Status']],
     body: [[
-      `${team.guideScore || 85} / 100`,
-      `${team.facultyScore || 82} / 100`,
-      `${team.reviewerScore || 88} / 100`,
-      `${team.avgMarks || 85} / 100`,
+      team.guideScore !== null && team.guideScore !== undefined ? `${team.guideScore} / 100` : 'Not Submitted',
+      team.facultyScore !== null && team.facultyScore !== undefined ? `${team.facultyScore} / 100` : 'Not Submitted',
+      team.reviewerScore !== null && team.reviewerScore !== undefined ? `${team.reviewerScore} / 100` : 'Not Submitted',
+      team.avgMarks !== null && team.avgMarks !== undefined ? `${team.avgMarks} / 100` : 'Not Evaluated',
       team.avgMarks >= 75 ? 'Distinction (Green)' : team.avgMarks >= 50 ? 'Satisfactory (Yellow)' : 'Needs Improvement (Red)'
     ]],
     theme: 'grid',

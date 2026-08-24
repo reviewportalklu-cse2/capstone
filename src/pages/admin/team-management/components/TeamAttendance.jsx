@@ -4,37 +4,46 @@ import Badge from '@/components/common/Badge';
 import { CalendarCheck, AlertCircle, Clock } from 'lucide-react';
 
 const TeamAttendance = ({ teamData }) => {
-  // Group attendance by review/week
-  const attendanceEvents = [...new Set(teamData.attendance.map(a => a.reviewType || a.week))];
+  const evalsWithAttendance = (teamData.evaluations || []).filter(e => e.attendance && Object.keys(e.attendance).length > 0);
+  const rawAttendance = teamData.attendance || [];
+
+  const evalEvents = evalsWithAttendance.map(e => ({
+    name: `${e.reviewCycle || 'Review Cycle'} (${e.role ? e.role.toUpperCase() : 'EVALUATION'})`,
+    date: e.submittedAt || e.updatedAt || e.createdAt,
+    evalObj: e
+  }));
+
+  const rawEvents = [...new Set(rawAttendance.map(a => a.reviewType || a.week))].map(name => ({
+    name,
+    date: rawAttendance.find(a => (a.reviewType || a.week) === name)?.createdAt,
+    records: rawAttendance.filter(a => (a.reviewType || a.week) === name)
+  }));
+
+  const allEvents = [...evalEvents, ...rawEvents];
 
   return (
-    <Card title="Attendance & Pending Evaluations" icon={CalendarCheck}>
+    <Card title="Attendance & Evaluation History" icon={CalendarCheck}>
       <div className="space-y-6">
-        {attendanceEvents.length > 0 ? (
-          attendanceEvents.map((event, idx) => {
-            const eventRecords = teamData.attendance.filter(a => a.reviewType === event || a.week === event);
-            
+        {allEvents.length > 0 ? (
+          allEvents.map((event, idx) => {
             return (
               <div key={idx} className="border border-gray-100 rounded-lg overflow-hidden">
                 <div className="bg-gray-50 p-3 border-b border-gray-100 flex justify-between items-center">
-                  <h4 className="font-bold text-gray-900">{event}</h4>
-                  <span className="text-xs text-gray-500">{new Date(eventRecords[0].createdAt).toLocaleDateString()}</span>
+                  <h4 className="font-bold text-gray-900">{event.name}</h4>
+                  <span className="text-xs text-gray-500">{event.date ? new Date(event.date).toLocaleDateString() : 'Recorded'}</span>
                 </div>
                 <div className="divide-y divide-gray-100">
                   {teamData.students.map(student => {
-                    const record = eventRecords.find(r => r.studentId === student.id);
-                    
-                    let deadlineDate = null;
-                    let isOverdue = false;
-                    let pendingResolution = false;
-                    
-                    if (record && record.status === 'Absent') {
-                      // Calculate 7-day deadline for pending evaluations
-                      const createdDate = new Date(record.createdAt);
-                      deadlineDate = new Date(createdDate.getTime() + 7 * 24 * 60 * 60 * 1000);
-                      isOverdue = new Date() > deadlineDate;
-                      pendingResolution = !record.evaluationCompleted; // Assume boolean field evaluationCompleted
+                    let status = 'Not Evaluated';
+                    if (event.evalObj) {
+                      status = event.evalObj.attendance[student.id] || 'Not Evaluated';
+                    } else if (event.records) {
+                      const rec = event.records.find(r => r.studentId === student.id);
+                      status = rec ? rec.status : 'Not Evaluated';
                     }
+
+                    const isAbsent = status === 'Absent';
+                    const isPresent = status === 'Present';
 
                     return (
                       <div key={student.id} className="p-3 flex items-center justify-between bg-white hover:bg-gray-50 transition-colors">
@@ -43,31 +52,9 @@ const TeamAttendance = ({ teamData }) => {
                           <span className="text-xs text-gray-500">{student.rollNumber || student.id}</span>
                         </div>
                         <div className="flex items-center gap-2 text-right">
-                          {record ? (
-                            <>
-                              <Badge variant={record.status === 'Present' ? 'success' : 'danger'}>
-                                {record.status}
-                              </Badge>
-                              {record.status === 'Absent' && (
-                                pendingResolution ? (
-                                  <div className="flex flex-col items-end">
-                                    <Badge variant="warning" className="text-[10px] flex items-center gap-1">
-                                      <Clock className="w-3 h-3" /> Pending Eval
-                                    </Badge>
-                                    <span className={`text-[10px] mt-1 ${isOverdue ? 'text-red-600 font-bold' : 'text-gray-500'}`}>
-                                      Due: {deadlineDate.toLocaleDateString()}
-                                    </span>
-                                  </div>
-                                ) : (
-                                  <Badge variant="success" className="text-[10px]">
-                                    Eval Completed
-                                  </Badge>
-                                )
-                              )}
-                            </>
-                          ) : (
-                            <span className="text-xs text-gray-400 italic">No record</span>
-                          )}
+                          {isPresent && <Badge variant="success">Present</Badge>}
+                          {isAbsent && <Badge variant="danger">Absent</Badge>}
+                          {!isPresent && !isAbsent && <span className="text-xs text-gray-400 italic">Not Evaluated</span>}
                         </div>
                       </div>
                     );

@@ -20,6 +20,8 @@ export const useEvaluationCenterData = () => {
     reviews = [], 
     guideMarks = [], 
     marks: facultyMarks = [],
+    evaluations = [],
+    teams: teamsList = [],
     dataLoading
   } = useData() || {};
 
@@ -30,30 +32,54 @@ export const useEvaluationCenterData = () => {
     const reviewerMap = new Map(reviewers.map(r => [r.id, r]));
     const facultyMap = new Map(faculty.map(f => [f.id, f]));
 
-    return projects.map((project, index) => {
-      const teamId = project.id || `TEAM${String(index + 1).padStart(3, '0')}`;
-      
-      const members = students.filter(s => 
-        s.projectId === project.id || 
-        s.teamId === project.id || 
-        s.projectTitle === project.title
-      );
+    // Combine projects and teams collection
+    const teamMap = new Map();
+    (projects || []).forEach(p => {
+      const id = p.id || p.teamId;
+      if (id) teamMap.set(String(id).toLowerCase(), { ...p, teamId: id, title: p.title || p.projectTitle || `Project ${id}` });
+    });
+    (teamsList || []).forEach(t => {
+      const id = t.id || t.teamId;
+      if (id && !teamMap.has(String(id).toLowerCase())) {
+        teamMap.set(String(id).toLowerCase(), { ...t, id, teamId: id, title: t.projectTitle || t.title || `Project ${id}` });
+      }
+    });
 
-      const guide = guideMap.get(project.guideId) || { name: project.guideName || 'Dr. Ramesh (Assigned)' };
-      const reviewer = reviewerMap.get(project.reviewerId) || { name: project.reviewerName || 'Dr. Kiran (Assigned)' };
-      const facultyPanel = facultyMap.get(project.facultyId) || { name: project.facultyName || 'Faculty Panel A' };
+    const combinedList = Array.from(teamMap.values());
+
+    return combinedList.map((project, index) => {
+      const teamId = project.id || project.teamId || `TEAM${String(index + 1).padStart(3, '0')}`;
+      const cleanTeamId = String(teamId).replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+
+      const members = students.filter(s => {
+        const sTeamId = String(s.teamId || s.team || s.projectId || '').replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+        return sTeamId === cleanTeamId || String(s.projectId || '').toLowerCase() === String(project.id).toLowerCase();
+      });
+
+      const teamEvals = (evaluations || []).filter(e => {
+        const eTeamId = String(e.teamId || e.team || '').replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+        return eTeamId === cleanTeamId;
+      }).sort((a, b) => new Date(b.submittedAt || b.updatedAt || b.createdAt || 0) - new Date(a.submittedAt || a.updatedAt || a.createdAt || 0));
+
+      const guideEval = teamEvals.find(e => e.role === 'guide');
+      const facultyEval = teamEvals.find(e => e.role === 'classroom_faculty' || e.role === 'faculty');
+      const reviewerEval = teamEvals.find(e => e.role === 'reviewer');
+
+      const guide = guideMap.get(project.guideId) || { name: project.guideName || (guideEval?.evaluatorName || 'Dr. Ramesh (Assigned)') };
+      const reviewer = reviewerMap.get(project.reviewerId) || { name: project.reviewerName || (reviewerEval?.evaluatorName || 'Dr. Kiran (Assigned)') };
+      const facultyPanel = facultyMap.get(project.facultyId) || { name: project.facultyName || (facultyEval?.evaluatorName || 'Faculty Panel A') };
 
       const teamReviews = reviews.filter(r => 
         r.projectId === project.id || 
         members.some(m => m.id === r.studentId || m.uid === r.studentId)
       );
 
-      const r1 = teamReviews.find(r => r.reviewType === 'Review 1')?.totalScore || project.review1Score || 0;
+      const r1 = reviewerEval?.teamAverage ?? (teamReviews.find(r => r.reviewType === 'Review 1')?.totalScore || project.review1Score || 0);
       const r2 = teamReviews.find(r => r.reviewType === 'Review 2')?.totalScore || project.review2Score || 0;
       const r3 = teamReviews.find(r => r.reviewType === 'Review 3')?.totalScore || project.review3Score || 0;
 
-      const gMark = guideMarks.find(m => members.some(s => s.id === m.studentId || s.uid === m.studentId))?.marks || project.guideScore || 0;
-      const fMark = facultyMarks.find(m => members.some(s => s.id === m.studentId || s.uid === m.studentId))?.marks || project.facultyScore || 0;
+      const gMark = guideEval?.teamAverage ?? (guideMarks.find(m => members.some(s => s.id === m.studentId || s.uid === m.studentId))?.marks || project.guideScore || 0);
+      const fMark = facultyEval?.teamAverage ?? (facultyMarks.find(m => members.some(s => s.id === m.studentId || s.uid === m.studentId))?.marks || project.facultyScore || 0);
 
       const totalWeightedScore = Math.round((gMark * 0.2) + (fMark * 0.2) + (r1 * 0.2) + (r2 * 0.2) + (r3 * 0.2));
       const percentage = totalWeightedScore;
