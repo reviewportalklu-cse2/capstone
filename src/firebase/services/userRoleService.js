@@ -1,5 +1,5 @@
 import { FirestoreService } from './firestore.js';
-import { getEntityKeys } from '@/utils/relationshipResolver';
+import { getEntityKeys } from '../../utils/relationshipResolver.js';
 
 const COLLECTION_NAME = 'userRoles';
 

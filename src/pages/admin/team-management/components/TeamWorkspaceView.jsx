@@ -23,6 +23,9 @@ export const TeamWorkspaceView = ({ team, contextData = {}, onRefresh }) => {
     guides = [], 
     faculty = [], 
     reviewers = [], 
+    reviewCycles = [],
+    rubrics = [],
+    rubricCriteria = [],
     evaluations = [], 
     remarks = [], 
     attendance = [], 
@@ -385,7 +388,7 @@ export const TeamWorkspaceView = ({ team, contextData = {}, onRefresh }) => {
           <Card title={<div className="flex items-center gap-2 font-extrabold text-slate-900 text-sm uppercase tracking-wider"><Clock className="w-5 h-5 text-sky-600" /> Panel 6 – Review Evaluation Timeline</div>}>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
               {(() => {
-                const cyclesToRender = (reviewCycles && reviewCycles.length > 0) ? reviewCycles.slice(0, 3) : [
+                const cyclesToRender = (Array.isArray(reviewCycles) && reviewCycles.length > 0) ? reviewCycles.slice(0, 3) : [
                   { id: 'c1', name: 'Review 1', reviewName: 'Review 1', status: 'Active' }
                 ];
 

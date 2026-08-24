@@ -112,11 +112,16 @@ const TeamDetails = () => {
             guides, 
             faculty, 
             reviewers,
-            evaluations: dataContext.evaluations || [],
-            remarks: dataContext.remarks || [],
-            attendance: dataContext.attendance || [],
-            notifications: dataContext.notifications || [],
-            auditLogs: dataContext.auditLogs || []
+            reviewCycles: dataContext?.reviewCycles || [],
+            rubrics: dataContext?.rubrics || [],
+            rubricCriteria: dataContext?.rubricCriteria || [],
+            students: dataContext?.students || [],
+            projects: dataContext?.projects || [],
+            evaluations: dataContext?.evaluations || [],
+            remarks: dataContext?.remarks || [],
+            attendance: dataContext?.attendance || [],
+            notifications: dataContext?.notifications || [],
+            auditLogs: dataContext?.auditLogs || []
           }}
           onRefresh={() => {}}
         />
