@@ -47,7 +47,8 @@ async function testAuthFlowDiagram() {
     // --------------------------------------------------
     console.log("\nSTEP 3: Visiting http://localhost:5173/ while authenticated as Admin...");
     await page.goto(`${BASE_URL}/`, { waitUntil: 'domcontentloaded' });
-    await new Promise(r => setTimeout(r, 1000));
+    await page.waitForFunction(() => window.location.pathname !== '/', { timeout: 5000 }).catch(() => {});
+    await new Promise(r => setTimeout(r, 600));
 
     const step3Url = page.url();
     console.log(`  -> Current URL: ${step3Url}`);
@@ -83,7 +84,8 @@ async function testAuthFlowDiagram() {
     // --------------------------------------------------
     console.log("\nSTEP 6: Visiting http://localhost:5173/ while authenticated as Evaluator...");
     await page.goto(`${BASE_URL}/`, { waitUntil: 'domcontentloaded' });
-    await new Promise(r => setTimeout(r, 1000));
+    await page.waitForFunction(() => window.location.pathname !== '/', { timeout: 5000 }).catch(() => {});
+    await new Promise(r => setTimeout(r, 600));
 
     const step6Url = page.url();
     console.log(`  -> Current URL: ${step6Url}`);
