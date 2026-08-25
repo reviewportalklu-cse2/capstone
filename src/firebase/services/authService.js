@@ -14,16 +14,19 @@ export const authService = {
     const rawEmail = (emailInput || '').trim();
     if (!rawEmail) throw new Error('Email is required');
 
-    const candidatePasswords = [password];
+    const candidatePasswords = [];
     if (password && password.length < 6) {
       candidatePasswords.push(password.padStart(6, '0'));
+      candidatePasswords.push(password);
+    } else {
+      candidatePasswords.push(password);
     }
 
     const lower = rawEmail.toLowerCase();
     const prefix = lower.includes('@') ? lower.split('@')[0] : lower;
 
     if (prefix === 'admin' || prefix === 'cse2admin' || prefix === 'cse2') {
-      ['Admin@123', 'cse2-2026', 'case2-2026', 'admin123'].forEach(p => {
+      ['cse2-2026', 'Admin@123', 'case2-2026', 'admin123'].forEach(p => {
         if (!candidatePasswords.includes(p)) candidatePasswords.push(p);
       });
     }
