@@ -20,7 +20,7 @@ const footerContent = fs.readFileSync(footerPath, 'utf8');
 const requiredStrings = [
   'Built & Designed by Ashrith Krishna',
   'Engineering ideas into meaningful digital experiences.',
-  '© 2026 Ashrith Krishna. All Rights Reserved.',
+  '© 2026 KLU CSE-2 Department. All Rights Reserved.',
   'View Portfolio',
   'https://myportfolio-eight-ecru-21.vercel.app/',
   'target="_blank"',

@@ -22,7 +22,7 @@ const Footer = () => {
         {/* Right Column / Bottom Stack: Copyright & Portfolio Link */}
         <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-6 pt-2 md:pt-0 border-t md:border-t-0 border-gray-200/60 dark:border-gray-800">
           <span className="text-gray-500 dark:text-gray-400 text-xs">
-            © 2026 Ashrith Krishna. All Rights Reserved.
+            © 2026 KLU CSE-2 Department. All Rights Reserved.
           </span>
           
           <a
