@@ -604,3 +604,130 @@ export const resolveTeamRelations = (team, contextData = {}) => {
     avgMarks
   };
 };
+
+export const resolveProjectRelations = (project, contextData = {}) => {
+  if (!project) return null;
+
+  const {
+    teams = [],
+    students = [],
+    guides = [],
+    faculty = [],
+    reviewers = [],
+    reviewerAssignments = [],
+    reviewCycles = [],
+    guideAssignments = [],
+    facultyAssignments = []
+  } = contextData;
+
+  const pId = String(project.id || project.projectId || project['Project ID'] || '').trim().toLowerCase();
+  const pTitle = String(project.projectTitle || project.title || project.name || project['Project Title'] || '').trim().toLowerCase();
+
+  // 1. Resolve Team
+  let team = teams.find(t => {
+    const tPId = String(t.projectId || t.project || t['Project ID'] || '').trim().toLowerCase();
+    const tId = String(t.id || t.teamId || t['Team ID'] || '').trim().toLowerCase();
+    const pTeamId = String(project.teamId || project.teamName || project['Team ID'] || '').trim().toLowerCase();
+    return (tPId && tPId === pId) || (pTeamId && (pTeamId === tId || pTeamId === tPId));
+  }) || null;
+
+  const teamIdentifier = team ? String(team.teamId || team.id || '').trim().toLowerCase() : String(project.teamId || '').trim().toLowerCase();
+
+  // 2. Resolve Assigned Students
+  const assignedStudents = students.filter(s => {
+    if (!s) return false;
+    const sPId = String(s.projectId || s['Project ID'] || '').trim().toLowerCase();
+    const sPTitle = String(s.projectTitle || '').trim().toLowerCase();
+    const sTeamId = String(s.teamId || s['Team ID'] || '').trim().toLowerCase();
+    return (sPId && sPId === pId) || (sPTitle && sPTitle === pTitle) || (teamIdentifier && sTeamId && sTeamId === teamIdentifier);
+  });
+
+  // Helper to resolve fallback values from team or assigned students
+  const getFallbackVal = (keys) => {
+    if (team) {
+      for (const k of keys) {
+        if (team[k]) return team[k];
+      }
+    }
+    for (const s of assignedStudents) {
+      for (const k of keys) {
+        if (s[k]) return s[k];
+      }
+    }
+    return '';
+  };
+
+  // 3. Resolve Guide
+  let guide = null;
+  const guideKey = project.guideId || project.guideName || team?.guideId || team?.guideName || getFallbackVal(['guideId', 'guideName', 'guide', 'Guide ID', 'Guide Name']);
+  if (guideKey) {
+    guide = resolveEntityMatch(guides, guideKey);
+  }
+  if (!guide && teamIdentifier) {
+    const activeGuideAssignment = guideAssignments?.find(a =>
+      String(a.teamId || a.team || '').trim().toLowerCase() === teamIdentifier && (a.status === 'Active' || !a.status)
+    );
+    if (activeGuideAssignment) {
+      guide = resolveEntityMatch(guides, activeGuideAssignment.guideId || activeGuideAssignment.employeeId);
+    }
+  }
+  const guideName = guide?.name || guide?.['Guide Name'] || project.guideName || team?.guideName || (guide ? guide.name : (getFallbackVal(['guideName']) || 'Unassigned'));
+
+  // 4. Resolve Faculty
+  let facultyObj = null;
+  const facultyKey = project.facultyId || project.facultyName || team?.facultyId || team?.facultyName || getFallbackVal(['facultyId', 'facultyName', 'faculty', 'Faculty ID', 'Faculty Name']);
+  if (facultyKey) {
+    facultyObj = resolveEntityMatch(faculty, facultyKey);
+  }
+  if (!facultyObj && teamIdentifier) {
+    const activeFacultyAssignment = facultyAssignments?.find(a =>
+      String(a.teamId || a.team || '').trim().toLowerCase() === teamIdentifier && (a.status === 'Active' || !a.status)
+    );
+    if (activeFacultyAssignment) {
+      facultyObj = resolveEntityMatch(faculty, activeFacultyAssignment.facultyId || activeFacultyAssignment.employeeId);
+    }
+  }
+  const facultyName = facultyObj?.name || facultyObj?.['Faculty Name'] || project.facultyName || team?.facultyName || (facultyObj ? facultyObj.name : (getFallbackVal(['facultyName']) || 'Unassigned'));
+
+  // 5. Resolve Reviewer
+  let reviewer = null;
+  const reviewerKey = project.reviewerId || project.reviewerName || team?.reviewerId || team?.reviewerName || getFallbackVal(['reviewerId', 'reviewerName', 'reviewer', 'Reviewer ID', 'Reviewer Name']);
+  if (reviewerKey) {
+    reviewer = resolveEntityMatch(reviewers, reviewerKey);
+  }
+  if (!reviewer && teamIdentifier) {
+    const activeCycle = reviewCycles?.find(c => c.status === 'Active') || reviewCycles?.[0] || null;
+    if (activeCycle) {
+      const activeAssignment = reviewerAssignments?.find(a =>
+        String(a.teamId || a.team || '').trim().toLowerCase() === teamIdentifier &&
+        (a.reviewCycleId === activeCycle.id || a.reviewCycleId === activeCycle.reviewCycleId || a.status === 'Active' || !a.status)
+      );
+      if (activeAssignment) {
+        reviewer = resolveEntityMatch(reviewers, activeAssignment.reviewerId || activeAssignment.employeeId);
+      }
+    }
+  }
+  const reviewerName = reviewer?.name || reviewer?.['Reviewer Name'] || project.reviewerName || team?.reviewerName || (reviewer ? reviewer.name : (getFallbackVal(['reviewerName']) || 'Unassigned'));
+
+  const teamName = project.teamName || team?.teamName || team?.name || (teamIdentifier ? (teamIdentifier.toUpperCase().startsWith('T') ? `Team ${teamIdentifier.toUpperCase()}` : teamIdentifier) : 'Unassigned');
+
+  return {
+    ...project,
+    projectId: project.projectId || project.id || (pId ? pId.toUpperCase() : 'Unassigned'),
+    projectTitle: project.projectTitle || project.title || project.name || 'Untitled Project',
+    teamId: team?.teamId || team?.id || project.teamId || 'Unassigned',
+    teamName,
+    teamObj: team,
+    assignedStudents,
+    studentCount: assignedStudents.length,
+    guideId: guide?.guideId || guide?.employeeId || guide?.id || project.guideId || '',
+    guideName,
+    guideObj: guide,
+    facultyId: facultyObj?.facultyId || facultyObj?.employeeId || facultyObj?.id || project.facultyId || '',
+    facultyName,
+    facultyObj,
+    reviewerId: reviewer?.reviewerId || reviewer?.employeeId || reviewer?.id || project.reviewerId || '',
+    reviewerName,
+    reviewerObj: reviewer
+  };
+};

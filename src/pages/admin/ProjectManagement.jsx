@@ -1,5 +1,5 @@
 import { useData } from '@/contexts/DataContext';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { useAdminNavigation } from '@/hooks/useAdminNavigation';
 import Card from '@/components/common/Card';
@@ -13,7 +13,7 @@ import { exportToCsv } from '@/utils/csvExport';
 import { useAuth } from '@/contexts/AuthContext';
 import { Plus, Search, Loader2, Download, Edit2, Trash2 } from 'lucide-react';
 
-import { resolveStudentRelations, resolveTeamRelations } from '@/utils/relationshipResolver';
+import { resolveProjectRelations } from '@/utils/relationshipResolver';
 
 const ProjectManagement = () => {
   const navigationItems = useAdminNavigation();
@@ -29,6 +29,8 @@ const ProjectManagement = () => {
     students = [], 
     reviewCycles = [],
     reviewerAssignments = [],
+    guideAssignments = [],
+    facultyAssignments = [],
     dataLoading 
   } = dataContext;
     
@@ -46,11 +48,17 @@ const ProjectManagement = () => {
     status: 'Active'
   });
 
+  // Pre-calculate project relationships once per dataset update
+  const resolvedProjects = useMemo(() => {
+    if (!projects || projects.length === 0) return [];
+    return projects.map(p => resolveProjectRelations(p, dataContext));
+  }, [projects, teams, students, guides, faculty, reviewers, reviewerAssignments, guideAssignments, facultyAssignments]);
+
   const handleOpenEdit = (project) => {
     setIsEdit(true);
     setFormData({
-      id: project.id,
-      title: project.title || project.projectTitle || '',
+      id: project.id || project.projectId,
+      title: project.projectTitle || project.title || '',
       description: project.description || '',
       domain: project.domain || '',
       teamName: project.teamName || project.teamId || '',
@@ -75,7 +83,7 @@ const ProjectManagement = () => {
       let prevData = null;
 
       if (isEdit) {
-        prevData = projects.find(p => p.id === formData.id);
+        prevData = projects.find(p => p.id === formData.id || p.projectId === formData.id);
         await projectService.update(formData.id, payload);
       } else {
         await projectService.create({
@@ -102,15 +110,15 @@ const ProjectManagement = () => {
   };
 
   const handleDelete = async (project) => {
-    const assigned = students.filter(s => s.projectId === project.id);
+    const assigned = students.filter(s => s.projectId === project.id || s.projectId === project.projectId);
     if (assigned.length > 0) {
       alert(`Cannot delete this project. It is currently assigned to ${assigned.length} student(s).`);
       return;
     }
 
-    if (window.confirm(`Are you sure you want to delete ${project.title}?`)) {
+    if (window.confirm(`Are you sure you want to delete ${project.projectTitle || project.title}?`)) {
       try {
-        await projectService.delete(project.id);
+        await projectService.delete(project.id || project.projectId);
         await auditService.log(currentUser?.uid || 'admin', 'DELETE_PROJECT', 'Project', project, null);
       } catch (err) {
         console.error("Error deleting project:", err);
@@ -119,28 +127,35 @@ const ProjectManagement = () => {
   };
 
   const handleExport = () => {
-    const dataToExport = projects.map(p => {
-      const assignedCount = students.filter(s => s.projectId === p.id).length;
+    const dataToExport = resolvedProjects.map(p => {
       return {
-        'Title': p.title || p.projectTitle,
-        'Domain': p.domain,
-        'Team Name': p.teamName || p.teamId,
-        'Status': p.status,
-        'Assigned Students': assignedCount
+        'Project ID': p.projectId || p.id,
+        'Title': p.projectTitle || p.title,
+        'Domain': p.domain || 'Software Engineering',
+        'Team Name': p.teamName,
+        'Assigned Students': p.studentCount,
+        'Guide': p.guideName,
+        'Classroom Faculty': p.facultyName,
+        'Current Reviewer': p.reviewerName,
+        'Status': p.status || 'Active'
       };
     });
     exportToCsv('capstoneflow_projects.csv', dataToExport);
   };
 
-  const filteredProjects = projects.filter(p => {
-    if (!searchTerm) return true;
+  const filteredProjects = useMemo(() => {
+    if (!searchTerm) return resolvedProjects;
     const term = searchTerm.toLowerCase();
-    return (
-      (p.projectTitle || p.title || p.name || '').toLowerCase().includes(term) || 
+    return resolvedProjects.filter(p => (
+      (p.projectTitle || p.title || p.name || '').toLowerCase().includes(term) ||
+      (p.projectId || p.id || '').toLowerCase().includes(term) ||
       (p.teamName || p.teamId || '').toLowerCase().includes(term) ||
-      (p.domain || '').toLowerCase().includes(term)
-    );
-  });
+      (p.domain || '').toLowerCase().includes(term) ||
+      (p.guideName || '').toLowerCase().includes(term) ||
+      (p.facultyName || '').toLowerCase().includes(term) ||
+      (p.reviewerName || '').toLowerCase().includes(term)
+    ));
+  }, [resolvedProjects, searchTerm]);
 
   const columns = [
     { 
@@ -162,87 +177,41 @@ const ProjectManagement = () => {
     },
     {
       header: 'Team & Members',
-      render: (row) => {
-        const pKey = String(row.id || row.projectId || row.title || '').toLowerCase();
-        
-        // Find assigned students for this project
-        const assignedStudents = students.map(s => resolveStudentRelations(s, dataContext)).filter(s => {
-          const sPId = String(s.projectId || '').toLowerCase();
-          const sPTitle = String(s.projectTitle || '').toLowerCase();
-          return (sPId && sPId === pKey) || (sPTitle && sPTitle === pKey) || sPId === String(row.id).toLowerCase();
-        });
-
-        const teamName = row.teamName || row.teamId || assignedStudents[0]?.teamName || 'Unassigned';
-
-        return (
-          <div>
-            <p className="font-medium text-gray-900">{teamName}</p>
-            <p className="text-xs text-gray-500">{assignedStudents.length} Member{assignedStudents.length !== 1 ? 's' : ''}</p>
-          </div>
-        );
-      }
+      render: (row) => (
+        <div>
+          <p className="font-medium text-gray-900">{row.teamName || 'Unassigned'}</p>
+          <p className="text-xs text-gray-500">{row.studentCount} Member{row.studentCount !== 1 ? 's' : ''}</p>
+        </div>
+      )
     },
     { 
       header: 'Guide', 
-      render: (row) => {
-        const pKey = String(row.id || row.projectId || row.title || '').toLowerCase();
-        const assignedStudents = students.map(s => resolveStudentRelations(s, dataContext)).filter(s => {
-          const sPId = String(s.projectId || '').toLowerCase();
-          const sPTitle = String(s.projectTitle || '').toLowerCase();
-          return (sPId && sPId === pKey) || (sPTitle && sPTitle === pKey) || sPId === String(row.id).toLowerCase();
-        });
-
-        const guideName = assignedStudents[0]?.guideName || row.guideName || 'Unassigned';
-
-        return (
-          <span className={guideName !== 'Unassigned' ? "text-gray-900 font-medium" : "text-gray-400 italic"}>
-            {guideName}
-          </span>
-        );
-      }
+      render: (row) => (
+        <span className={row.guideName !== 'Unassigned' ? "text-gray-900 font-medium" : "text-gray-400 italic"}>
+          {row.guideName}
+        </span>
+      )
     },
     { 
       header: 'Classroom Faculty', 
-      render: (row) => {
-        const pKey = String(row.id || row.projectId || row.title || '').toLowerCase();
-        const assignedStudents = students.map(s => resolveStudentRelations(s, dataContext)).filter(s => {
-          const sPId = String(s.projectId || '').toLowerCase();
-          const sPTitle = String(s.projectTitle || '').toLowerCase();
-          return (sPId && sPId === pKey) || (sPTitle && sPTitle === pKey) || sPId === String(row.id).toLowerCase();
-        });
-
-        const facultyName = assignedStudents[0]?.facultyName || row.facultyName || 'Unassigned';
-
-        return (
-          <span className={facultyName !== 'Unassigned' ? "text-gray-900 font-medium" : "text-gray-400 italic"}>
-            {facultyName}
-          </span>
-        );
-      }
+      render: (row) => (
+        <span className={row.facultyName !== 'Unassigned' ? "text-gray-900 font-medium" : "text-gray-400 italic"}>
+          {row.facultyName}
+        </span>
+      )
     },
     { 
       header: 'Current Reviewer', 
-      render: (row) => {
-        const pKey = String(row.id || row.projectId || row.title || '').toLowerCase();
-        const assignedStudents = students.map(s => resolveStudentRelations(s, dataContext)).filter(s => {
-          const sPId = String(s.projectId || '').toLowerCase();
-          const sPTitle = String(s.projectTitle || '').toLowerCase();
-          return (sPId && sPId === pKey) || (sPTitle && sPTitle === pKey) || sPId === String(row.id).toLowerCase();
-        });
-
-        const reviewerName = assignedStudents[0]?.reviewerName || row.reviewerName || 'Unassigned';
-
-        return (
-          <span className={reviewerName !== 'Unassigned' ? "text-gray-900 font-medium" : "text-gray-400 italic"}>
-            {reviewerName}
-          </span>
-        );
-      }
+      render: (row) => (
+        <span className={row.reviewerName !== 'Unassigned' ? "text-gray-900 font-medium" : "text-gray-400 italic"}>
+          {row.reviewerName}
+        </span>
+      )
     },
     { 
       header: 'Status', 
       render: (row) => (
-        <Badge variant={row.status === 'Completed' ? 'success' : row.status === 'Active' ? 'primary' : 'default'}>
+        <Badge variant={row.status === 'Completed' ? 'success' : row.status === 'Active' || row.status === 'In Progress' ? 'primary' : 'default'}>
           {row.status || 'Active'}
         </Badge>
       )

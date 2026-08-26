@@ -6,6 +6,8 @@ import { X } from 'lucide-react';
 import { NavLink } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 
+import Footer from '@/components/common/Footer';
+
 const DashboardLayout = ({ children, navigationItems, title }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const { logout } = useAuth();
@@ -95,12 +97,13 @@ const DashboardLayout = ({ children, navigationItems, title }) => {
       <div className="flex flex-col w-0 flex-1 overflow-hidden bg-surface-dim">
         <Header title={title} setMobileMenuOpen={setMobileMenuOpen} />
         
-        <main className="flex-1 relative overflow-y-auto focus:outline-none">
+        <main className="flex-1 relative overflow-y-auto focus:outline-none flex flex-col justify-between">
           <div className="py-6">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8">
               {children}
             </div>
           </div>
+          <Footer />
         </main>
       </div>
     </div>
