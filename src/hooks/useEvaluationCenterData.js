@@ -1,4 +1,5 @@
 import { useData } from '@/contexts/DataContext';
+import { resolveTeamRelations } from '@/utils/relationshipResolver';
 
 export const calculateGrade = (percentage) => {
   const val = Number(percentage);
@@ -11,50 +12,55 @@ export const calculateGrade = (percentage) => {
 };
 
 export const useEvaluationCenterData = () => {
-  const { 
-    projects = [], 
-    students = [], 
-    guides = [], 
-    reviewers = [], 
-    faculty = [], 
-    reviews = [], 
-    guideMarks = [], 
+  const {
+    projects = [],
+    students = [],
+    guides = [],
+    reviewers = [],
+    faculty = [],
+    reviews = [],
+    guideMarks = [],
     marks: facultyMarks = [],
     evaluations = [],
     teams: teamsList = [],
+    reviewCycles = [],
+    guideAssignments = [],
+    facultyAssignments = [],
+    reviewerAssignments = [],
     dataLoading
   } = useData() || {};
 
   const getTeamsWithEvaluations = () => {
     if (dataLoading) return [];
 
-    const guideMap = new Map(guides.map(g => [g.id, g]));
-    const reviewerMap = new Map(reviewers.map(r => [r.id, r]));
-    const facultyMap = new Map(faculty.map(f => [f.id, f]));
+    const baseTeams = teamsList && teamsList.length > 0 ? teamsList : projects;
 
-    // Combine projects and teams collection
-    const teamMap = new Map();
-    (projects || []).forEach(p => {
-      const id = p.id || p.teamId;
-      if (id) teamMap.set(String(id).toLowerCase(), { ...p, teamId: id, title: p.title || p.projectTitle || `Project ${id}` });
-    });
-    (teamsList || []).forEach(t => {
-      const id = t.id || t.teamId;
-      if (id && !teamMap.has(String(id).toLowerCase())) {
-        teamMap.set(String(id).toLowerCase(), { ...t, id, teamId: id, title: t.projectTitle || t.title || `Project ${id}` });
-      }
-    });
+    return baseTeams.map((team, index) => {
+      const resolved = resolveTeamRelations(team, {
+        students,
+        projects,
+        guides,
+        faculty,
+        reviewers,
+        reviewCycles,
+        guideAssignments,
+        facultyAssignments,
+        reviewerAssignments,
+        evaluations,
+        guideMarks,
+        facultyMarks,
+        reviews
+      }) || {};
 
-    const combinedList = Array.from(teamMap.values());
-
-    return combinedList.map((project, index) => {
-      const teamId = project.id || project.teamId || `TEAM${String(index + 1).padStart(3, '0')}`;
+      const teamId = resolved.teamId || team.teamId || team.id || `TEAM${String(index + 1).padStart(3, '0')}`;
       const cleanTeamId = String(teamId).replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
 
-      const members = students.filter(s => {
-        const sTeamId = String(s.teamId || s.team || s.projectId || '').replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
-        return sTeamId === cleanTeamId || String(s.projectId || '').toLowerCase() === String(project.id).toLowerCase();
-      });
+      const members = resolved.assignedStudents && resolved.assignedStudents.length > 0 
+        ? resolved.assignedStudents 
+        : students.filter(s => {
+            const sTeamId = String(s.teamId || s.team || s.projectId || '').replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+            return sTeamId === cleanTeamId || String(s.projectId || '').toLowerCase() === String(team.id).toLowerCase();
+          });
 
       const teamEvals = (evaluations || []).filter(e => {
         const eTeamId = String(e.teamId || e.team || '').replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
@@ -63,45 +69,47 @@ export const useEvaluationCenterData = () => {
 
       const guideEval = teamEvals.find(e => e.role === 'guide');
       const facultyEval = teamEvals.find(e => e.role === 'classroom_faculty' || e.role === 'faculty');
-      const reviewerEval = teamEvals.find(e => e.role === 'reviewer');
+      const reviewerEvalR1 = teamEvals.find(e => e.role === 'reviewer' && (e.reviewCycle === 'Review 1' || e.reviewCycleId === 'cycle-1'));
+      const reviewerEvalR2 = teamEvals.find(e => e.role === 'reviewer' && (e.reviewCycle === 'Review 2' || e.reviewCycleId === 'cycle-2'));
+      const reviewerEvalR3 = teamEvals.find(e => e.role === 'reviewer' && (e.reviewCycle === 'Review 3' || e.reviewCycleId === 'cycle-3'));
 
-      const guide = guideMap.get(project.guideId) || { name: project.guideName || (guideEval?.evaluatorName || 'Dr. Ramesh (Assigned)') };
-      const reviewer = reviewerMap.get(project.reviewerId) || { name: project.reviewerName || (reviewerEval?.evaluatorName || 'Dr. Kiran (Assigned)') };
-      const facultyPanel = facultyMap.get(project.facultyId) || { name: project.facultyName || (facultyEval?.evaluatorName || 'Faculty Panel A') };
+      const guideName = resolved.guideName || team.guideName || (guideEval?.evaluatorName || 'Unassigned');
+      const reviewerName = resolved.reviewerName || team.reviewerName || (reviewerEvalR1?.evaluatorName || 'Unassigned');
+      const facultyPanelName = resolved.facultyName || team.facultyName || (facultyEval?.evaluatorName || 'Unassigned');
 
-      const teamReviews = reviews.filter(r => 
-        r.projectId === project.id || 
-        members.some(m => m.id === r.studentId || m.uid === r.studentId)
-      );
+      const gMark = guideEval?.teamAverage ?? (team.guideScore > 0 ? team.guideScore : null);
+      const fMark = facultyEval?.teamAverage ?? (team.facultyScore > 0 ? team.facultyScore : null);
+      const r1 = reviewerEvalR1?.teamAverage ?? (team.review1Score > 0 ? team.review1Score : null);
+      const r2 = reviewerEvalR2?.teamAverage ?? (team.review2Score > 0 ? team.review2Score : null);
+      const r3 = reviewerEvalR3?.teamAverage ?? (team.review3Score > 0 ? team.review3Score : null);
 
-      const r1 = reviewerEval?.teamAverage ?? (teamReviews.find(r => r.reviewType === 'Review 1')?.totalScore || project.review1Score || 0);
-      const r2 = teamReviews.find(r => r.reviewType === 'Review 2')?.totalScore || project.review2Score || 0;
-      const r3 = teamReviews.find(r => r.reviewType === 'Review 3')?.totalScore || project.review3Score || 0;
+      const validScores = [gMark, fMark, r1, r2, r3].filter(v => v !== null && v !== undefined);
+      const totalWeightedScore = validScores.length > 0
+        ? Math.round(validScores.reduce((sum, v) => sum + v, 0) / validScores.length)
+        : null;
 
-      const gMark = guideEval?.teamAverage ?? (guideMarks.find(m => members.some(s => s.id === m.studentId || s.uid === m.studentId))?.marks || project.guideScore || 0);
-      const fMark = facultyEval?.teamAverage ?? (facultyMarks.find(m => members.some(s => s.id === m.studentId || s.uid === m.studentId))?.marks || project.facultyScore || 0);
-
-      const totalWeightedScore = Math.round((gMark * 0.2) + (fMark * 0.2) + (r1 * 0.2) + (r2 * 0.2) + (r3 * 0.2));
-      const percentage = totalWeightedScore;
-      const grade = calculateGrade(percentage);
-      const passStatus = percentage >= 50 ? 'Pass' : 'Fail';
+      const percentage = totalWeightedScore !== null ? totalWeightedScore : 0;
+      const grade = totalWeightedScore !== null ? calculateGrade(percentage) : 'PENDING';
+      const passStatus = totalWeightedScore !== null ? (percentage >= 50 ? 'Pass' : 'Fail') : 'Pending';
 
       let stageProgress = 0;
-      if (gMark > 0) stageProgress += 20;
-      if (fMark > 0) stageProgress += 20;
-      if (r1 > 0) stageProgress += 20;
-      if (r2 > 0) stageProgress += 20;
-      if (r3 > 0) stageProgress += 20;
+      if (gMark !== null) stageProgress += 20;
+      if (fMark !== null) stageProgress += 20;
+      if (r1 !== null) stageProgress += 20;
+      if (r2 !== null) stageProgress += 20;
+      if (r3 !== null) stageProgress += 20;
 
       return {
-        ...project,
+        ...team,
+        id: team.id || teamId,
         teamId,
-        teamName: project.teamName || project.title || `Team ${index + 1}`,
+        teamName: resolved.teamName || team.teamName || team.name || `Team ${teamId}`,
+        projectTitle: resolved.projectTitle || team.projectTitle || team.title || `Project ${teamId}`,
         members,
-        membersCount: members.length || project.membersCount || 4,
-        guideName: guide.name,
-        reviewerName: reviewer.name,
-        facultyPanelName: facultyPanel.name,
+        membersCount: members.length || resolved.studentCount || team.membersCount || 4,
+        guideName,
+        reviewerName,
+        facultyPanelName,
         guideMarks: gMark,
         facultyMarks: fMark,
         review1Score: r1,
@@ -112,150 +120,39 @@ export const useEvaluationCenterData = () => {
         grade,
         passStatus,
         stageProgress,
-        approvalStage: project.approvalStage || (stageProgress === 100 ? 'Published' : 'Submitted'),
-        isLocked: project.isLocked || false,
-        status: project.status || (stageProgress === 100 ? 'Completed' : 'In Progress'),
-        department: project.department || 'CSE',
-        academicYear: project.academicYear || '2026-27',
-        batch: project.batch || '2022-26',
-        section: project.section || 'A',
-        room: project.room || 'Lab 302',
-        slot: project.slot || '10:00 AM - 10:30 AM'
+        evaluations: teamEvals,
+        guideEval,
+        facultyEval,
+        reviewerEvalR1,
+        reviewerEvalR2,
+        reviewerEvalR3,
+        approvalStage: team.approvalStage || (stageProgress === 100 ? 'Published' : (teamEvals.length > 0 ? 'Submitted' : 'Draft')),
+        isLocked: team.isLocked || teamEvals.some(e => e.status === 'Locked'),
+        status: team.status || (stageProgress === 100 ? 'Completed' : 'In Progress'),
+        department: team.department || resolved.department || 'CSE',
+        academicYear: team.academicYear || '2026-27',
+        batch: team.batch || '2022-26',
+        section: team.section || 'A',
+        room: team.room || 'Lab 302',
+        slot: team.slot || '10:00 AM - 10:30 AM'
       };
     });
   };
 
   const getTeamDetails = (teamId) => {
     if (dataLoading) return null;
-    
+
     const allTeams = getTeamsWithEvaluations();
-    const team = allTeams.find(t => t.id === teamId || t.teamId === teamId || t.title?.toLowerCase().replace(/\s+/g, '-') === teamId);
-    
+    const cleanId = String(teamId).replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+    const team = allTeams.find(t => {
+      const tId = String(t.id || '').replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+      const tTeamId = String(t.teamId || '').replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+      return tId === cleanId || tTeamId === cleanId || t.projectTitle?.toLowerCase().replace(/\s+/g, '-') === teamId;
+    });
+
     if (!team) return null;
 
-    const rubrics = {
-      guide: {
-        problemStatement: Math.round(team.guideMarks * 0.2) || 4,
-        innovation: Math.round(team.guideMarks * 0.2) || 4,
-        implementation: Math.round(team.guideMarks * 0.3) || 6,
-        documentation: Math.round(team.guideMarks * 0.15) || 3,
-        presentation: Math.round(team.guideMarks * 0.15) || 3,
-        total: team.guideMarks
-      },
-      faculty: {
-        viva: Math.round(team.facultyMarks * 0.4) || 8,
-        implementation: Math.round(team.facultyMarks * 0.4) || 8,
-        documentation: Math.round(team.facultyMarks * 0.2) || 4,
-        total: team.facultyMarks
-      },
-      review1: { presentation: 25, technical: 30, qa: 25, total: team.review1Score },
-      review2: { presentation: 28, technical: 32, qa: 28, total: team.review2Score },
-      review3: { presentation: 30, technical: 31, qa: 30, total: team.review3Score }
-    };
-
-    const facultyPanelDetails = {
-      name: team.facultyPanelName,
-      chairperson: 'Dr. Srinivas (HOD - CSE)',
-      members: ['Dr. Lakshmi', 'Dr. Ravi', 'Dr. Naveen', 'Dr. Mahesh'],
-      department: team.department
-    };
-
-    const documents = [
-      { name: 'Project Proposal', type: 'PDF', size: '1.2 MB', url: '#', date: '2026-01-15' },
-      { name: 'Architecture Synopsis', type: 'PDF', size: '2.4 MB', url: '#', date: '2026-02-10' },
-      { name: 'Interim Review Presentation', type: 'PPTX', size: '5.8 MB', url: '#', date: '2026-03-20' },
-      { name: 'Final Project Report', type: 'PDF', size: '8.1 MB', url: '#', date: '2026-04-12' },
-      { name: 'GitHub Repository Code', type: 'ZIP', size: '14.5 MB', url: team.repoUrl || 'https://github.com/capstone', date: '2026-04-18' }
-    ];
-
-    const marksHistory = team.marksHistory || [
-      {
-        id: 'v1',
-        date: '2026-03-10',
-        time: '11:30 AM',
-        updatedBy: 'Dr. Ramesh',
-        role: 'Guide',
-        previousScore: 15,
-        updatedScore: team.guideMarks,
-        reason: 'Initial guide evaluation score awarded after code review.'
-      },
-      {
-        id: 'v2',
-        date: '2026-04-02',
-        time: '02:15 PM',
-        updatedBy: 'Dr. Kiran',
-        role: 'Reviewer',
-        previousScore: 78,
-        updatedScore: team.review2Score,
-        reason: 'Revised Review 2 presentation score post Q&A defense.'
-      }
-    ];
-
-    const timeline = [
-      {
-        title: 'Guide Evaluation Submitted',
-        evaluator: team.guideName,
-        role: 'Guide',
-        date: '2026-02-15',
-        score: `${team.guideMarks}/20`,
-        remarks: 'Good progress in architecture design and sprint plan.',
-        status: 'Completed'
-      },
-      {
-        title: 'Faculty Internal Assessment',
-        evaluator: team.facultyPanelName,
-        role: 'Classroom Faculty',
-        date: '2026-03-01',
-        score: `${team.facultyMarks}/20`,
-        remarks: 'Solid implementation of database models and APIs.',
-        status: 'Completed'
-      },
-      {
-        title: 'Review 1 (External Evaluation)',
-        evaluator: team.reviewerName,
-        role: 'Panel Reviewer',
-        date: '2026-03-15',
-        score: `${team.review1Score}/100`,
-        remarks: 'Approved with minor suggestions for frontend UI.',
-        status: team.review1Score > 0 ? 'Completed' : 'Pending'
-      },
-      {
-        title: 'Review 2 (External Evaluation)',
-        evaluator: team.reviewerName,
-        role: 'Panel Reviewer',
-        date: '2026-04-05',
-        score: `${team.review2Score}/100`,
-        remarks: 'Technical implementation verified. Excellent demo.',
-        status: team.review2Score > 0 ? 'Completed' : 'Pending'
-      },
-      {
-        title: 'Review 3 (Final Defense)',
-        evaluator: team.reviewerName,
-        role: 'Panel Reviewer',
-        date: '2026-04-20',
-        score: `${team.review3Score}/100`,
-        remarks: 'Outstanding project defense. Documentation complete.',
-        status: team.review3Score > 0 ? 'Completed' : 'Pending'
-      },
-      {
-        title: 'Final Results Published',
-        evaluator: 'University Admin',
-        role: 'Admin',
-        date: '2026-04-25',
-        score: `${team.finalScore}/100 (${team.grade})`,
-        remarks: 'Final grades published to university records.',
-        status: team.approvalStage === 'Published' ? 'Published' : 'Pending'
-      }
-    ];
-
-    return {
-      ...team,
-      rubrics,
-      facultyPanelDetails,
-      documents,
-      marksHistory,
-      timeline
-    };
+    return team;
   };
 
   return {

@@ -396,12 +396,12 @@ export const resolveStudentRelations = (student, contextData = {}) => {
   // 3. Resolve Guide
   const guideKey = student.guideId || student.guideName || student['Guide ID'] || student['Guide Name'] || team?.guideId || team?.guideName || team?.['Guide Name'] || '';
   const guide = resolveEntityMatch(guides, guideKey);
-  const guideName = guide?.name || guide?.['Guide Name'] || student.guideName || team?.guideName || (guideKey && !guideKey.startsWith('gde-') ? guideKey : 'Unassigned');
+  const guideName = guide?.name || guide?.['Guide Name'] || student.guideName || team?.guideName || (typeof guideKey === 'string' && !guideKey.startsWith('gde-') ? guideKey : 'Unassigned');
 
   // 4. Resolve Faculty
   const facultyKey = student.facultyId || student.facultyName || student['Faculty ID'] || student['Faculty Name'] || team?.facultyId || team?.facultyName || team?.['Faculty Name'] || '';
   const facultyObj = resolveEntityMatch(faculty, facultyKey);
-  const facultyName = facultyObj?.name || facultyObj?.['Faculty Name'] || student.facultyName || team?.facultyName || (facultyKey && !facultyKey.startsWith('fac-') ? facultyKey : 'Unassigned');
+  const facultyName = facultyObj?.name || facultyObj?.['Faculty Name'] || student.facultyName || team?.facultyName || (typeof facultyKey === 'string' && !facultyKey.startsWith('fac-') ? facultyKey : 'Unassigned');
 
   // 5. Resolve Reviewer
   const reviewerKey = student.reviewerId || student.reviewerName || student['Reviewer ID'] || student['Reviewer Name'] || team?.reviewerId || team?.reviewerName || team?.['Reviewer Name'] || '';
@@ -416,7 +416,7 @@ export const resolveStudentRelations = (student, contextData = {}) => {
     }
   }
 
-  const reviewerName = reviewer?.name || reviewer?.['Reviewer Name'] || student.reviewerName || team?.reviewerName || (reviewerKey && !reviewerKey.startsWith('rev-') ? reviewerKey : 'Unassigned');
+  const reviewerName = reviewer?.name || reviewer?.['Reviewer Name'] || student.reviewerName || team?.reviewerName || (typeof reviewerKey === 'string' && !reviewerKey.startsWith('rev-') ? reviewerKey : 'Unassigned');
 
   // 6. Resolve Active Review Cycle
   const activeCycle = reviewCycles?.find(c => c.status === 'Active') || reviewCycles?.[0] || null;
@@ -508,7 +508,7 @@ export const resolveTeamRelations = (team, contextData = {}) => {
     const guideKey = team.guideId || team.guideName || team['Guide ID'] || getMemberValue(['guideId', 'guideName', 'guide', 'Guide ID', 'Guide Name', 'assignedGuideId', 'guideCode']);
     guide = resolveEntityMatch(guides, guideKey);
   }
-  const guideName = guide?.name || guide?.['Guide Name'] || team.guideName || (team.guideId && !team.guideId.startsWith('gde-') ? team.guideId : 'Unassigned');
+  const guideName = guide?.name || guide?.['Guide Name'] || team.guideName || (typeof team.guideId === 'string' && !team.guideId.startsWith('gde-') ? team.guideId : 'Unassigned');
 
   // 4. Resolve Faculty (Check active facultyAssignments first, then team/member facultyKey)
   let facultyObj = null;
@@ -523,7 +523,7 @@ export const resolveTeamRelations = (team, contextData = {}) => {
     const facultyKey = team.facultyId || team.facultyName || team['Faculty ID'] || getMemberValue(['facultyId', 'facultyName', 'faculty', 'Faculty ID', 'Faculty Name', 'assignedFacultyId', 'facultyCode']);
     facultyObj = resolveEntityMatch(faculty, facultyKey);
   }
-  const facultyName = facultyObj?.name || facultyObj?.['Faculty Name'] || team.facultyName || (team.facultyId && !team.facultyId.startsWith('fac-') ? team.facultyId : 'Unassigned');
+  const facultyName = facultyObj?.name || facultyObj?.['Faculty Name'] || team.facultyName || (typeof team.facultyId === 'string' && !team.facultyId.startsWith('fac-') ? team.facultyId : 'Unassigned');
 
   // 5. Resolve Reviewer (Check Active Review Cycle Assignment first, then fallback to team/member reviewerKey)
   let reviewer = null;

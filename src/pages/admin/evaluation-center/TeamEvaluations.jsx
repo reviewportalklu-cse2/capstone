@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { evaluationCenterService } from '@/firebase/services/evaluationCenterService';
+import { exportToCSV, exportToExcel } from '@/utils/ReportExporter';
 import { useEvaluationCenterData } from '@/hooks/useEvaluationCenterData';
 import Card from '@/components/common/Card';
 import Table from '@/components/common/Table';
@@ -17,13 +19,14 @@ import {
   Clock, 
   AlertCircle, 
   FileText, 
+  Download,
   Send,
   Loader2
 } from 'lucide-react';
 
 const TeamEvaluations = () => {
-  const [teams, setTeams] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const { getTeamsWithEvaluations, dataLoading } = useEvaluationCenterData();
+  const [asyncTeams, setAsyncTeams] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedDept, setSelectedDept] = useState('All');
   const [selectedStatus, setSelectedStatus] = useState('All');
@@ -32,26 +35,50 @@ const TeamEvaluations = () => {
 
   const navigate = useNavigate();
 
-  useEffect(() => {
-    fetchTeams();
-  }, []);
+  const hookTeams = getTeamsWithEvaluations() || [];
+  const teams = asyncTeams.length > 0 ? asyncTeams : hookTeams;
+  const loading = dataLoading && teams.length === 0;
 
-  const fetchTeams = async () => {
-    setLoading(true);
-    try {
-      const data = await evaluationCenterService.getAllTeamsWithEvaluations();
-      setTeams(data);
-    } catch (err) {
-      console.error("Failed to load team evaluations:", err);
-    } finally {
-      setLoading(false);
-    }
+  const formatExportRows = (items) => {
+    return items.map(t => ({
+      'Team ID': t.teamId || t.id,
+      'Project Title': t.projectTitle || t.teamName || t.title || 'N/A',
+      'Review Cycle': 'Review 1',
+      'Guide Evaluator': t.guideName || 'Unassigned',
+      'Guide Employee ID': t.guideEmployeeId || t.guideId || 'N/A',
+      'Guide Score': t.guideMarks !== null && t.guideMarks !== undefined ? t.guideMarks : 'PENDING',
+      'Guide Status': t.guideMarks !== null && t.guideMarks !== undefined ? 'Submitted' : 'PENDING',
+      'Faculty Evaluator': t.facultyPanelName || t.facultyName || 'Unassigned',
+      'Faculty Employee ID': t.facultyEmployeeId || t.facultyId || 'N/A',
+      'Faculty Score': t.facultyMarks !== null && t.facultyMarks !== undefined ? t.facultyMarks : 'PENDING',
+      'Faculty Status': t.facultyMarks !== null && t.facultyMarks !== undefined ? 'Submitted' : 'PENDING',
+      'Reviewer Evaluator': t.reviewerName || 'Unassigned',
+      'Reviewer Employee ID': t.reviewerEmployeeId || t.reviewerId || 'N/A',
+      'Reviewer Score': t.review1Score !== null && t.review1Score !== undefined ? t.review1Score : 'PENDING',
+      'Reviewer Status': t.review1Score !== null && t.review1Score !== undefined ? 'Submitted' : 'PENDING',
+      'Final Score': t.finalScore !== null && t.finalScore !== undefined ? t.finalScore : 'PENDING',
+      'Grade': t.finalScore !== null && t.finalScore !== undefined ? (t.grade || 'N/A') : 'PENDING',
+      'Latest Submitted Date': t.latestEvalDate && t.latestEvalDate !== 'Pending' ? t.latestEvalDate : 'PENDING'
+    }));
+  };
+
+  const handleExportCSV = (teamsToExport = filteredTeams) => {
+    const rows = formatExportRows(teamsToExport);
+    exportToCSV('evaluation_center_teams_report', rows);
+  };
+
+  const handleExportExcel = (teamsToExport = filteredTeams) => {
+    const rows = formatExportRows(teamsToExport);
+    exportToExcel('evaluation_center_teams_report', rows);
   };
 
   const handleToggleLock = async (team) => {
     try {
       const updatedLock = await evaluationCenterService.toggleTeamLock(team.id, team.isLocked, 'admin');
-      setTeams(prev => prev.map(t => t.id === team.id ? { ...t, isLocked: updatedLock } : t));
+      setAsyncTeams(prev => {
+        const base = prev.length > 0 ? prev : hookTeams;
+        return base.map(t => t.id === team.id ? { ...t, isLocked: updatedLock } : t);
+      });
     } catch (err) {
       alert("Failed to toggle lock status");
     }
@@ -143,19 +170,19 @@ const TeamEvaluations = () => {
     },
     {
       key: 'guideMarks',
-      header: 'Guide (20%)',
+      header: 'Guide Marks',
       render: (_, row) => (
-        <span className={`text-xs font-bold ${row.guideMarks > 0 ? 'text-gray-900' : 'text-gray-400 italic'}`}>
-          {row.guideMarks > 0 ? `${row.guideMarks}/20` : 'Pending'}
+        <span className={`text-xs font-bold ${row.guideMarks !== null && row.guideMarks !== undefined ? 'text-gray-900' : 'text-amber-600 italic'}`}>
+          {row.guideMarks !== null && row.guideMarks !== undefined ? `${row.guideMarks} / 100` : 'PENDING'}
         </span>
       )
     },
     {
       key: 'facultyMarks',
-      header: 'Faculty (20%)',
+      header: 'Faculty Marks',
       render: (_, row) => (
-        <span className={`text-xs font-bold ${row.facultyMarks > 0 ? 'text-gray-900' : 'text-gray-400 italic'}`}>
-          {row.facultyMarks > 0 ? `${row.facultyMarks}/20` : 'Pending'}
+        <span className={`text-xs font-bold ${row.facultyMarks !== null && row.facultyMarks !== undefined ? 'text-gray-900' : 'text-amber-600 italic'}`}>
+          {row.facultyMarks !== null && row.facultyMarks !== undefined ? `${row.facultyMarks} / 100` : 'PENDING'}
         </span>
       )
     },
@@ -164,9 +191,9 @@ const TeamEvaluations = () => {
       header: 'R1 / R2 / R3',
       render: (_, row) => (
         <div className="text-xs font-medium space-x-1">
-          <span className={row.review1Score > 0 ? 'text-gray-900 font-bold' : 'text-gray-400'}>{row.review1Score || '-'}</span> /
-          <span className={row.review2Score > 0 ? 'text-gray-900 font-bold' : 'text-gray-400'}>{row.review2Score || '-'}</span> /
-          <span className={row.review3Score > 0 ? 'text-gray-900 font-bold' : 'text-gray-400'}>{row.review3Score || '-'}</span>
+          <span className={row.review1Score !== null && row.review1Score !== undefined ? 'text-gray-900 font-bold' : 'text-amber-600 italic'}>{row.review1Score !== null && row.review1Score !== undefined ? `${row.review1Score}` : 'PENDING'}</span> /
+          <span className={row.review2Score !== null && row.review2Score !== undefined ? 'text-gray-900 font-bold' : 'text-amber-600 italic'}>{row.review2Score !== null && row.review2Score !== undefined ? `${row.review2Score}` : 'PENDING'}</span> /
+          <span className={row.review3Score !== null && row.review3Score !== undefined ? 'text-gray-900 font-bold' : 'text-amber-600 italic'}>{row.review3Score !== null && row.review3Score !== undefined ? `${row.review3Score}` : 'PENDING'}</span>
         </div>
       )
     },
@@ -174,6 +201,9 @@ const TeamEvaluations = () => {
       key: 'finalScore',
       header: 'Final Score',
       render: (_, row) => {
+        if (row.finalScore === null || row.finalScore === undefined) {
+          return <span className="text-xs font-bold text-amber-600 italic">PENDING</span>;
+        }
         const gradeStr = String(row?.grade || 'F');
         const isGradeA = gradeStr.startsWith('A');
         return (
@@ -292,6 +322,13 @@ const TeamEvaluations = () => {
               <option value="Approved">Approved</option>
               <option value="Published">Published</option>
             </select>
+
+            <Button size="xs" variant="outline" onClick={() => handleExportCSV(filteredTeams)} className="text-xs font-semibold">
+              <Download className="w-3.5 h-3.5 mr-1 text-green-600" /> Export CSV
+            </Button>
+            <Button size="xs" variant="outline" onClick={() => handleExportExcel(filteredTeams)} className="text-xs font-semibold">
+              <Download className="w-3.5 h-3.5 mr-1 text-blue-600" /> Export XLSX
+            </Button>
           </div>
         </div>
 
@@ -305,8 +342,11 @@ const TeamEvaluations = () => {
               <Button size="xs" variant="outline" onClick={() => alert(`Locking ${selectedTeams.length} team(s)`)}>
                 <Lock className="w-3 h-3 mr-1" /> Lock Selected
               </Button>
-              <Button size="xs" variant="outline" onClick={() => alert(`Exporting ${selectedTeams.length} team(s)`)}>
-                <FileText className="w-3 h-3 mr-1" /> Export Selected
+              <Button size="xs" variant="outline" onClick={() => handleExportCSV(teams.filter(t => selectedTeams.includes(t.id)))}>
+                <FileText className="w-3 h-3 mr-1" /> Export Selected CSV
+              </Button>
+              <Button size="xs" variant="outline" onClick={() => handleExportExcel(teams.filter(t => selectedTeams.includes(t.id)))}>
+                <FileText className="w-3 h-3 mr-1" /> Export Selected XLSX
               </Button>
               <Button size="xs" variant="primary" onClick={() => alert(`Publishing results for ${selectedTeams.length} team(s)`)}>
                 <Send className="w-3 h-3 mr-1" /> Publish Results

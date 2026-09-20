@@ -96,7 +96,12 @@ export const useFacultyAnalytics = () => {
 
       // 2. Check for Active Cycle Faculty evaluation
       if (activeCycle) {
-        const hasEvaluated = evaluations.some(e => e.teamId === team.id && e.reviewCycleId === activeCycle.id && e.role === 'faculty');
+        const hasEvaluated = evaluations.some(e => 
+          (String(e.teamId || '').toLowerCase() === String(team.id || '').toLowerCase() || String(e.teamId || '').toLowerCase() === String(team.teamId || '').toLowerCase()) &&
+          (e.reviewCycleId === activeCycle.id || e.reviewCycle === activeCycle.name || e.reviewCycle === activeCycle.reviewName) &&
+          (e.role === 'faculty' || e.role === 'classroom_faculty') &&
+          (e.status === 'Locked' || e.status === 'Submitted')
+        );
         if (!hasEvaluated) {
           pendingList.push({
             type: 'ActiveCycle',

@@ -68,8 +68,8 @@ export const useReviewerAnalytics = () => {
     return mappedTeams.filter(t => t.cycleStatus === 'Active').map(team => {
       // Find reviewer's evaluation for this team in this active cycle
       const teamEval = evaluations.find(e => 
-        e.teamId === team.id && 
-        e.reviewCycleId === team.reviewCycleId && 
+        (String(e.teamId || '').toLowerCase() === String(team.id || '').toLowerCase() || String(e.teamId || '').toLowerCase() === String(team.teamId || '').toLowerCase()) && 
+        (e.reviewCycleId === team.reviewCycleId || e.reviewCycle === team.reviewCycleName || e.reviewCycle === 'Review 1') && 
         e.role === 'reviewer'
       );
 

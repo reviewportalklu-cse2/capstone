@@ -11,37 +11,38 @@ import Button from '@/components/common/Button';
 import Input from '@/components/common/Input';
 import Modal from '@/components/common/Modal';
 import { resolveTeamRelations, resolveStudentRelations, getEntityKeys } from '@/utils/relationshipResolver';
-import { ArrowLeft, Lock, Unlock, Save, ShieldCheck, AlertCircle, Calendar, Clock, CheckCircle, CheckCircle2, Eye, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, Lock, Unlock, Save, ShieldCheck, AlertCircle, Calendar, Clock, CheckCircle, CheckCircle2, Eye, AlertTriangle, Info } from 'lucide-react';
 
 const EvaluationWorkspace = () => {
   const { teamId } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
   const { userRole, currentUser, domainUser } = useAuth();
-  
-  const { 
-    teams, projects, students, rubrics, rubricCriteria, 
-    evaluations, pendingEvaluations, reviewCycles, reviewerAssignments, guideAssignments, facultyAssignments, guides, faculty: facultyList, reviewers, getGuideById, getFacultyById, getReviewerById, getActiveReviewCycle, dataLoading 
+
+  const {
+    teams, projects, students, rubrics, rubricCriteria,
+    evaluations, pendingEvaluations, reviewCycles, reviewerAssignments, guideAssignments, facultyAssignments, guides, faculty: facultyList, reviewers, getGuideById, getFacultyById, getReviewerById, getActiveReviewCycle, dataLoading
   } = useData();
 
   const activeCycle = getActiveReviewCycle();
   const [selectedCycle, setSelectedCycle] = useState('Review 1');
   const [teamSelection, setTeamSelection] = useState('');
-  
+
   useEffect(() => {
     if (activeCycle && userRole !== 'admin') {
       setSelectedCycle(activeCycle.name || activeCycle.reviewName || 'Review 1');
     }
   }, [activeCycle, userRole]);
-  
+
   const [marks, setMarks] = useState({});
+  const [markErrors, setMarkErrors] = useState({});
   const [remarks, setRemarks] = useState({});
   const [attendance, setAttendance] = useState({});
-  
+
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showPreviewModal, setShowPreviewModal] = useState(false);
 
-  // Determine which navigation to use
+  // Determine navigation by userRole
   const navItems = useMemo(() => {
     switch(userRole) {
       case 'admin': return adminNavigation;
@@ -53,11 +54,11 @@ const EvaluationWorkspace = () => {
     }
   }, [userRole]);
 
-  // If no teamId, render team selector
+  // Available Teams filter
   const availableTeams = useMemo(() => {
     if (!teams) return [];
     if (userRole === 'admin') return teams;
-    
+
     const userEntity = domainUser || currentUser;
     const userKeys = getEntityKeys(userEntity);
 
@@ -91,17 +92,29 @@ const EvaluationWorkspace = () => {
     });
   }, [teams, userRole, currentUser, domainUser, projects, students, guides, facultyList, reviewers, reviewCycles, reviewerAssignments, guideAssignments, facultyAssignments]);
 
+  const [directTeam, setDirectTeam] = useState(null);
+
+  useEffect(() => {
+    if (teamId && (!teams || teams.length === 0 || !teams.some(x => String(x.id || x.teamId).toLowerCase() === String(teamId).toLowerCase()))) {
+      FirestoreService.getById('teams', teamId).then(t => {
+        if (t) setDirectTeam(t);
+      }).catch(console.error);
+    }
+  }, [teamId, teams]);
+
   const teamData = useMemo(() => {
-    if (!teamId || !teams) return null;
+    if (!teamId) return null;
+    const pool = (teams && teams.length > 0) ? teams : (directTeam ? [directTeam] : []);
+    if (pool.length === 0) return null;
     const cleanParamId = String(teamId).replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
-    const t = teams.find(x => {
+    const t = pool.find(x => {
       const rawId = String(x.id || x.teamId).toLowerCase();
       const normId = rawId.replace(/[^a-zA-Z0-9]/g, '');
       return rawId === String(teamId).toLowerCase() || normId === cleanParamId;
     });
     if (!t) return null;
     const rel = resolveTeamRelations(t, { students, projects, guides, faculty: facultyList, reviewers, reviewCycles, reviewerAssignments, guideAssignments, facultyAssignments });
-    
+
     const teamMembers = students?.filter(s => {
       const sRel = resolveStudentRelations(s, { teams, projects, guides, faculty: facultyList, reviewers, reviewCycles, reviewerAssignments });
       const memberTeamId = String(sRel.teamId || s.teamId || '').toLowerCase();
@@ -116,44 +129,23 @@ const EvaluationWorkspace = () => {
       faculty: rel.facultyObj || (rel.facultyId ? getFacultyById(rel.facultyId) : null),
       reviewer: rel.reviewerObj || (rel.reviewerId ? getReviewerById(rel.reviewerId) : null),
     };
-  }, [teamId, teams, projects, students, facultyList, guides, reviewers, reviewCycles, reviewerAssignments, guideAssignments, facultyAssignments, getGuideById, getFacultyById, getReviewerById]);
+  }, [teamId, teams, directTeam, projects, students, facultyList, guides, reviewers, reviewCycles, reviewerAssignments, guideAssignments, facultyAssignments, getGuideById, getFacultyById, getReviewerById]);
 
+  // Active Published Rubric lookup for selectedCycle
   const activeRubric = useMemo(() => {
-    if (rubrics && rubrics.length > 0) {
-      const cycleName = (selectedCycle || activeCycle?.name || activeCycle?.reviewName || 'Review 1').trim().toLowerCase();
-      const cycleId = (activeCycle?.id || activeCycle?.reviewCycleId || activeCycle?.cycleId || '').trim().toLowerCase();
+    if (!rubrics || rubrics.length === 0) return null;
 
-      const matchesCycle = (r) => {
-        const rCycleName = String(r.reviewCycle || r.reviewCycleName || '').trim().toLowerCase();
-        const rCycleId = String(r.reviewCycleId || r.cycleId || r.id || '').trim().toLowerCase();
-        return (rCycleName && rCycleName === cycleName) || (cycleId && rCycleId === cycleId);
-      };
+    const cycleName = String(selectedCycle || activeCycle?.name || activeCycle?.reviewName || 'Review 1').trim().toLowerCase();
 
-      const publishedMatch = rubrics.find(r => matchesCycle(r) && (r.status === 'Published' || r.status === 'Active'));
-      if (publishedMatch) return publishedMatch;
-
-      const anyMatch = rubrics.find(r => matchesCycle(r));
-      if (anyMatch) return anyMatch;
-
-      const anyPublished = rubrics.find(r => r.status === 'Published' || r.status === 'Active');
-      if (anyPublished) return anyPublished;
-    }
-
-    // Default Fallback Rubric Object (Guarantees evaluation workspace ALWAYS renders criteria & input controls)
-    return {
-      id: `rubric_default_${(selectedCycle || 'review_1').toLowerCase().replace(/\s+/g, '_')}`,
-      rubricId: `R001`,
-      title: `${selectedCycle || 'Review 1'} Evaluation Rubric`,
-      version: '1.0',
-      status: 'Published',
-      reviewCycle: selectedCycle || 'Review 1',
-      criteria: [
-        { id: 'crit_tech', title: 'Technical Knowledge', description: 'Technical implementation & concept clarity', maximumMarks: 25, displayOrder: 1 },
-        { id: 'crit_pres', title: 'Presentation', description: 'Slide quality & oral presentation skills', maximumMarks: 25, displayOrder: 2 },
-        { id: 'crit_impl', title: 'Implementation & Demo', description: 'Working project demo & execution', maximumMarks: 25, displayOrder: 3 },
-        { id: 'crit_viva', title: 'Viva & Q&A', description: 'Responses to evaluator questions', maximumMarks: 25, displayOrder: 4 }
-      ]
+    const matchesCycle = (r) => {
+      const rCycleName = String(r.reviewCycle || r.reviewCycleName || '').trim().toLowerCase();
+      return rCycleName && (rCycleName === cycleName || cycleName.includes(rCycleName) || rCycleName.includes(cycleName));
     };
+
+    const publishedMatch = rubrics.find(r => matchesCycle(r) && (r.status === 'Published' || r.status === 'Active'));
+    if (publishedMatch) return publishedMatch;
+
+    return rubrics.find(r => r.status === 'Published' || r.status === 'Active') || null;
   }, [rubrics, selectedCycle, activeCycle]);
 
   const cycleConfig = useMemo(() => {
@@ -163,7 +155,7 @@ const EvaluationWorkspace = () => {
   const activeWindowStatus = useMemo(() => {
     if (!cycleConfig) return { isAvailable: true, message: 'Active' };
     const now = new Date();
-    
+
     let startBoundary = null;
     if (cycleConfig.startDate) {
       const timeStr = cycleConfig.startTime || '00:00';
@@ -200,60 +192,43 @@ const EvaluationWorkspace = () => {
     return reviewerAssignments?.find(a => String(a.teamId).toLowerCase() === String(teamId).toLowerCase() && (a.reviewCycleId === cycleConfig.id || a.status === 'Active'));
   }, [cycleConfig, teamId, userRole, reviewerAssignments]);
 
+  // Active Criteria derived from published rubric
   const activeCriteria = useMemo(() => {
+    if (!activeRubric) return [];
+
     let result = [];
 
-    if (activeRubric) {
-      // 1. Check embedded criteria array in activeRubric
-      if (Array.isArray(activeRubric.criteria) && activeRubric.criteria.length > 0) {
-        result = [...activeRubric.criteria].map((c, idx) => ({
-          id: c.id || `crit_${idx + 1}`,
-          title: c.title || c.name || `Criterion ${idx + 1}`,
+    if (Array.isArray(activeRubric.criteria) && activeRubric.criteria.length > 0) {
+      result = activeRubric.criteria.map((c, idx) => ({
+        id: c.id || c.criterionId || `crit_${idx + 1}`,
+        criterionId: c.criterionId || c.id || `crit_${idx + 1}`,
+        title: c.title || c.criterionName || `Criterion ${idx + 1}`,
+        description: c.description || '',
+        maximumMarks: Number(c.maximumMarks || c.maxMarks || 10),
+        displayOrder: Number(c.displayOrder || c.order || idx + 1)
+      }));
+    } else if (rubricCriteria && rubricCriteria.length > 0) {
+      const rId = String(activeRubric.id || activeRubric.rubricId || '').toLowerCase();
+      const filtered = rubricCriteria.filter(c => String(c.rubricId || '').toLowerCase() === rId);
+
+      if (filtered.length > 0) {
+        result = filtered.map((c, idx) => ({
+          id: c.id || c.criterionId || `crit_${idx + 1}`,
+          criterionId: c.criterionId || c.id || `crit_${idx + 1}`,
+          title: c.title || c.criterionName || `Criterion ${idx + 1}`,
           description: c.description || '',
-          maximumMarks: Number(c.maximumMarks || c.maxMarks || 25),
-          displayOrder: c.displayOrder || idx + 1
+          maximumMarks: Number(c.maximumMarks || c.maxMarks || 10),
+          displayOrder: Number(c.displayOrder || c.order || idx + 1)
         }));
-      } else if (rubricCriteria && rubricCriteria.length > 0) {
-        // 2. Filter from rubricCriteria collection
-        const rKeys = getEntityKeys({
-          id: activeRubric.id,
-          rubricId: activeRubric.rubricId,
-          title: activeRubric.title
-        });
-
-        const filtered = rubricCriteria.filter(c => {
-          const cKeys = getEntityKeys({ rubricId: c.rubricId });
-          return rKeys.some(k => cKeys.includes(k)) || 
-            String(c.rubricId || '').toLowerCase() === String(activeRubric.id || activeRubric.rubricId || '').toLowerCase();
-        });
-
-        if (filtered.length > 0) {
-          result = filtered.map((c, idx) => ({
-            id: c.id || `crit_${idx + 1}`,
-            title: c.title || c.name || `Criterion ${idx + 1}`,
-            description: c.description || '',
-            maximumMarks: Number(c.maximumMarks || c.maxMarks || 25),
-            displayOrder: c.displayOrder || idx + 1
-          }));
-        }
       }
     }
 
-    // 3. Fallback: If result is empty, generate standard evaluation criteria (Technical Knowledge, Presentation, Implementation, Viva)
-    if (result.length === 0) {
-      result = [
-        { id: 'crit_tech', title: 'Technical Knowledge', description: 'Technical implementation & concept clarity', maximumMarks: 25, displayOrder: 1 },
-        { id: 'crit_pres', title: 'Presentation', description: 'Slide quality & oral presentation skills', maximumMarks: 25, displayOrder: 2 },
-        { id: 'crit_impl', title: 'Implementation & Demo', description: 'Working project demo & execution', maximumMarks: 25, displayOrder: 3 },
-        { id: 'crit_viva', title: 'Viva & Q&A', description: 'Responses to evaluator questions', maximumMarks: 25, displayOrder: 4 }
-      ];
-    }
-
-    return result.sort((a, b) => a.displayOrder - b.displayOrder);
+    return result.sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0));
   }, [activeRubric, rubricCriteria]);
 
   const userKeys = useMemo(() => getEntityKeys(domainUser || currentUser), [domainUser, currentUser]);
 
+  // Existing Evaluation scoped strictly by team, reviewCycle, and role
   const existingEvaluation = useMemo(() => {
     if (!evaluations || !teamId) return null;
     const cleanParamId = String(teamId).replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
@@ -266,9 +241,7 @@ const EvaluationWorkspace = () => {
 
       const eCycle = String(e.reviewCycle || e.reviewCycleId || '').trim().toLowerCase();
       const sCycle = String(selectedCycle || '').trim().toLowerCase();
-      const aCycleId = String(activeCycle?.id || activeCycle?.reviewCycleId || '').trim().toLowerCase();
-      const cycleMatch = !eCycle || eCycle === sCycle || (aCycleId && eCycle === aCycleId);
-      if (!cycleMatch) return false;
+      if (eCycle !== sCycle) return false;
 
       const eRole = String(e.role || '').toLowerCase();
       const isEFac = eRole === 'faculty' || eRole === 'classroom_faculty';
@@ -285,12 +258,18 @@ const EvaluationWorkspace = () => {
 
       return userKeys.some(k => eKeys.includes(k));
     }) || null;
-  }, [evaluations, teamId, selectedCycle, activeCycle, userRole, userKeys, domainUser, currentUser]);
-  
+  }, [evaluations, teamId, selectedCycle, userRole, userKeys]);
+
   const allEvaluationsForCycle = useMemo(() => {
     if (!evaluations || !teamId) return [];
-    return evaluations.filter(e => String(e.teamId || e.team).toLowerCase() === String(teamId).toLowerCase() && (e.reviewCycle === selectedCycle || e.reviewCycleId === activeCycle?.id));
-  }, [evaluations, teamId, selectedCycle, activeCycle]);
+    return evaluations.filter(e => {
+      const eTeamId = String(e.teamId || e.team || '').replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+      const cleanParamId = String(teamId).replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+      const eCycle = String(e.reviewCycle || e.reviewCycleId || '').trim().toLowerCase();
+      const sCycle = String(selectedCycle || '').trim().toLowerCase();
+      return eTeamId === cleanParamId && eCycle === sCycle;
+    });
+  }, [evaluations, teamId, selectedCycle]);
 
   const activePendingEvaluations = useMemo(() => {
     if (!pendingEvaluations || !teamId) return [];
@@ -303,30 +282,53 @@ const EvaluationWorkspace = () => {
       setRemarks(existingEvaluation.remarks || {});
       setAttendance(existingEvaluation.attendance || {});
     } else if (teamData) {
-      // Init attendance to Present
       const initAtt = {};
       teamData.members.forEach(m => { initAtt[m.id] = 'Present'; });
       setAttendance(initAtt);
+      setMarks({});
     }
   }, [existingEvaluation, teamData]);
 
+  // Strict Mark Validation: 0 <= enteredMark <= maxMarks
   const handleMarkChange = (studentId, criterionId, value) => {
+    const markKey = `${studentId}_${criterionId}`;
+
     if (value === '' || value === null || value === undefined) {
-      setMarks(prev => ({
-        ...prev,
-        [`${studentId}_${criterionId}`]: ''
-      }));
+      setMarks(prev => {
+        const next = { ...prev };
+        delete next[markKey];
+        return next;
+      });
+      setMarkErrors(prev => {
+        const next = { ...prev };
+        delete next[markKey];
+        return next;
+      });
       return;
     }
 
-    const rawVal = Number(value);
-    const criterion = activeCriteria.find(c => String(c.id) === String(criterionId));
-    const max = criterion ? (Number(criterion.maximumMarks) || 100) : 100;
-    const clamped = Math.max(0, Math.min(max, isNaN(rawVal) ? 0 : rawVal));
+    const numVal = Number(value);
+    const criterion = activeCriteria.find(c => String(c.id) === String(criterionId) || String(c.criterionId) === String(criterionId));
+    const maxMarks = criterion ? (Number(criterion.maximumMarks) || 10) : 10;
+
+    if (isNaN(numVal) || numVal < 0 || numVal > maxMarks) {
+      setMarkErrors(prev => ({
+        ...prev,
+        [markKey]: `Must be 0 – ${maxMarks}`
+      }));
+    } else {
+      setMarkErrors(prev => {
+        const next = { ...prev };
+        delete next[markKey];
+        return next;
+      });
+    }
+
+    const clampedVal = isNaN(numVal) ? 0 : Math.max(0, Math.min(maxMarks, numVal));
 
     setMarks(prev => ({
       ...prev,
-      [`${studentId}_${criterionId}`]: clamped
+      [markKey]: clampedVal
     }));
   };
 
@@ -379,6 +381,10 @@ const EvaluationWorkspace = () => {
 
   const handleOpenPreview = () => {
     if (!activeRubric || !teamData) return;
+    if (Object.keys(markErrors).length > 0) {
+      alert("Please fix invalid marks before proceeding to preview.");
+      return;
+    }
     setShowPreviewModal(true);
   };
 
@@ -388,7 +394,7 @@ const EvaluationWorkspace = () => {
       let totalMarks = 0;
       const studentTotals = {};
       const sanitizedMarks = {};
-      
+
       teamData.members.forEach(student => {
         let stuTotal = 0;
         const isAbsent = attendance[student.id] === 'Absent';
@@ -401,12 +407,14 @@ const EvaluationWorkspace = () => {
         studentTotals[student.id] = stuTotal;
         totalMarks += stuTotal;
       });
-      
+
       const teamAvg = Math.round(totalMarks / (teamData.members.length || 1));
 
       const now = new Date().toISOString();
       const evalRole = (userRole === 'classroom_faculty' || userRole === 'faculty') ? 'faculty' : userRole;
-      const evalDocId = existingEvaluation?.id || `eval_${String(selectedCycle).toLowerCase().replace(/\s+/g, '-')}_${String(teamData.id).toLowerCase()}_${evalRole}`;
+      const cleanCycle = String(selectedCycle).toLowerCase().replace(/[^a-z0-9]/g, '_');
+      const cleanTeam = String(teamData.id).toLowerCase().replace(/[^a-z0-9]/g, '_');
+      const evalDocId = existingEvaluation?.id || `eval_${cleanCycle}_${cleanTeam}_${evalRole}`;
 
       const evaluationData = {
         id: evalDocId,
@@ -421,6 +429,7 @@ const EvaluationWorkspace = () => {
         rubricTitle: activeRubric.title || 'Evaluation Rubric',
         rubricVersion: activeRubric.version || '1.0',
         evaluatorId: currentUser.uid,
+        evaluatorEmployeeId: currentUser.employeeId || currentUser.uid,
         evaluatorName: currentUser.displayName || currentUser.email,
         role: evalRole,
         marks: sanitizedMarks,
@@ -436,61 +445,46 @@ const EvaluationWorkspace = () => {
       };
 
       await FirestoreService.set('evaluations', evalDocId, evaluationData);
-      
-      // Create immutable history
+
+      // Update matching pending evaluations in Firestore
+      try {
+        const pendings = await FirestoreService.getAll('pendingEvaluations');
+        const cleanTid = String(teamData.id).toLowerCase();
+        const matchingPendings = (pendings || []).filter(p => 
+          String(p.teamId || '').toLowerCase() === cleanTid &&
+          (p.reviewCycle === selectedCycle || p.reviewCycleId === cycleConfig?.id || p.reviewCycleId === selectedCycle)
+        );
+        for (const p of matchingPendings) {
+          await FirestoreService.updateDocument('pendingEvaluations', p.id, {
+            status: 'Completed',
+            submittedAt: now,
+            updatedAt: now
+          });
+        }
+      } catch (pErr) {
+        console.warn('Could not update pendingEvaluations in Firestore:', pErr);
+      }
+
+      // Create immutable evaluation history
       await FirestoreService.createDocument('evaluationHistory', {
         ...evaluationData,
-        evaluationId: evaluationData.id || existingEvaluation?.id,
-        timestamp: new Date().toISOString(),
+        evaluationId: evalDocId,
+        timestamp: now,
         action: 'Submitted and Locked'
       });
-      
-      // Audit Log & Notification for Submit
+
+      // Audit log & notification
       await FirestoreService.createDocument('auditLogs', {
         user: currentUser.uid,
         role: userRole,
         teamId: teamData.id,
         reviewCycle: selectedCycle,
-        timestamp: new Date().toISOString(),
+        timestamp: now,
         action: 'Evaluation Submitted',
         previousValue: existingEvaluation ? 'Updated' : 'Created',
         newValue: 'Locked'
       });
-      
-      await FirestoreService.createDocument('notifications', {
-        title: 'Evaluation Submitted',
-        message: `${userRole.toUpperCase()} has submitted the evaluation for team ${teamData.id} (${selectedCycle}).`,
-        targetRole: 'admin',
-        targetTeam: teamData.id,
-        createdAt: new Date().toISOString(),
-        read: false
-      });
-      
-      // Create pending evaluations for absent students
-      Object.entries(attendance).forEach(async ([stuId, status]) => {
-        if (status === 'Absent') {
-          await FirestoreService.createDocument('pendingEvaluations', {
-            teamId: teamData.id,
-            studentId: stuId,
-            reviewCycle: selectedCycle,
-            deadline: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-            status: 'Pending',
-            createdAt: new Date().toISOString()
-          });
-          
-          await FirestoreService.createDocument('auditLogs', {
-            user: currentUser.uid,
-            role: userRole,
-            teamId: teamData.id,
-            reviewCycle: selectedCycle,
-            timestamp: new Date().toISOString(),
-            action: 'Pending Evaluation Created',
-            previousValue: 'None',
-            newValue: `Absent: ${stuId}`
-          });
-        }
-      });
-      
+
       setShowPreviewModal(false);
       alert('Evaluation submitted successfully and locked.');
       const targetPath = userRole === 'classroom_faculty' ? 'faculty' : userRole;
@@ -511,24 +505,29 @@ const EvaluationWorkspace = () => {
       let totalMarks = 0;
       const studentTotals = {};
       const sanitizedMarks = {};
-      
+
       teamData.members.forEach(student => {
         let stuTotal = 0;
+        const isAbsent = attendance[student.id] === 'Absent';
         activeCriteria.forEach(c => {
           const rawVal = marks[`${student.id}_${c.id}`];
-          const numVal = Number(rawVal) || 0;
-          sanitizedMarks[`${student.id}_${c.id}`] = numVal;
-          stuTotal += numVal;
+          if (rawVal !== undefined && rawVal !== null && rawVal !== '') {
+            const numVal = isAbsent ? 0 : (Number(rawVal) || 0);
+            sanitizedMarks[`${student.id}_${c.id}`] = numVal;
+            stuTotal += numVal;
+          }
         });
         studentTotals[student.id] = stuTotal;
         totalMarks += stuTotal;
       });
-      
+
       const teamAvg = Math.round(totalMarks / (teamData.members.length || 1));
 
       const now = new Date().toISOString();
       const evalRole = (userRole === 'classroom_faculty' || userRole === 'faculty') ? 'faculty' : userRole;
-      const evalDocId = existingEvaluation?.id || `eval_${String(selectedCycle).toLowerCase().replace(/\s+/g, '-')}_${String(teamData.id).toLowerCase()}_${evalRole}`;
+      const cleanCycle = String(selectedCycle).toLowerCase().replace(/[^a-z0-9]/g, '_');
+      const cleanTeam = String(teamData.id).toLowerCase().replace(/[^a-z0-9]/g, '_');
+      const evalDocId = existingEvaluation?.id || `eval_${cleanCycle}_${cleanTeam}_${evalRole}`;
 
       const evaluationData = {
         id: evalDocId,
@@ -543,6 +542,7 @@ const EvaluationWorkspace = () => {
         rubricTitle: activeRubric.title || 'Evaluation Rubric',
         rubricVersion: activeRubric.version || '1.0',
         evaluatorId: currentUser.uid,
+        evaluatorEmployeeId: currentUser.employeeId || currentUser.uid,
         evaluatorName: currentUser.displayName || currentUser.email,
         role: evalRole,
         marks: sanitizedMarks,
@@ -563,12 +563,12 @@ const EvaluationWorkspace = () => {
         role: userRole,
         teamId: teamData.id,
         reviewCycle: selectedCycle,
-        timestamp: new Date().toISOString(),
+        timestamp: now,
         action: 'Evaluation Draft Saved',
         previousValue: existingEvaluation ? existingEvaluation.status : 'None',
         newValue: 'Draft'
       });
-      
+
       alert('Draft evaluation saved successfully.');
     } catch (err) {
       console.error(err);
@@ -577,6 +577,7 @@ const EvaluationWorkspace = () => {
       setIsSubmitting(false);
     }
   };
+
   const handleUnlock = async () => {
     if (!existingEvaluation || userRole !== 'admin') return;
     try {
@@ -584,39 +585,14 @@ const EvaluationWorkspace = () => {
         status: 'Draft',
         updatedAt: new Date().toISOString()
       });
-      
-      await FirestoreService.createDocument('auditLogs', {
-        evaluationId: existingEvaluation.id,
-        user: currentUser.uid,
-        adminId: currentUser.uid,
-        adminName: currentUser.displayName || currentUser.email,
-        role: userRole,
-        teamId: teamData.id,
-        reviewCycle: selectedCycle,
-        timestamp: new Date().toISOString(),
-        action: 'UNLOCK_EVALUATION',
-        previousStatus: 'Locked',
-        newStatus: 'Draft',
-        previousValue: 'Locked',
-        newValue: 'Draft'
-      });
-      
-      await FirestoreService.createDocument('notifications', {
-        title: 'Evaluation Unlocked',
-        message: `Admin has unlocked your evaluation for team ${teamData.id} (${selectedCycle}).`,
-        targetRole: existingEvaluation.role,
-        targetTeam: teamData.id,
-        createdAt: new Date().toISOString(),
-        read: false
-      });
-      
       alert('Evaluation unlocked successfully.');
     } catch (err) {
       console.error(err);
       alert('Failed to unlock evaluation.');
     }
   };
-  if (dataLoading) {
+
+  if (dataLoading || (!teamData && (!teams || teams.length === 0) && !directTeam)) {
     return (
       <DashboardLayout navigationItems={navItems} title="Evaluation Workspace">
         <div className="flex h-screen items-center justify-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div></div>
@@ -637,7 +613,6 @@ const EvaluationWorkspace = () => {
                 onChange={(e) => {
                   setTeamSelection(e.target.value);
                   if (e.target.value) {
-                    // Navigate relative to current path
                     const basePath = location.pathname;
                     navigate(`${basePath}/${e.target.value}`);
                   }
@@ -668,7 +643,7 @@ const EvaluationWorkspace = () => {
   return (
     <DashboardLayout navigationItems={navItems} title="Evaluation Workspace">
       <div className="max-w-7xl mx-auto space-y-6 pb-20 font-sans">
-        
+
         {!activeWindowStatus.isAvailable && (
           <div className="bg-amber-50 border border-amber-200 text-amber-800 px-4 py-3 rounded-xl flex items-center gap-3 text-xs font-semibold shadow-sm">
             <AlertCircle className="w-5 h-5 text-amber-600 shrink-0" />
@@ -679,7 +654,7 @@ const EvaluationWorkspace = () => {
           </div>
         )}
 
-        {/* Header */}
+        {/* Workspace Header */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-6 rounded-lg shadow-sm border border-gray-200">
           <div className="flex items-center gap-4">
             <Button variant="ghost" onClick={() => navigate(-1)} className="px-2">
@@ -694,10 +669,10 @@ const EvaluationWorkspace = () => {
               <p className="text-sm text-gray-500 mt-1">{teamData.project?.title || 'No Project Assigned'}</p>
             </div>
           </div>
-          
+
           <div className="flex items-center gap-4">
             <select
-              className="rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm p-2 border bg-white"
+              className="rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm p-2 border bg-white font-semibold text-gray-800"
               value={selectedCycle}
               onChange={(e) => setSelectedCycle(e.target.value)}
               disabled={isLocked || userRole !== 'admin'}
@@ -718,35 +693,44 @@ const EvaluationWorkspace = () => {
                 <Save className="w-4 h-4"/> Save Draft
               </Button>
             )}
-            
+
             <Button onClick={handleOpenPreview} disabled={isLocked || isSubmitting || !activeRubric} className="flex items-center gap-2">
               {isSubmitting ? 'Submitting...' : (isLocked ? 'Locked' : <><Eye className="w-4 h-4"/> Preview & Submit</>)}
             </Button>
           </div>
         </div>
 
+        {/* Rule 5 Requirement: If no published rubric, show exact required message */}
         {!activeRubric ? (
-          <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 p-4 rounded-lg flex items-center gap-2">
-            <AlertCircle className="w-5 h-5" />
-            No published rubric found for {selectedCycle}. Please contact administrator.
+          <div className="bg-amber-50 border border-amber-200 text-amber-900 p-6 rounded-xl flex items-start gap-4 shadow-sm">
+            <AlertCircle className="w-6 h-6 text-amber-600 shrink-0 mt-0.5" />
+            <div>
+              <h3 className="font-bold text-base text-amber-900">
+                No published rubric is configured for this review cycle.
+              </h3>
+              <p className="text-xs text-amber-700 mt-1">
+                An Admin must configure and publish a rubric for <strong>{selectedCycle}</strong> in the Rubrics Engine before evaluators can enter marks.
+              </p>
+            </div>
           </div>
         ) : (
           <>
             {activePendingEvaluations.length > 0 && (
               <div className="bg-orange-50 border border-orange-200 text-orange-800 p-4 rounded-lg flex items-center gap-2 mb-4">
                 <AlertCircle className="w-5 h-5 flex-shrink-0" />
-                This team has active Pending Evaluations that must be completed before the current review cycle can be closed.
+                This team has active Pending Evaluations that must be completed.
               </div>
             )}
-            
-            <Card title={`Attendance - ${selectedCycle}`} icon={CheckCircle2}>
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+
+            {/* Attendance Section */}
+            <Card title={`Attendance — ${selectedCycle}`} icon={CheckCircle2}>
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
                 {teamData.members.map(student => (
                   <div key={student.id} className="border border-gray-200 rounded-lg p-3 bg-gray-50">
-                    <p className="font-bold text-gray-900">{student.name}</p>
+                    <p className="font-bold text-gray-900 text-sm">{student.name}</p>
                     <p className="text-xs text-gray-500 mb-2">{student.rollNumber || student.id}</p>
                     <select
-                      className="w-full rounded-md border-gray-300 shadow-sm text-sm p-1.5 border bg-white"
+                      className="w-full rounded-md border-gray-300 shadow-sm text-xs font-semibold p-2 border bg-white"
                       value={attendance[student.id] || 'Present'}
                       onChange={(e) => handleAttendanceChange(student.id, e.target.value)}
                       disabled={isLocked}
@@ -759,50 +743,66 @@ const EvaluationWorkspace = () => {
               </div>
             </Card>
 
-            <Card title={`Marks Entry - ${activeRubric.title} (v${activeRubric.version})`} icon={ShieldCheck} className="overflow-x-auto">
+            {/* Rubric Marks Entry Table */}
+            <Card title={`Rubric Marks Entry — ${activeRubric.title} (v${activeRubric.version})`} icon={ShieldCheck} className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider sticky left-0 bg-gray-50 z-10 w-48">Student</th>
+                    <th className="px-3 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider sticky left-0 bg-gray-50 z-10 w-48">
+                      Student
+                    </th>
                     {activeCriteria.map(c => (
-                      <th key={c.id} className="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[120px]">
-                        <div title={c.description}>{c.title}</div>
-                        <div className="text-primary-600 font-bold">Max: {c.maximumMarks}</div>
+                      <th key={c.id || c.criterionId} className="px-3 py-3 text-center text-xs font-bold text-gray-600 uppercase tracking-wider min-w-[150px]">
+                        <div className="font-bold text-gray-900">{c.title}</div>
+                        <div className="text-primary-600 font-extrabold text-[11px] mt-0.5">Max: {c.maximumMarks} Marks</div>
+                        {c.description && (
+                          <div className="text-[10px] font-normal text-gray-500 mt-1 normal-case line-clamp-2" title={c.description}>
+                            {c.description}
+                          </div>
+                        )}
                       </th>
                     ))}
-                    <th className="px-3 py-3 text-center text-xs font-bold text-gray-900 uppercase tracking-wider bg-gray-100">Total</th>
+                    <th className="px-3 py-3 text-center text-xs font-extrabold text-gray-900 uppercase tracking-wider bg-gray-100">
+                      Total
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
                   {teamData.members.map(student => {
                     let studentTotal = 0;
+                    const isAbsent = attendance[student.id] === 'Absent';
                     return (
-                      <tr key={student.id} className={attendance[student.id] === 'Absent' ? 'opacity-50 bg-gray-50' : ''}>
+                      <tr key={student.id} className={isAbsent ? 'opacity-50 bg-red-50/20' : ''}>
                         <td className="px-3 py-4 whitespace-nowrap sticky left-0 bg-white z-10 border-r border-gray-100">
-                          <div className="text-sm font-medium text-gray-900">{student.name}</div>
+                          <div className="text-sm font-bold text-gray-900">{student.name}</div>
                           <div className="text-xs text-gray-500">{student.rollNumber || student.id}</div>
-                          {attendance[student.id] === 'Absent' && <Badge variant="danger" className="text-[10px] mt-1">Absent</Badge>}
+                          {isAbsent && <Badge variant="danger" className="text-[10px] mt-1">Absent</Badge>}
                         </td>
                         {activeCriteria.map(c => {
-                          const rawVal = marks[`${student.id}_${c.id}`];
-                          const displayVal = rawVal === undefined || rawVal === null ? (existingEvaluation ? 0 : 0) : rawVal;
-                          const numVal = Number(rawVal) || 0;
+                          const markKey = `${student.id}_${c.id}`;
+                          const rawVal = marks[markKey];
+                          const displayVal = isAbsent ? 0 : (rawVal === undefined || rawVal === null ? '' : rawVal);
+                          const numVal = isAbsent ? 0 : (Number(rawVal) || 0);
                           studentTotal += numVal;
+                          const err = markErrors[markKey];
+
                           return (
-                            <td key={c.id} className="px-3 py-4 whitespace-nowrap text-center">
+                            <td key={c.id || c.criterionId} className="px-3 py-4 whitespace-nowrap text-center">
                               <Input
                                 type="number"
                                 min={0}
                                 max={c.maximumMarks}
-                                className="w-20 text-center mx-auto font-medium"
+                                className={`w-20 text-center mx-auto font-bold ${err ? 'border-red-500 ring-1 ring-red-500 bg-red-50' : ''}`}
                                 value={displayVal}
                                 onChange={(e) => handleMarkChange(student.id, c.id, e.target.value)}
-                                disabled={isLocked || attendance[student.id] === 'Absent'}
+                                disabled={isLocked || isAbsent}
+                                placeholder="0"
                               />
+                              {err && <div className="text-[10px] text-red-600 font-bold mt-1">{err}</div>}
                             </td>
                           );
                         })}
-                        <td className="px-3 py-4 whitespace-nowrap text-center font-bold text-lg text-primary-700 bg-gray-50">
+                        <td className="px-3 py-4 whitespace-nowrap text-center font-black text-lg text-primary-700 bg-gray-50">
                           {studentTotal}
                         </td>
                       </tr>
@@ -812,16 +812,17 @@ const EvaluationWorkspace = () => {
               </table>
             </Card>
 
+            {/* Remarks Section */}
             <Card title="Remarks & Feedback" icon={CheckCircle2}>
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Strengths</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Strengths Observed</label>
                   <textarea
                     className="w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm p-2 border bg-white min-h-[80px]"
                     value={remarks.strengths || ''}
                     onChange={(e) => setRemarks({...remarks, strengths: e.target.value})}
                     disabled={isLocked}
-                    placeholder="Team strengths observed during evaluation..."
+                    placeholder="Key project strengths and positive achievements..."
                   />
                 </div>
                 <div>
@@ -831,13 +832,13 @@ const EvaluationWorkspace = () => {
                     value={remarks.weaknesses || ''}
                     onChange={(e) => setRemarks({...remarks, weaknesses: e.target.value})}
                     disabled={isLocked}
-                    placeholder="Areas where the team needs to focus..."
+                    placeholder="Specific areas where the team should improve..."
                   />
                 </div>
               </div>
             </Card>
-            
-            {/* Read-Only Visibility of All 3 Evaluators for Current Team & Cycle */}
+
+            {/* Evaluator Panel Summary: Role Isolation Read-Only Visibility */}
             <div className="mt-8 pt-8 border-t border-gray-200">
               <h3 className="text-lg font-bold text-gray-900 mb-4">Evaluator Panel Summary ({selectedCycle})</h3>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -858,9 +859,12 @@ const EvaluationWorkspace = () => {
                           {evalObj ? (evalObj.status || 'Submitted') : 'PENDING'}
                         </Badge>
                       </div>
-                      
+
                       <div className="text-2xl font-black text-gray-900 mt-2">
-                        {evalObj && evalObj.teamAverage !== undefined && evalObj.teamAverage !== null ? `${evalObj.teamAverage} / 100` : <span className="text-sm font-bold text-amber-600 italic">PENDING</span>}
+                        {evalObj && evalObj.teamAverage !== undefined && evalObj.teamAverage !== null
+                          ? `${evalObj.teamAverage} / 100`
+                          : <span className="text-sm font-bold text-amber-600 italic">PENDING</span>
+                        }
                       </div>
 
                       {evalObj?.remarks && (
@@ -885,7 +889,6 @@ const EvaluationWorkspace = () => {
           maxWidth="max-w-4xl"
         >
           <div className="space-y-6 text-sm font-sans p-1">
-            {/* Header Details */}
             <div className="bg-slate-900 text-white p-5 rounded-xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
               <div>
                 <div className="flex items-center gap-2">
@@ -901,11 +904,10 @@ const EvaluationWorkspace = () => {
               </div>
             </div>
 
-            {/* Student Marks & Attendance Breakdown Table */}
             <div className="border border-gray-200 rounded-xl overflow-hidden shadow-sm">
               <div className="bg-gray-100 px-4 py-2 border-b font-bold text-gray-800 text-xs uppercase tracking-wider flex justify-between items-center">
                 <span>Student Score Breakdown</span>
-                <span className="text-primary-700 font-extrabold">Rubric Max per Student: {previewStats.maxPossibleStudent} Marks</span>
+                <span className="text-primary-700 font-extrabold">Rubric Max: {previewStats.maxPossibleStudent} Marks</span>
               </div>
               <div className="overflow-x-auto">
                 <table className="min-w-full divide-y divide-gray-200">
@@ -955,7 +957,6 @@ const EvaluationWorkspace = () => {
               </div>
             </div>
 
-            {/* Team Summary Cards */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <div className="bg-gray-50 p-3 rounded-lg border text-center">
                 <span className="text-[11px] font-semibold text-gray-500 block uppercase">Total Students</span>
@@ -975,14 +976,12 @@ const EvaluationWorkspace = () => {
               </div>
             </div>
 
-            {/* Remarks Summary */}
             <div className="bg-gray-50 p-4 rounded-xl border border-gray-200 space-y-2 text-xs">
               <p className="font-bold text-gray-900 uppercase">Remarks & Feedback</p>
               <p><span className="font-semibold text-gray-700">Strengths:</span> {remarks.strengths || 'N/A'}</p>
               <p><span className="font-semibold text-gray-700">Areas for Improvement:</span> {remarks.weaknesses || 'N/A'}</p>
             </div>
 
-            {/* Warning Confirmation Alert */}
             <div className="bg-amber-50 border border-amber-200 p-4 rounded-xl flex items-start gap-3 text-amber-900 text-xs shadow-sm">
               <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
               <div>
@@ -993,7 +992,6 @@ const EvaluationWorkspace = () => {
               </div>
             </div>
 
-            {/* Modal Actions */}
             <div className="flex justify-end items-center gap-3 border-t pt-4">
               <Button
                 variant="outline"
@@ -1005,7 +1003,6 @@ const EvaluationWorkspace = () => {
               <Button
                 variant="primary"
                 onClick={handleConfirmSubmit}
-                disabled={isSubmitting}
                 disabled={isSubmitting}
                 className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700"
               >

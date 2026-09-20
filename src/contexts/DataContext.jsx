@@ -103,9 +103,10 @@ export const DataProvider = ({ children }) => {
       if (!hasError) {
         setLoading(false);
       }
-    }, 1200);
+    }, 4000);
 
     const handleData = (key, incomingData) => {
+      console.log('[DATA_SYNC]', key, 'loaded count:', incomingData?.length);
       setData(prev => ({ ...prev, [key]: incomingData }));
       loadedKeys.add(key);
       const hasCoreLoaded = Array.from(coreKeys).every(k => loadedKeys.has(k));
@@ -115,7 +116,7 @@ export const DataProvider = ({ children }) => {
     };
 
     const handleError = (key, err) => {
-      console.error(`Error in DataContext subscribing to ${key}:`, err);
+      console.error(`[DATA_SYNC_ERROR] Error subscribing to ${key}:`, err);
       hasError = true;
       setError(`Failed to sync ${key}. Check network connection.`);
       setLoading(false);
@@ -138,17 +139,18 @@ export const DataProvider = ({ children }) => {
       unsubs.forEach(unsub => {
         if (typeof unsub === 'function') unsub();
       });
-      // reset state on unmount or role switch
-      setData({
-        students: [], guides: [], faculty: [], reviewers: [],
-        teams: [], projects: [], notifications: [], reviews: [],
-        marks: [], guideMarks: [], submissions: [], reports: [], attendance: [],
-        rooms: [], schedules: [], milestones: [],
-        rubrics: [], rubricCriteria: [], evaluations: [], pendingEvaluations: [], evaluationRemarks: [],
-        reviewCycles: [], reviewerAssignments: [], settings: []
-      });
+      if (!currentUser) {
+        setData({
+          students: [], guides: [], faculty: [], reviewers: [],
+          teams: [], projects: [], notifications: [], reviews: [],
+          marks: [], guideMarks: [], submissions: [], reports: [], attendance: [],
+          rooms: [], schedules: [], milestones: [],
+          rubrics: [], rubricCriteria: [], evaluations: [], pendingEvaluations: [], evaluationRemarks: [],
+          reviewCycles: [], reviewerAssignments: [], settings: []
+        });
+      }
     };
-  }, [currentUser?.uid, currentRole, authLoading]);
+  }, [currentUser?.uid, authLoading]);
 
   // Derived Helpers
   const getTeamById = (id) => data.teams.find(t => t.id === id || t.teamId === id) || null;

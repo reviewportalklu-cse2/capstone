@@ -85,8 +85,11 @@ export const useGuideAnalytics = () => {
     supervisedTeams.forEach(team => {
       // Guide evaluates their team
       // For this system, let's assume Guide evaluations are tracked in `evaluations` or `guideMarks`
-      // We look for an evaluation in the active cycle authored by this guide
-      const hasEvaluated = evaluations.some(e => e.teamId === team.id && e.reviewCycleId === activeCycle.id && e.evaluatorId === guide.id);
+      const hasEvaluated = evaluations.some(e => 
+        (String(e.teamId || '').toLowerCase() === String(team.id || '').toLowerCase() || String(e.teamId || '').toLowerCase() === String(team.teamId || '').toLowerCase()) &&
+        (e.reviewCycleId === activeCycle.id || e.reviewCycle === activeCycle.name || e.reviewCycle === activeCycle.reviewName) &&
+        e.role === 'guide' && (e.status === 'Locked' || e.status === 'Submitted')
+      );
       
       if (!hasEvaluated) {
         pending.push({

@@ -64,7 +64,7 @@ const RubricsManagement = () => {
   const columns = [
     {
       header: 'Rubric Information',
-      accessor: (row) => (
+      render: (row) => (
         <div>
           <div className="font-bold text-gray-900">{row.title}</div>
           <div className="text-xs text-gray-500">{row.department} • {row.academicYear} • Sem {row.semester}</div>
@@ -73,19 +73,19 @@ const RubricsManagement = () => {
     },
     {
       header: 'Review Cycle',
-      accessor: (row) => <Badge variant="primary">{row.reviewCycle}</Badge>
+      render: (row) => <Badge variant="primary">{row.reviewCycle}</Badge>
     },
     {
       header: 'Version',
-      accessor: (row) => <span className="text-sm font-medium text-gray-600">v{row.version}</span>
+      render: (row) => <span className="text-sm font-medium text-gray-600">v{row.version}</span>
     },
     {
       header: 'Total Marks',
-      accessor: (row) => <span className="font-bold text-primary-600">{row.totalMarks}</span>
+      render: (row) => <span className="font-bold text-primary-600">{row.totalMarks}</span>
     },
     {
       header: 'Status',
-      accessor: (row) => (
+      render: (row) => (
         <Badge variant={row.status === 'Published' ? 'success' : (row.status === 'Draft' ? 'warning' : 'default')}>
           {row.status}
         </Badge>
@@ -93,7 +93,7 @@ const RubricsManagement = () => {
     },
     {
       header: 'Actions',
-      accessor: (row) => (
+      render: (row) => (
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" onClick={() => navigate(`/admin/rubrics/builder/${row.id}`)}>
             <FileEdit className="w-4 h-4 mr-1" /> Edit

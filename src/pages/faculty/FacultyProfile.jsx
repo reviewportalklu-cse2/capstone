@@ -40,7 +40,7 @@ const FacultyProfile = () => {
         email: domainUser.email || currentUser?.email || '',
         phone: domainUser.phone || '',
         department: domainUser.department || 'Computer Science',
-        designation: domainUser.designation || (domainUser.role === 'classroom_faculty' ? 'Classroom Faculty' : 'Faculty'),
+        designation: (domainUser.role === 'classroom_faculty' || domainUser.role === 'faculty' || !domainUser.designation || domainUser.designation === 'External Assessor') ? 'Classroom Faculty' : domainUser.designation,
         employeeId: domainUser.employeeId || domainUser.facultyId || domainUser.id || 'F001'
       });
       setLoading(false);
@@ -134,7 +134,7 @@ const FacultyProfile = () => {
                 <h3 className="font-bold text-lg text-gray-900">{profile.name}</h3>
                 <p className="text-sm font-medium text-gray-500 mb-4">{profile.designation}</p>
                 <Badge variant="primary" className="w-full justify-center py-1.5">
-                  ID: {profile.employeeId.toUpperCase()}
+                  ID: {profile.employeeId ? profile.employeeId.toUpperCase() : 'FACULTY'}
                 </Badge>
               </div>
             </Card>

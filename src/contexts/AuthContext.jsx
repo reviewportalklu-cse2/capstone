@@ -195,8 +195,8 @@ export const AuthProvider = ({ children }) => {
 
       // Re-evaluate MFA for switched role
       const secDoc = await FirestoreService.getById('settings', 'security');
-      const mfaEnabled = secDoc ? secDoc.mfaEnabled !== false : true;
-      const mandatoryRoles = secDoc?.mandatoryRoles || ['admin', 'guide', 'classroom_faculty', 'faculty', 'reviewer'];
+      const mfaEnabled = secDoc ? secDoc.mfaEnabled === true : false;
+      const mandatoryRoles = secDoc?.mandatoryRoles || [];
       const requiresMfa = mfaEnabled && mandatoryRoles.includes(newRole);
 
       const trusted = await mfaService.isTrustedDevice(currentUser.uid);

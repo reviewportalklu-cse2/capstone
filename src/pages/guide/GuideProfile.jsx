@@ -21,14 +21,14 @@ const GuideProfile = () => {
   const assignedStudentsCount = supervisedTeams.reduce((sum, t) => sum + (t.members?.length || 0), 0);
   const assignedProjectsCount = supervisedTeams.filter(t => t.project?.title || t.projectId).length;
 
-  const [profile, setProfile] = useState({
-    name: '',
-    email: '',
-    phone: '',
-    department: '',
-    designation: 'Project Guide',
-    employeeId: ''
-  });
+  const [profile, setProfile] = useState(() => ({
+    name: domainUser?.name || '',
+    email: domainUser?.email || currentUser?.email || '',
+    phone: domainUser?.phone || '',
+    department: domainUser?.department || 'Computer Science',
+    designation: (domainUser?.role === 'guide' || !domainUser?.designation || domainUser?.designation === 'External Assessor') ? 'Project Guide' : (domainUser?.designation || 'Project Guide'),
+    employeeId: domainUser?.employeeId || domainUser?.guideId || domainUser?.id || ''
+  }));
 
   const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -41,7 +41,7 @@ const GuideProfile = () => {
         email: domainUser.email || currentUser?.email || '',
         phone: domainUser.phone || '',
         department: domainUser.department || 'Computer Science',
-        designation: domainUser.designation || 'Project Guide',
+        designation: (domainUser.role === 'guide' || !domainUser.designation || domainUser.designation === 'External Assessor') ? 'Project Guide' : domainUser.designation,
         employeeId: domainUser.employeeId || domainUser.guideId || domainUser.id || 'G001'
       });
     } else if (currentUser?.uid && !dataLoading) {

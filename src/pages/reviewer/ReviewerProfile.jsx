@@ -24,14 +24,14 @@ const ReviewerProfile = () => {
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
   
-  const [formData, setFormData] = useState({
-    name: '',
-    email: '',
-    department: '',
-    designation: '',
-    phone: '',
-    employeeId: ''
-  });
+  const [formData, setFormData] = useState(() => ({
+    name: domainUser?.name || '',
+    email: domainUser?.email || currentUser?.email || '',
+    department: domainUser?.department || 'Computer Science',
+    designation: domainUser?.designation || 'External Assessor',
+    phone: domainUser?.phone || '',
+    employeeId: domainUser?.employeeId || domainUser?.reviewerId || domainUser?.id || ''
+  }));
 
   const { getReviewerById, dataLoading } = useData();
 
@@ -159,6 +159,8 @@ const ReviewerProfile = () => {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Email Address</label>
                 <Input 
+                  type="email"
+                  name="email"
                   disabled
                   value={formData.email}
                   className="bg-gray-50 text-gray-500"

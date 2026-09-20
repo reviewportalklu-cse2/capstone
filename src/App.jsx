@@ -38,6 +38,16 @@ const RootRedirect = () => {
   return <Navigate to={roleRoutes[currentRole] || '/login'} replace />;
 };
 
+const ProfileRedirect = () => {
+  const { activeRole, userRole } = useAuth();
+  const currentRole = activeRole || userRole;
+  if (currentRole === 'admin') {
+    return <Navigate to="/admin/settings" replace />;
+  }
+  const rolePath = currentRole === 'classroom_faculty' ? 'faculty' : (currentRole || 'guide');
+  return <Navigate to={`/${rolePath}/profile`} replace />;
+};
+
 function App() {
   return (
     <Router>
@@ -79,6 +89,12 @@ function App() {
         <Route path="/student/*" element={
           <ProtectedRoute allowedRoles={['student']}>
             <StudentRoutes />
+          </ProtectedRoute>
+        } />
+
+        <Route path="/profile" element={
+          <ProtectedRoute allowedRoles={['admin', 'guide', 'classroom_faculty', 'faculty', 'reviewer', 'student']}>
+            <ProfileRedirect />
           </ProtectedRoute>
         } />
         

@@ -50,16 +50,23 @@ export const evaluationCenterService = {
       const reviewerMap = new Map(reviewers.map(r => [r.id, r]));
       const facultyMap = new Map(faculty.map(f => [f.id, f]));
 
-      // Combine projects and teams collection
+      // Combine projects, teams, and evaluations collection
       const teamMap = new Map();
       (projects || []).forEach(p => {
-        const id = p.id || p.teamId;
-        if (id) teamMap.set(String(id).toLowerCase(), { ...p, teamId: id, title: p.title || p.projectTitle || `Project ${id}` });
+        const id = p.teamId || p.id;
+        if (id) teamMap.set(String(id).toLowerCase(), { ...p, teamId: p.teamId || id, title: p.title || p.projectTitle || `Project ${id}` });
       });
       (teamsDocs || []).forEach(t => {
-        const id = t.id || t.teamId;
+        const id = t.teamId || t.id;
+        if (id) {
+          const existing = teamMap.get(String(id).toLowerCase());
+          teamMap.set(String(id).toLowerCase(), { ...t, ...existing, id, teamId: id, title: t.projectTitle || t.title || existing?.title || `Project ${id}` });
+        }
+      });
+      (evaluationsDocs || []).forEach(e => {
+        const id = e.teamId || e.team;
         if (id && !teamMap.has(String(id).toLowerCase())) {
-          teamMap.set(String(id).toLowerCase(), { ...t, id, teamId: id, title: t.projectTitle || t.title || `Project ${id}` });
+          teamMap.set(String(id).toLowerCase(), { id, teamId: id, title: e.projectName || `Team ${id}`, teamName: e.teamName || `Team ${id}`, department: 'CSE' });
         }
       });
 
@@ -91,47 +98,51 @@ export const evaluationCenterService = {
         const facultyPanel = facultyMap.get(project.facultyId) || { name: project.facultyName || facultyEval?.evaluatorName || 'Unassigned' };
 
         // Evaluation Scores derivation
-        const teamReviews = reviews.filter(r => 
-          r.projectId === project.id || 
+        const teamReviews = reviews.filter(r =>
+          r.projectId === project.id ||
           members.some(m => m.id === r.studentId || m.uid === r.studentId)
         );
 
-        const r1 = reviewerEval?.teamAverage || teamReviews.find(r => r.reviewType === 'Review 1')?.totalScore || project.review1Score || 0;
-        const r2 = teamReviews.find(r => r.reviewType === 'Review 2')?.totalScore || project.review2Score || 0;
-        const r3 = teamReviews.find(r => r.reviewType === 'Review 3')?.totalScore || project.review3Score || 0;
+        const reviewerEvalR1 = teamEvals.find(e => e.role === 'reviewer' && (e.reviewCycle === 'Review 1' || e.reviewCycleId === 'cycle-1'));
+        const reviewerEvalR2 = teamEvals.find(e => e.role === 'reviewer' && (e.reviewCycle === 'Review 2' || e.reviewCycleId === 'cycle-2'));
+        const reviewerEvalR3 = teamEvals.find(e => e.role === 'reviewer' && (e.reviewCycle === 'Review 3' || e.reviewCycleId === 'cycle-3'));
 
-        const gMark = guideEval?.teamAverage || guideMarks.find(m => members.some(s => s.id === m.studentId || s.uid === m.studentId))?.marks || project.guideScore || 0;
-        const fMark = facultyEval?.teamAverage || facultyMarks.find(m => members.some(s => s.id === m.studentId || s.uid === m.studentId))?.marks || project.facultyScore || 0;
+        const gMark = guideEval?.teamAverage ?? (project.guideScore > 0 ? project.guideScore : null);
+        const fMark = facultyEval?.teamAverage ?? (project.facultyScore > 0 ? project.facultyScore : null);
 
-        // Weighted total calculation (20% each out of 100)
-        const totalWeightedScore = Math.round(
-          (gMark * 0.2) + (fMark * 0.2) + (r1 * 0.2) + (r2 * 0.2) + (r3 * 0.2)
-        );
+        const r1 = reviewerEvalR1?.teamAverage ?? (project.review1Score > 0 ? project.review1Score : null);
+        const r2 = reviewerEvalR2?.teamAverage ?? (project.review2Score > 0 ? project.review2Score : null);
+        const r3 = reviewerEvalR3?.teamAverage ?? (project.review3Score > 0 ? project.review3Score : null);
 
-        const percentage = totalWeightedScore;
-        const grade = evaluationCenterService.calculateGrade(percentage);
-        const passStatus = percentage >= 50 ? 'Pass' : 'Fail';
+        const validScores = [gMark, fMark, r1, r2, r3].filter(v => v !== null && v !== undefined);
+        const totalWeightedScore = validScores.length > 0
+          ? Math.round(validScores.reduce((sum, v) => sum + v, 0) / validScores.length)
+          : null;
+
+        const percentage = totalWeightedScore !== null ? totalWeightedScore : 0;
+        const grade = totalWeightedScore !== null ? evaluationCenterService.calculateGrade(percentage) : 'PENDING';
+        const passStatus = totalWeightedScore !== null ? (percentage >= 50 ? 'Pass' : 'Fail') : 'Pending';
 
         // Stage progress
         let stageProgress = 0;
-        if (gMark > 0) stageProgress += 20;
-        if (fMark > 0) stageProgress += 20;
-        if (r1 > 0) stageProgress += 20;
-        if (r2 > 0) stageProgress += 20;
-        if (r3 > 0) stageProgress += 20;
+        if (gMark !== null) stageProgress += 20;
+        if (fMark !== null) stageProgress += 20;
+        if (r1 !== null) stageProgress += 20;
+        if (r2 !== null) stageProgress += 20;
+        if (r3 !== null) stageProgress += 20;
 
         // Formatted timestamp of last evaluation activity
-        const latestEvalDate = [guideEval, facultyEval, reviewerEval]
+        const latestEvalDate = [guideEval, facultyEval, reviewerEvalR1, reviewerEvalR2, reviewerEvalR3]
           .filter(Boolean)
           .map(e => e.submittedAt || e.evaluatedAt || e.updatedAt || e.createdAt)
           .sort()
           .reverse()[0];
 
-        const formattedDate = latestEvalDate 
+        const formattedDate = latestEvalDate
           ? new Date(latestEvalDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
           : 'Pending';
 
-        const formattedTime = latestEvalDate 
+        const formattedTime = latestEvalDate
           ? new Date(latestEvalDate).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
           : '';
 
@@ -189,7 +200,7 @@ export const evaluationCenterService = {
     cycles.forEach(c => {
       const cName = c.reviewName || c.name || c.id;
       const cEvals = teamEvals.filter(e => e.reviewCycle === cName || e.reviewCycleId === c.id);
-      
+
       const getRoleStatus = (targetRole) => {
         const match = cEvals.find(e => e.role === targetRole || (targetRole === 'faculty' && e.role === 'classroom_faculty'));
         if (!match) return 'Not Started';
@@ -213,7 +224,7 @@ export const evaluationCenterService = {
     try {
       const allTeams = await evaluationCenterService.getAllTeamsWithEvaluations();
       const team = allTeams.find(t => t.id === teamId || t.teamId === teamId || t.title?.toLowerCase().replace(/\s+/g, '-') === teamId);
-      
+
       if (!team) return null;
 
       // Mock / Firestore Rubrics Breakdown
