@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useEvaluationCenterData } from '@/hooks/useEvaluationCenterData';
+import { evaluationCenterService } from '@/firebase/services/evaluationCenterService';
 import Card from '@/components/common/Card';
 import Table from '@/components/common/Table';
 import Badge from '@/components/common/Badge';
@@ -37,11 +38,13 @@ const PendingTracker = () => {
     );
   }
 
-  const guidePending = teams.filter(t => t.guideMarks === 0);
-  const facultyPending = teams.filter(t => t.facultyMarks === 0);
-  const r1Pending = teams.filter(t => t.review1Score === 0);
-  const r2Pending = teams.filter(t => t.review2Score === 0);
-  const r3Pending = teams.filter(t => t.review3Score === 0);
+  const isPending = (val) => val === null || val === undefined;
+
+  const guidePending = teams.filter(t => isPending(t.guideMarks));
+  const facultyPending = teams.filter(t => isPending(t.facultyMarks));
+  const r1Pending = teams.filter(t => isPending(t.review1Score));
+  const r2Pending = teams.filter(t => isPending(t.review2Score));
+  const r3Pending = teams.filter(t => isPending(t.review3Score));
 
   const getFilteredData = () => {
     if (filterType === 'Guide') return guidePending;
@@ -49,7 +52,7 @@ const PendingTracker = () => {
     if (filterType === 'Review 1') return r1Pending;
     if (filterType === 'Review 2') return r2Pending;
     if (filterType === 'Review 3') return r3Pending;
-    return teams.filter(t => t.guideMarks === 0 || t.facultyMarks === 0 || t.review1Score === 0 || t.review2Score === 0 || t.review3Score === 0);
+    return teams.filter(t => isPending(t.guideMarks) || isPending(t.facultyMarks) || isPending(t.review1Score) || isPending(t.review2Score) || isPending(t.review3Score));
   };
 
   const pendingList = getFilteredData();
@@ -58,40 +61,40 @@ const PendingTracker = () => {
     {
       key: 'team',
       header: 'Team Details',
-      render: (_, row) => (
+      render: (row) => (
         <div>
           <div className="font-bold text-gray-900 text-sm">{row.teamId}</div>
-          <div className="text-xs text-primary-700 font-semibold">{row.teamName}</div>
+          <div className="text-xs text-primary-700 font-semibold">{row.projectTitle || row.teamName}</div>
         </div>
       )
     },
     {
       key: 'pendingItems',
       header: 'Pending Evaluations',
-      render: (_, row) => (
+      render: (row) => (
         <div className="flex flex-wrap gap-1.5">
-          {row.guideMarks === 0 && <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800">Guide Marks</span>}
-          {row.facultyMarks === 0 && <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-800">Faculty Internal</span>}
-          {row.review1Score === 0 && <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-800">Review 1</span>}
-          {row.review2Score === 0 && <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-100 text-indigo-800">Review 2</span>}
-          {row.review3Score === 0 && <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-100 text-rose-800">Review 3</span>}
+          {isPending(row.guideMarks) && <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800">Guide Marks</span>}
+          {isPending(row.facultyMarks) && <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-800">Faculty Internal</span>}
+          {isPending(row.review1Score) && <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-800">Review 1</span>}
+          {isPending(row.review2Score) && <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-100 text-indigo-800">Review 2</span>}
+          {isPending(row.review3Score) && <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-100 text-rose-800">Review 3</span>}
         </div>
       )
     },
     {
       key: 'assignedMentors',
       header: 'Responsible Evaluator',
-      render: (_, row) => (
+      render: (row) => (
         <div className="text-xs text-gray-700">
-          <div><span className="text-gray-400">Guide:</span> {row.guideName}</div>
-          <div><span className="text-gray-400">Reviewer:</span> {row.reviewerName}</div>
+          <div><span className="text-gray-400">Guide:</span> <span className="font-medium text-gray-800">{row.guideName || 'Unassigned'}</span></div>
+          <div><span className="text-gray-400">Reviewer:</span> <span className="font-medium text-gray-800">{row.reviewerName || 'Unassigned'}</span></div>
         </div>
       )
     },
     {
       key: 'actions',
       header: 'Actions',
-      render: (_, row) => (
+      render: (row) => (
         <Button size="xs" variant="primary" onClick={() => navigate(`/admin/evaluation-center/team/${row.id}`)}>
           View & Remind
         </Button>

@@ -55,12 +55,14 @@ export const useEvaluationCenterData = () => {
       const teamId = resolved.teamId || team.teamId || team.id || `TEAM${String(index + 1).padStart(3, '0')}`;
       const cleanTeamId = String(teamId).replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
 
-      const members = resolved.assignedStudents && resolved.assignedStudents.length > 0 
-        ? resolved.assignedStudents 
-        : students.filter(s => {
-            const sTeamId = String(s.teamId || s.team || s.projectId || '').replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
-            return sTeamId === cleanTeamId || String(s.projectId || '').toLowerCase() === String(team.id).toLowerCase();
-          });
+      const members = (resolved.members && resolved.members.length > 0)
+        ? resolved.members
+        : (resolved.assignedStudents && resolved.assignedStudents.length > 0 
+          ? resolved.assignedStudents 
+          : students.filter(s => {
+              const sTeamId = String(s.teamId || s.team || s.projectId || '').replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+              return sTeamId === cleanTeamId || String(s.projectId || '').toLowerCase() === String(team.id).toLowerCase();
+            }));
 
       const teamEvals = (evaluations || []).filter(e => {
         const eTeamId = String(e.teamId || e.team || '').replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
@@ -132,7 +134,7 @@ export const useEvaluationCenterData = () => {
         department: team.department || resolved.department || 'CSE',
         academicYear: team.academicYear || '2026-27',
         batch: team.batch || '2022-26',
-        section: team.section || 'A',
+        section: team.section || resolved.section || 'A',
         room: team.room || 'Lab 302',
         slot: team.slot || '10:00 AM - 10:30 AM'
       };

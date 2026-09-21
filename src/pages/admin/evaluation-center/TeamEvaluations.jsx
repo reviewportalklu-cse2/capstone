@@ -126,7 +126,7 @@ const TeamEvaluations = () => {
           className="rounded border-gray-300 text-primary-600 focus:ring-primary-500 cursor-pointer"
         />
       ),
-      render: (_, row) => (
+      render: (row) => (
         <input 
           type="checkbox" 
           checked={selectedTeams.includes(row.id)}
@@ -138,7 +138,7 @@ const TeamEvaluations = () => {
     {
       key: 'teamInfo',
       header: 'Team & Project',
-      render: (_, row) => (
+      render: (row) => (
         <div>
           <div className="flex items-center gap-2">
             <span className="font-bold text-gray-900 text-sm">{row.teamId}</span>
@@ -148,11 +148,11 @@ const TeamEvaluations = () => {
               </span>
             )}
           </div>
-          <div className="text-xs font-semibold text-primary-700 truncate max-w-[220px]" title={row.teamName}>
-            {row.teamName}
+          <div className="text-xs font-semibold text-primary-700 truncate max-w-[220px]" title={row.projectTitle || row.teamName}>
+            {row.projectTitle || row.teamName}
           </div>
           <div className="text-[11px] text-gray-400">
-            {row.department} • Sec {row.section} • {row.membersCount} Members
+            {row.department || 'CSE'} • Sec {row.section || 'A'} • {row.membersCount || (row.members && row.members.length) || 4} Members
           </div>
         </div>
       )
@@ -160,18 +160,18 @@ const TeamEvaluations = () => {
     {
       key: 'mentors',
       header: 'Assigned Mentors',
-      render: (_, row) => (
+      render: (row) => (
         <div className="text-xs space-y-0.5">
-          <div className="truncate max-w-[150px]"><span className="text-gray-400">Guide:</span> <span className="font-medium text-gray-800">{row.guideName}</span></div>
-          <div className="truncate max-w-[150px]"><span className="text-gray-400">Rev:</span> <span className="font-medium text-gray-800">{row.reviewerName}</span></div>
-          <div className="truncate max-w-[150px]"><span className="text-gray-400">Panel:</span> <span className="font-medium text-gray-800">{row.facultyPanelName}</span></div>
+          <div className="truncate max-w-[150px]"><span className="text-gray-400">Guide:</span> <span className="font-medium text-gray-800">{row.guideName || 'Unassigned'}</span></div>
+          <div className="truncate max-w-[150px]"><span className="text-gray-400">Rev:</span> <span className="font-medium text-gray-800">{row.reviewerName || 'Unassigned'}</span></div>
+          <div className="truncate max-w-[150px]"><span className="text-gray-400">Panel:</span> <span className="font-medium text-gray-800">{row.facultyPanelName || row.facultyName || 'Unassigned'}</span></div>
         </div>
       )
     },
     {
       key: 'guideMarks',
       header: 'Guide Marks',
-      render: (_, row) => (
+      render: (row) => (
         <span className={`text-xs font-bold ${row.guideMarks !== null && row.guideMarks !== undefined ? 'text-gray-900' : 'text-amber-600 italic'}`}>
           {row.guideMarks !== null && row.guideMarks !== undefined ? `${row.guideMarks} / 100` : 'PENDING'}
         </span>
@@ -180,7 +180,7 @@ const TeamEvaluations = () => {
     {
       key: 'facultyMarks',
       header: 'Faculty Marks',
-      render: (_, row) => (
+      render: (row) => (
         <span className={`text-xs font-bold ${row.facultyMarks !== null && row.facultyMarks !== undefined ? 'text-gray-900' : 'text-amber-600 italic'}`}>
           {row.facultyMarks !== null && row.facultyMarks !== undefined ? `${row.facultyMarks} / 100` : 'PENDING'}
         </span>
@@ -189,7 +189,7 @@ const TeamEvaluations = () => {
     {
       key: 'reviews',
       header: 'R1 / R2 / R3',
-      render: (_, row) => (
+      render: (row) => (
         <div className="text-xs font-medium space-x-1">
           <span className={row.review1Score !== null && row.review1Score !== undefined ? 'text-gray-900 font-bold' : 'text-amber-600 italic'}>{row.review1Score !== null && row.review1Score !== undefined ? `${row.review1Score}` : 'PENDING'}</span> /
           <span className={row.review2Score !== null && row.review2Score !== undefined ? 'text-gray-900 font-bold' : 'text-amber-600 italic'}>{row.review2Score !== null && row.review2Score !== undefined ? `${row.review2Score}` : 'PENDING'}</span> /
@@ -200,7 +200,7 @@ const TeamEvaluations = () => {
     {
       key: 'finalScore',
       header: 'Final Score',
-      render: (_, row) => {
+      render: (row) => {
         if (row.finalScore === null || row.finalScore === undefined) {
           return <span className="text-xs font-bold text-amber-600 italic">PENDING</span>;
         }
@@ -227,7 +227,7 @@ const TeamEvaluations = () => {
     {
       key: 'approvalStage',
       header: 'Stage & Status',
-      render: (_, row) => (
+      render: (row) => (
         <div>
           <Badge 
             variant={
@@ -247,7 +247,7 @@ const TeamEvaluations = () => {
     {
       key: 'actions',
       header: 'Actions',
-      render: (_, row) => (
+      render: (row) => (
         <div className="flex items-center space-x-2">
           <Button
             size="xs"

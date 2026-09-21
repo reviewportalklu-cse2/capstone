@@ -113,7 +113,7 @@ const Table = ({ columns, data = [], keyField = 'id', isLoading = false, enableS
                   {columns.map((column, colIndex) => (
                     <td key={colIndex} className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-700">
                       {typeof column.render === 'function' 
-                        ? column.render(row, rowIndex) 
+                        ? column.render(row, row, rowIndex) 
                         : typeof column.accessor === 'function' 
                           ? column.accessor(row, rowIndex) 
                           : (column.accessor ? row[column.accessor] : null)}

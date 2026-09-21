@@ -48,7 +48,7 @@ const EvaluationAuditLogs = () => {
     {
       key: 'action',
       header: 'Action Event',
-      render: (_, row) => (
+      render: (row) => (
         <div>
           <span className="font-bold text-gray-900 text-xs tracking-tight">{row.action}</span>
           <div className="text-[11px] text-gray-500">
@@ -60,7 +60,7 @@ const EvaluationAuditLogs = () => {
     {
       key: 'user',
       header: 'Operator & Role',
-      render: (_, row) => (
+      render: (row) => (
         <div>
           <div className="text-xs font-bold text-gray-800">{row.user}</div>
           <Badge variant="primary">{row.role || 'Admin'}</Badge>
@@ -70,7 +70,7 @@ const EvaluationAuditLogs = () => {
     {
       key: 'target',
       header: 'Target Entity',
-      render: (_, row) => (
+      render: (row) => (
         <span className="text-xs text-primary-700 font-extrabold">
           {row.entity} ({row.entityId})
         </span>
@@ -79,14 +79,14 @@ const EvaluationAuditLogs = () => {
     {
       key: 'timestamp',
       header: 'Timestamp',
-      render: (_, row) => (
+      render: (row) => (
         <span className="text-xs text-gray-500 font-medium">{String(row.timestamp)}</span>
       )
     },
     {
       key: 'status',
       header: 'Status',
-      render: (_, row) => (
+      render: (row) => (
         <Badge variant="success">{row.status || 'Verified'}</Badge>
       )
     }
