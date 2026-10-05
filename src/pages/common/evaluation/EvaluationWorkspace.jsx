@@ -121,9 +121,12 @@ const EvaluationWorkspace = () => {
       return memberTeamId === String(rel.teamId).toLowerCase() || memberTeamId.replace(/[^a-zA-Z0-9]/g, '') === cleanParamId;
     }) || [];
 
+    const finalId = rel?.id || rel?.teamId || t.id || t.teamId;
     return {
       ...rel,
-      project: projects?.find(p => String(p.id || p.projectId).toLowerCase() === String(rel.projectId).toLowerCase()) || { title: rel.projectTitle },
+      id: finalId,
+      teamId: finalId,
+      project: projects?.find(p => String(p.id || p.projectId).toLowerCase() === String(rel.projectId).toLowerCase()) || { title: rel.projectTitle || `Project ${finalId}` },
       members: teamMembers,
       guide: rel.guideObj || (rel.guideId ? getGuideById(rel.guideId) : null),
       faculty: rel.facultyObj || (rel.facultyId ? getFacultyById(rel.facultyId) : null),

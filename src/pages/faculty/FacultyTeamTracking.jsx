@@ -19,10 +19,12 @@ const FacultyTeamTracking = () => {
 
   const teams = getAssignedTeams();
 
-  const filteredTeams = teams.filter(t => 
-    t.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    t.project?.title?.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredTeams = teams.filter(t => {
+    const q = (searchQuery || '').toLowerCase();
+    const idMatch = String(t.id || t.teamId || '').toLowerCase().includes(q);
+    const titleMatch = String(t.project?.title || t.projectTitle || '').toLowerCase().includes(q);
+    return idMatch || titleMatch;
+  });
 
   if (dataLoading) {
     return (

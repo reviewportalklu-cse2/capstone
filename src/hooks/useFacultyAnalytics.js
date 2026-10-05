@@ -59,10 +59,13 @@ export const useFacultyAnalytics = () => {
       const teamEvals = evaluations.filter(e => String(e.teamId || e.team).toLowerCase() === String(rel.teamId).toLowerCase());
       const completionPercent = Math.min(100, Math.round(((teamEvals.length + 1) / 5) * 100));
 
+      const tId = rel?.id || rel?.teamId || team.id || team.teamId;
       return {
         ...rel,
-        project: projects.find(p => p.id === rel.projectId || p.projectId === rel.projectId) || { title: rel.projectTitle },
-        members: rel.members,
+        id: tId,
+        teamId: tId,
+        project: projects.find(p => p.id === rel.projectId || p.projectId === rel.projectId) || { title: rel.projectTitle || `Project ${tId}` },
+        members: rel.members || [],
         progressPercent: completionPercent,
         attendancePercent: 95,
         completedReviews: teamEvals.length,
