@@ -1,5 +1,5 @@
 import { FirestoreService } from './firestore.js';
-import { getEntityKeys } from '@/utils/relationshipResolver';
+import { getEntityKeys } from '../../utils/relationshipResolver.js';
 
 const ROLE_COLLECTION_MAP = {
   'student': 'students',
@@ -59,25 +59,52 @@ export const userResolver = {
         ]);
       }
 
-      // 4. Case-insensitive & normalized key fallback search across primary and evaluator collections
+      // 4. Fetch userDoc & userRoleDoc early to guide employeeId resolution
+      let userRoleDoc = null;
+      let userDoc = null;
+      if (firebaseUser.uid) {
+        try {
+          userRoleDoc = await FirestoreService.getById('userRoles', firebaseUser.uid);
+          userDoc = await FirestoreService.getById('users', firebaseUser.uid);
+        } catch (e) {
+          // Non-blocking fetch
+        }
+      }
+      if (!userDoc && email) {
+        try {
+          const userMatches = await FirestoreService.query('users', [{ field: 'email', operator: '==', value: email.toLowerCase() }]);
+          if (userMatches.length > 0) userDoc = userMatches[0];
+        } catch (e) {}
+      }
+
+      // 5. If not found in primary collection by email/uid, check by employeeId if known
+      const knownEmpId = userDoc?.employeeId || userRoleDoc?.employeeId;
+      if (domainRecords.length === 0 && knownEmpId) {
+        const empStr = String(knownEmpId).trim();
+        const docById = await FirestoreService.getById(collectionName, empStr);
+        if (docById) {
+          domainRecords = [docById];
+        } else {
+          const empMatches = await FirestoreService.query(collectionName, [
+            { field: 'employeeId', operator: '==', value: empStr }
+          ]);
+          if (empMatches.length > 0) domainRecords = empMatches;
+        }
+      }
+
+      // 6. Fallback search across evaluator collections: STRICTLY match user's actual email or UID
       if (domainRecords.length === 0) {
-        const collectionsToTry = [collectionName, 'guides', 'classroomFaculty', 'reviewers'].filter((c, idx, arr) => arr.indexOf(c) === idx);
+        const collectionsToTry = [collectionName, 'guides', 'classroomFaculty', 'reviewers', 'users'].filter((c, idx, arr) => arr.indexOf(c) === idx);
         for (const targetColl of collectionsToTry) {
           const allRecords = await FirestoreService.getAll(targetColl);
-          const emailPrefix = email ? email.split('@')[0].toLowerCase() : '';
-          const searchKeys = [email, firebaseUser.uid, firebaseUser.displayName, emailPrefix].filter(Boolean).flatMap(k => getEntityKeys(k));
+          const emailLower = email ? email.toLowerCase().trim() : '';
 
           const match = allRecords.find(r => {
-            const rEmail = String(r.email || r.Email || '').toLowerCase();
-            const rPrefix = rEmail.includes('@') ? rEmail.split('@')[0] : '';
-            if (rEmail && rEmail === email.toLowerCase()) return true;
-            if (rPrefix && emailPrefix) {
-              if (rPrefix === emailPrefix) return true;
-              if (rPrefix.replace(/0+/g, '') === emailPrefix.replace(/0+/g, '')) return true;
-            }
-            if (r.id === firebaseUser.uid || r.uid === firebaseUser.uid) return true;
-            const rKeys = getEntityKeys(r);
-            return searchKeys.some(k => rKeys.includes(k));
+            const rEmail = String(r.email || r.Email || '').toLowerCase().trim();
+            if (rEmail && rEmail === emailLower) return true;
+            if (firebaseUser.uid && (r.id === firebaseUser.uid || r.uid === firebaseUser.uid)) return true;
+            if (knownEmpId && (String(r.employeeId || r['Employee ID'] || r.id || '') === String(knownEmpId))) return true;
+            return false;
           });
           if (match) {
             domainRecords = [match];
@@ -88,16 +115,25 @@ export const userResolver = {
 
       let domainRecord = domainRecords[0];
 
-      // 5. Safe Fallback if no specific collection record exists yet
+      // 7. Safe Fallback to userDoc or basic authenticated identity if no specific domain record
       if (!domainRecord) {
-        const fallbackName = firebaseUser.displayName || (email ? email.split('@')[0].toUpperCase() : 'User');
-        domainRecord = {
+        const fallbackName = userDoc?.name || firebaseUser.displayName || (email ? email.split('@')[0].toUpperCase() : 'User');
+        domainRecord = userDoc || {
           id: firebaseUser.uid,
           name: fallbackName,
           email: email,
-          department: 'Computer Science & Engineering'
+          department: userDoc?.department || 'Computer Science & Engineering'
         };
       }
+
+      // Resolve employee ID safely as string
+      const rawEmployeeId = domainRecord?.['Employee ID'] ?? domainRecord?.employeeId ?? userRoleDoc?.employeeId ?? userDoc?.employeeId;
+      const employeeId = rawEmployeeId != null && String(rawEmployeeId).trim() !== '' ? String(rawEmployeeId).trim() : null;
+
+      const phone = domainRecord?.phone || domainRecord?.Phone || domainRecord?.['Phone Number'] || userDoc?.phone || '';
+      const department = domainRecord?.department || domainRecord?.Department || userDoc?.department || 'Computer Science & Engineering';
+      const designation = domainRecord?.designation || domainRecord?.Designation || (role === 'guide' ? 'Project Guide' : (role === 'reviewer' ? 'Reviewer' : 'Faculty'));
+      const availableRoles = userRoleDoc?.availableRoles || userDoc?.availableRoles || [role];
 
       // Standardize the returned domain user
       return {
@@ -106,10 +142,13 @@ export const userResolver = {
         role,
         domainId: domainRecord.id || firebaseUser.uid,
         email: domainRecord.email || domainRecord.Email || email,
-        employeeId: domainRecord['Employee ID'] || domainRecord.employeeId || null,
+        employeeId,
         rollNumber: domainRecord['Roll Number'] || domainRecord.rollNumber || null,
-        name: domainRecord.name || domainRecord['Student Name'] || domainRecord['Guide Name'] || domainRecord['Faculty Name'] || domainRecord['Reviewer Name'] || domainRecord.Name || firebaseUser.displayName || email.split('@')[0].toUpperCase(),
-        department: domainRecord.department || domainRecord.Department || 'Computer Science & Engineering',
+        name: domainRecord.name || domainRecord['Student Name'] || domainRecord['Guide Name'] || domainRecord['Faculty Name'] || domainRecord['Reviewer Name'] || domainRecord.Name || userDoc?.name || firebaseUser.displayName || email.split('@')[0].toUpperCase(),
+        department,
+        designation,
+        phone,
+        availableRoles,
         assignedBatch: domainRecord.assignedBatch || domainRecord['Assigned Batch'] || '2026',
         profile: domainRecord
       };

@@ -1,10 +1,23 @@
 import React from 'react';
-import { Navigate } from 'react-router-dom';
-import { useAuth } from '@/contexts/AuthContext';
+import { Navigate, useLocation } from 'react-router-dom';
+import { useAuth, IS_MFA_ENFORCEMENT_ENABLED } from '@/contexts/AuthContext';
+import MandatoryMfaEnrollmentModal from '@/components/auth/MandatoryMfaEnrollmentModal';
 
 const ProtectedRoute = ({ children, allowedRoles }) => {
-  const { currentUser, activeRole, userRole, availableRoles = [], switchRole, mfaRequired, mfaVerified, requiresPasswordChange, loading } = useAuth();
+  const { 
+    currentUser, 
+    activeRole, 
+    userRole, 
+    availableRoles = [], 
+    switchRole, 
+    requiresPasswordChange, 
+    mfaEnrollmentRequired, 
+    completeMfaEnrollment, 
+    loading 
+  } = useAuth();
+  
   const currentRole = activeRole || userRole;
+  const location = useLocation();
 
   const matchingRole = React.useMemo(() => {
     if (!allowedRoles || allowedRoles.includes(currentRole)) return null;
@@ -26,16 +39,22 @@ const ProtectedRoute = ({ children, allowedRoles }) => {
   }
 
   if (!currentUser) {
-    return <Navigate to="/login" replace />;
+    return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
   if (requiresPasswordChange === true) {
     return <Navigate to="/first-login-password-change" replace />;
   }
 
-  // Enforce MFA verification before granting portal access
-  if (mfaRequired && !mfaVerified) {
-    return <Navigate to="/mfa-verification" replace />;
+  // Mandatory MFA Enrollment Enforcement (TEMPORARILY DISABLED FOR PRODUCTION)
+  // Students are exempt. Admin, Guide, Faculty, Classroom Faculty, Reviewer require MFA when enabled.
+  // Gated behind IS_MFA_ENFORCEMENT_ENABLED so no modal or redirect blocks production users.
+  if (IS_MFA_ENFORCEMENT_ENABLED && mfaEnrollmentRequired) {
+    return (
+      <div className="min-h-screen relative bg-slate-900 flex items-center justify-center p-4">
+        <MandatoryMfaEnrollmentModal onSuccess={completeMfaEnrollment} />
+      </div>
+    );
   }
 
   if (allowedRoles && !allowedRoles.includes(currentRole)) {

@@ -1,7 +1,6 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import Login from '@/pages/auth/Login';
-import MFAVerification from '@/pages/auth/MFAVerification';
 import FirstLoginPasswordChange from '@/pages/auth/FirstLoginPasswordChange';
 import DeviceManagement from '@/pages/profile/DeviceManagement';
 import AdminRoutes from '@/pages/admin/AdminRoutes';
@@ -13,7 +12,7 @@ import ProtectedRoute from '@/components/common/ProtectedRoute';
 import { useAuth } from '@/contexts/AuthContext';
 
 const RootRedirect = () => {
-  const { currentUser, activeRole, userRole, mfaRequired, mfaVerified, requiresPasswordChange, loading } = useAuth();
+  const { currentUser, activeRole, userRole, requiresPasswordChange, loading } = useAuth();
   const currentRole = activeRole || userRole;
   
   if (loading) {
@@ -23,8 +22,6 @@ const RootRedirect = () => {
   if (!currentUser) return <Navigate to="/login" replace />;
 
   if (requiresPasswordChange === true) return <Navigate to="/first-login-password-change" replace />;
-  
-  if (mfaRequired && !mfaVerified) return <Navigate to="/mfa-verification" replace />;
 
   const roleRoutes = {
     admin: '/admin',
@@ -53,7 +50,6 @@ function App() {
     <Router>
       <Routes>
         <Route path="/login" element={<Login />} />
-        <Route path="/mfa-verification" element={<MFAVerification />} />
         <Route path="/first-login-password-change" element={<FirstLoginPasswordChange />} />
         
         <Route path="/devices" element={

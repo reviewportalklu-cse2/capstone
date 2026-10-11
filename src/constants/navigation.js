@@ -2,7 +2,7 @@ import {
   LayoutDashboard, Users, FileText, ClipboardList, BookOpen, UserCheck, 
   Settings, UserCog, LogOut, FileBarChart, PieChart, ShieldCheck, Download, 
   Search, PlayCircle, BarChart3, DatabaseBackup, Upload, HelpCircle, Bell, Clock,
-  RefreshCw, UserCircle, Shield, Award, Layers
+  RefreshCw, UserCircle, Shield, Award, Layers, UserPlus
 } from 'lucide-react';
 
 export const adminNavigation = [
@@ -12,6 +12,7 @@ export const adminNavigation = [
 
   // Data Management Section
   { name: 'Enterprise Bulk Upload Center', href: '/admin/sync', icon: RefreshCw, section: 'Data Management' },
+  { name: 'Members', href: '/admin/members', icon: UserPlus, section: 'Data Management' },
   { name: 'Students', href: '/admin/students', icon: UserCheck, section: 'Data Management' },
   { name: 'Teams & Groups', href: '/admin/teams', icon: Users, section: 'Data Management' },
   { name: 'Projects', href: '/admin/projects', icon: FileText, section: 'Data Management' },

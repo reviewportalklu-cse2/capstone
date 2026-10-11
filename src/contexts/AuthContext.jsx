@@ -3,7 +3,8 @@ import { authService } from '@/firebase/services/authService';
 import { userService } from '@/firebase/services/userService';
 import { userRoleService } from '@/firebase/services/userRoleService';
 import { userResolver } from '@/firebase/services/userResolver';
-import { mfaService } from '@/firebase/services/mfaService';
+import { auditService } from '@/firebase/services/auditService';
+import { totpMfaService } from '@/firebase/services/totpMfaService';
 import { FirestoreService } from '@/firebase/services/firestore';
 import Logo from '@/components/common/Logo';
 import { Loader2 } from 'lucide-react';
@@ -11,7 +12,14 @@ import { Loader2 } from 'lucide-react';
 const AuthContext = createContext();
 
 const STORAGE_KEY_ACTIVE_ROLE = 'capstone-active-role';
-const SESSION_KEY_MFA_VERIFIED = 'capstone-mfa-verified';
+
+/**
+ * MFA FEATURE TOGGLE
+ * Set to false temporarily for production because Firebase project has MFA globally disabled
+ * and Authentication is not yet upgraded to Identity Platform (preventing auth/operation-not-allowed).
+ * When Identity Platform and TOTP MFA are enabled in Firebase Console, set this flag back to true.
+ */
+export const IS_MFA_ENFORCEMENT_ENABLED = false;
 
 const ROLE_PATH_MAP = {
   admin: '/admin/dashboard',
@@ -20,6 +28,11 @@ const ROLE_PATH_MAP = {
   faculty: '/faculty/dashboard',
   reviewer: '/reviewer/dashboard',
   student: '/student/dashboard'
+};
+
+const isStudentRole = (role) => {
+  if (!role) return false;
+  return String(role).toLowerCase().trim() === 'student';
 };
 
 export const useAuth = () => {
@@ -31,14 +44,12 @@ export const AuthProvider = ({ children }) => {
   const [availableRoles, setAvailableRoles] = useState([]);
   const [activeRole, setActiveRoleState] = useState(null);
   const [domainUser, setDomainUser] = useState(null);
-  
-  // MFA States
-  const [mfaRequired, setMfaRequired] = useState(false);
-  const [mfaVerified, setMfaVerified] = useState(false);
-  const [isTrustedDevice, setIsTrustedDevice] = useState(false);
-  const [lastGeneratedOtp, setLastGeneratedOtp] = useState(null);
-
   const [requiresPasswordChange, setRequiresPasswordChange] = useState(false);
+  
+  // Native Firebase MFA states (Preserved for when IS_MFA_ENFORCEMENT_ENABLED is restored)
+  const [isMfaEnrolled, setIsMfaEnrolled] = useState(false);
+  const [mfaEnrollmentRequired, setMfaEnrollmentRequired] = useState(false);
+
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -81,35 +92,29 @@ export const AuthProvider = ({ children }) => {
             setDomainUser(null);
           }
 
-          // 4. MFA & Identity Protection Evaluation (only require if explicitly enabled in Firestore)
-          const trusted = await mfaService.isTrustedDevice(user.uid);
-          setIsTrustedDevice(trusted);
+          // 4. Evaluate Native MFA Requirement for Non-Student Users (DISABLED FOR PRODUCTION)
+          // Students are exempt. When re-enabled, Admin, Guide, Faculty, Classroom Faculty, Reviewer require MFA.
+          const enrolled = IS_MFA_ENFORCEMENT_ENABLED ? totpMfaService.isMfaEnrolled(user) : false;
+          setIsMfaEnrolled(enrolled);
 
-          const secDoc = await FirestoreService.getById('settings', 'security');
-          const mfaEnabled = secDoc ? secDoc.mfaEnabled === true : false;
-          const mandatoryRoles = secDoc?.mandatoryRoles || [];
+          const isSolelyStudent = finalRoles.length > 0 
+            ? finalRoles.every(r => isStudentRole(r)) 
+            : isStudentRole(initialRole);
 
-          const requiresMfa = mfaEnabled && mandatoryRoles.includes(initialRole);
-          setMfaRequired(requiresMfa);
-
-          const sessionVerified = sessionStorage.getItem(SESSION_KEY_MFA_VERIFIED) === 'true';
-
-          if (requiresMfa && !trusted && !sessionVerified) {
-            setMfaVerified(false);
-          } else {
-            setMfaVerified(true);
-          }
+          const needsMfa = IS_MFA_ENFORCEMENT_ENABLED && !isSolelyStudent && !enrolled;
+          setMfaEnrollmentRequired(needsMfa);
 
           setCurrentUser(user);
-          console.log("[AUTH_RUNTIME] Auth resolved:", user.email, "| Role:", initialRole, "| ReqPassChange:", reqPass);
+          console.log("[AUTH_RUNTIME] Auth resolved:", user.email, "| Role:", initialRole, "| MFA Enrolled:", enrolled, "| MFA Required:", needsMfa, "| MFA Enforcement Active:", IS_MFA_ENFORCEMENT_ENABLED);
         } catch (error) {
           console.error("[AUTH_RUNTIME] Error resolving auth state:", error);
           setCurrentUser(user);
           setAvailableRoles(['student']);
           setActiveRoleState('student');
           setDomainUser(null);
-          setMfaVerified(true);
           setRequiresPasswordChange(false);
+          setIsMfaEnrolled(false);
+          setMfaEnrollmentRequired(false);
         } finally {
           setLoading(false);
         }
@@ -118,13 +123,10 @@ export const AuthProvider = ({ children }) => {
         setAvailableRoles([]);
         setActiveRoleState(null);
         setDomainUser(null);
-        setMfaRequired(false);
-        setMfaVerified(false);
-        setIsTrustedDevice(false);
-        setLastGeneratedOtp(null);
         setRequiresPasswordChange(false);
+        setIsMfaEnrolled(false);
+        setMfaEnrollmentRequired(false);
         localStorage.removeItem(STORAGE_KEY_ACTIVE_ROLE);
-        sessionStorage.removeItem(SESSION_KEY_MFA_VERIFIED);
         setLoading(false);
         console.log("[AUTH_RUNTIME] Auth state reset to UNAUTHENTICATED.");
       }
@@ -132,33 +134,6 @@ export const AuthProvider = ({ children }) => {
 
     return () => unsubscribe();
   }, []);
-
-  /**
-   * Request a new OTP verification code
-   */
-  const requestMfaOTP = useCallback(async () => {
-    if (!currentUser) return;
-    const res = await mfaService.requestMFA(currentUser.uid, currentUser.email);
-    if (res?.otp) setLastGeneratedOtp(res.otp);
-    return res;
-  }, [currentUser]);
-
-  /**
-   * Verify entered OTP code and complete MFA login step
-   */
-  const verifyMfaOTP = useCallback(async (otpCode, rememberDevice = false) => {
-    if (!currentUser) throw new Error("User not authenticated.");
-    
-    await mfaService.verifyMFA(currentUser.uid, otpCode, rememberDevice);
-    setMfaVerified(true);
-    sessionStorage.setItem(SESSION_KEY_MFA_VERIFIED, 'true');
-
-    if (rememberDevice) {
-      setIsTrustedDevice(true);
-    }
-
-    return ROLE_PATH_MAP[activeRole] || '/';
-  }, [currentUser, activeRole]);
 
   /**
    * Switch active operational role
@@ -193,22 +168,13 @@ export const AuthProvider = ({ children }) => {
       const resolvedUser = await userResolver.resolveCurrentUser(currentUser, newRole);
       setDomainUser(resolvedUser);
 
-      // Re-evaluate MFA for switched role
-      const secDoc = await FirestoreService.getById('settings', 'security');
-      const mfaEnabled = secDoc ? secDoc.mfaEnabled === true : false;
-      const mandatoryRoles = secDoc?.mandatoryRoles || [];
-      const requiresMfa = mfaEnabled && mandatoryRoles.includes(newRole);
-
-      const trusted = await mfaService.isTrustedDevice(currentUser.uid);
-      const sessionVerified = sessionStorage.getItem(SESSION_KEY_MFA_VERIFIED) === 'true';
-
-      if (requiresMfa && !trusted && !sessionVerified) {
-        setMfaRequired(true);
-        setMfaVerified(false);
-        await requestMfaOTP();
-      } else {
-        setMfaVerified(true);
-      }
+      // MFA applies to the USER ACCOUNT, not each role separately.
+      // Re-evaluate MFA requirement without forcing multiple enrollments (DISABLED FOR PRODUCTION)
+      const enrolled = IS_MFA_ENFORCEMENT_ENABLED ? totpMfaService.isMfaEnrolled(currentUser) : false;
+      setIsMfaEnrolled(enrolled);
+      const isSolelyStudent = availableRoles.every(r => isStudentRole(r));
+      const needsMfa = IS_MFA_ENFORCEMENT_ENABLED && !isSolelyStudent && !enrolled;
+      setMfaEnrollmentRequired(needsMfa);
 
       // Log successful role switch in audit log
       try {
@@ -232,18 +198,47 @@ export const AuthProvider = ({ children }) => {
       setLoading(false);
       throw err;
     }
-  }, [currentUser, activeRole, availableRoles, requestMfaOTP]);
+  }, [currentUser, activeRole, availableRoles]);
 
   const isRoleAvailable = useCallback((role) => {
     return availableRoles.includes(role);
   }, [availableRoles]);
 
+  /**
+   * Complete MFA enrollment in state
+   */
+  const completeMfaEnrollment = useCallback(() => {
+    setIsMfaEnrolled(true);
+    setMfaEnrollmentRequired(false);
+  }, []);
+
+  /**
+   * Refresh native MFA status from Firebase User
+   */
+  const refreshMfaStatus = useCallback(async () => {
+    if (!currentUser) return false;
+    try {
+      await currentUser.reload();
+    } catch (e) {
+      console.warn("[AUTH_RUNTIME] Reload notice:", e);
+    }
+    const enrolled = IS_MFA_ENFORCEMENT_ENABLED ? totpMfaService.isMfaEnrolled(currentUser) : false;
+    setIsMfaEnrolled(enrolled);
+    const isSolelyStudent = availableRoles.length > 0 
+      ? availableRoles.every(r => isStudentRole(r)) 
+      : isStudentRole(activeRole);
+    const needsMfa = IS_MFA_ENFORCEMENT_ENABLED && !isSolelyStudent && !enrolled;
+    setMfaEnrollmentRequired(needsMfa);
+    return enrolled;
+  }, [currentUser, availableRoles, activeRole]);
+
   const logout = async () => {
     if (currentUser) {
-      await mfaService.recordLogout(currentUser.uid, currentUser.email);
+      await auditService.recordLogout(currentUser.uid, currentUser.email);
     }
     localStorage.removeItem(STORAGE_KEY_ACTIVE_ROLE);
-    sessionStorage.removeItem(SESSION_KEY_MFA_VERIFIED);
+    setIsMfaEnrolled(false);
+    setMfaEnrollmentRequired(false);
     await authService.logout();
   };
 
@@ -273,14 +268,12 @@ export const AuthProvider = ({ children }) => {
     activeRole,
     availableRoles,
     domainUser,
-    mfaRequired,
-    mfaVerified,
     requiresPasswordChange,
     completePasswordChange,
-    isTrustedDevice,
-    lastGeneratedOtp,
-    requestMfaOTP,
-    verifyMfaOTP,
+    isMfaEnrolled,
+    mfaEnrollmentRequired,
+    completeMfaEnrollment,
+    refreshMfaStatus,
     switchRole,
     isRoleAvailable,
     logout,

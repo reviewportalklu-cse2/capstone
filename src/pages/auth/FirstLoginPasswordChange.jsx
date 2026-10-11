@@ -17,7 +17,14 @@ const ROLE_ROUTES = {
 };
 
 const FirstLoginPasswordChange = () => {
-  const { currentUser, activeRole, requiresPasswordChange, completePasswordChange } = useAuth();
+  const { 
+    currentUser, 
+    activeRole, 
+    domainUser, 
+    requiresPasswordChange, 
+    completePasswordChange,
+    loading: authLoading 
+  } = useAuth();
   const navigate = useNavigate();
 
   const [currentPassword, setCurrentPassword] = useState('');
@@ -32,14 +39,17 @@ const FirstLoginPasswordChange = () => {
   }, []);
 
   useEffect(() => {
-    // If password change is not required or user is not logged in, redirect
+    // If auth state is still resolving, don't redirect yet
+    if (authLoading) return;
+
+    // If user is not logged in, redirect to login
     if (!currentUser) {
-      navigate('/login');
+      navigate('/login', { replace: true });
     } else if (requiresPasswordChange === false) {
       const targetPath = ROLE_ROUTES[activeRole] || '/';
-      navigate(targetPath);
+      navigate(targetPath, { replace: true });
     }
-  }, [currentUser, requiresPasswordChange, activeRole, navigate]);
+  }, [currentUser, requiresPasswordChange, activeRole, authLoading, navigate]);
 
   const handleSubmit = async (e) => {
     if (e) e.preventDefault();
@@ -47,6 +57,11 @@ const FirstLoginPasswordChange = () => {
 
     setErrorMsg('');
     setSuccessMsg('');
+
+    if (!currentPassword) {
+      setErrorMsg('Please enter your initial password (Employee ID).');
+      return;
+    }
 
     if (!newPassword || !confirmPassword) {
       setErrorMsg('Please enter both your new password and confirmation.');
@@ -63,6 +78,27 @@ const FirstLoginPasswordChange = () => {
       return;
     }
 
+    const cleanCurrent = (currentPassword || '').trim();
+    const cleanNew = (newPassword || '').trim();
+    const empId = String(domainUser?.employeeId || '').trim();
+    const paddedEmpId = empId && empId.length < 6 ? empId.padStart(6, '0') : empId;
+    const currentPadded = cleanCurrent.length < 6 ? cleanCurrent.padStart(6, '0') : cleanCurrent;
+
+    if (
+      cleanNew === cleanCurrent ||
+      cleanNew === currentPadded ||
+      cleanNew.replace(/^0+/, '') === cleanCurrent.replace(/^0+/, '') ||
+      (empId && (
+        cleanNew === empId || 
+        cleanNew === paddedEmpId || 
+        cleanNew.replace(/^0+/, '') === empId.replace(/^0+/, '')
+      ))
+    ) {
+      setErrorMsg('New password cannot be the same as your initial Employee ID password. Please choose a new, secure password.');
+      return;
+    }
+
+    console.log("[FIRST_LOGIN_AUTH] Form submitted. currentPassword:", currentPassword, "newPassword:", newPassword, "confirmPassword:", confirmPassword);
     setIsSubmitting(true);
 
     try {
@@ -73,14 +109,19 @@ const FirstLoginPasswordChange = () => {
         passToUse = empIdFromEmail;
       }
 
+      console.log("[FIRST_LOGIN_AUTH] Attempting changePassword with passToUse:", passToUse, "newPassword:", newPassword);
+
       // Try changing password via authService
       try {
         await authService.changePassword(currentUser, passToUse, newPassword);
+        console.log("[FIRST_LOGIN_AUTH] Primary changePassword SUCCESS!");
       } catch (changeErr) {
+        console.warn("[FIRST_LOGIN_AUTH] Primary changePassword failed:", changeErr.message);
         // Fallback: If user entered exact 4/5 digit employee ID, try padded version if current password failed
         if (passToUse && passToUse.length < 6) {
           const paddedPass = passToUse.padStart(6, '0');
           await authService.changePassword(currentUser, paddedPass, newPassword);
+          console.log("[FIRST_LOGIN_AUTH] Padded fallback changePassword SUCCESS!");
         } else {
           throw changeErr;
         }
@@ -88,12 +129,13 @@ const FirstLoginPasswordChange = () => {
 
       // 2. Mark password change complete in Firestore & AuthContext state
       await completePasswordChange();
+      console.log("[FIRST_LOGIN_AUTH] completePasswordChange completed in Firestore!");
 
       setSuccessMsg('Password successfully changed! Redirecting to dashboard...');
 
       setTimeout(() => {
         const targetPath = ROLE_ROUTES[activeRole] || '/';
-        navigate(targetPath);
+        navigate(targetPath, { replace: true });
       }, 1000);
 
     } catch (err) {
@@ -102,6 +144,14 @@ const FirstLoginPasswordChange = () => {
       setIsSubmitting(false);
     }
   };
+
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-surface-dim">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-surface-dim flex flex-col justify-center py-12 sm:px-6 lg:px-8 font-sans">
@@ -173,6 +223,7 @@ const FirstLoginPasswordChange = () => {
 
             <div className="pt-2">
               <Button
+                id="submitFirstLoginPasswordBtn"
                 type="submit"
                 isLoading={isSubmitting}
                 disabled={isSubmitting}

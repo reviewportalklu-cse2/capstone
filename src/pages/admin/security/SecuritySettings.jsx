@@ -8,7 +8,7 @@ import Input from '@/components/common/Input';
 import Badge from '@/components/common/Badge';
 import { useData } from '@/contexts/DataContext';
 import { FirestoreService } from '@/firebase/services/firestore';
-import { ShieldCheck, Lock, Smartphone, Clock, AlertTriangle, Users, Save, CheckCircle2, Loader2, Key } from 'lucide-react';
+import { ShieldCheck, Lock, Clock, AlertTriangle, Users, Save, CheckCircle2, Loader2, Key } from 'lucide-react';
 
 const SecuritySettings = () => {
   const { settings, auditLogs, dataLoading } = useData();
@@ -16,9 +16,6 @@ const SecuritySettings = () => {
   const [successMsg, setSuccessMsg] = useState('');
 
   const [formData, setFormData] = useState({
-    mfaEnabled: true,
-    mandatoryRoles: ['admin', 'guide', 'classroom_faculty', 'reviewer'],
-    trustedDeviceDays: 30,
     maxLoginAttempts: 5,
     sessionTimeoutMinutes: 30,
     accountLockMinutes: 15,
@@ -32,20 +29,14 @@ const SecuritySettings = () => {
       if (secDoc) {
         setFormData(prev => ({
           ...prev,
-          ...secDoc
+          maxLoginAttempts: secDoc.maxLoginAttempts || 5,
+          sessionTimeoutMinutes: secDoc.sessionTimeoutMinutes || 30,
+          accountLockMinutes: secDoc.accountLockMinutes || 15,
+          requireSpecialCharPassword: secDoc.requireSpecialCharPassword !== false
         }));
       }
     }
   }, [settings]);
-
-  const handleRoleToggle = (roleKey) => {
-    setFormData(prev => ({
-      ...prev,
-      mandatoryRoles: prev.mandatoryRoles.includes(roleKey)
-        ? prev.mandatoryRoles.filter(r => r !== roleKey)
-        : [...prev.mandatoryRoles, roleKey]
-    }));
-  };
 
   const handleSave = async (e) => {
     e.preventDefault();
@@ -59,7 +50,7 @@ const SecuritySettings = () => {
         updatedAt: new Date().toISOString()
       };
 
-      await FirestoreService.set('settings', 'security', payload);
+      await FirestoreService.set('settings', 'security', payload, { merge: true });
 
       await FirestoreService.create('auditLogs', {
         action: 'SECURITY_SETTINGS_UPDATED',
@@ -89,9 +80,9 @@ const SecuritySettings = () => {
 
   // Derived Metrics
   const loginAudits = auditLogs.filter(a => a.action === 'LOGIN_SUCCESS' || a.action === 'LOGIN_FAILED');
-  const failedLogins = auditLogs.filter(a => a.action === 'LOGIN_FAILED' || a.action === 'MFA_OTP_FAILED').length;
-  const mfaVerifications = auditLogs.filter(a => a.action === 'MFA_OTP_VERIFIED').length;
-  const trustedDeviceEvents = auditLogs.filter(a => a.action === 'TRUSTED_DEVICE_ADDED').length;
+  const successfulLogins = auditLogs.filter(a => a.action === 'LOGIN_SUCCESS').length;
+  const failedLogins = auditLogs.filter(a => a.action === 'LOGIN_FAILED').length;
+  const securityEvents = auditLogs.filter(a => a.action?.includes('SECURITY') || a.action?.includes('PASSWORD')).length;
 
   return (
     <DashboardLayout navigationItems={adminNavigation} title="Security Settings">
@@ -103,7 +94,7 @@ const SecuritySettings = () => {
             <h1 className="text-2xl font-bold text-gray-900 tracking-tight flex items-center gap-2">
               <ShieldCheck className="w-6 h-6 text-primary-600" /> Enterprise Security Dashboard & Policies
             </h1>
-            <p className="text-sm text-gray-500 mt-1">Configure Multi-Factor Authentication (MFA), device trust, and login security controls.</p>
+            <p className="text-sm text-gray-500 mt-1">Configure session timeout, account lockout rules, and login security controls.</p>
           </div>
           {successMsg && (
             <div className="bg-emerald-50 text-emerald-700 text-xs font-bold px-3 py-2 rounded-lg border border-emerald-200 flex items-center gap-1.5 animate-in fade-in">
@@ -122,6 +113,13 @@ const SecuritySettings = () => {
             bgClass="bg-blue-50" 
           />
           <StatCard 
+            title="Successful Logins" 
+            value={successfulLogins.toString()} 
+            icon={ShieldCheck} 
+            colorClass="text-emerald-600" 
+            bgClass="bg-emerald-50" 
+          />
+          <StatCard 
             title="Failed Login Attempts" 
             value={failedLogins.toString()} 
             icon={AlertTriangle} 
@@ -129,16 +127,9 @@ const SecuritySettings = () => {
             bgClass="bg-red-50" 
           />
           <StatCard 
-            title="MFA Verifications" 
-            value={mfaVerifications.toString()} 
-            icon={ShieldCheck} 
-            colorClass="text-emerald-600" 
-            bgClass="bg-emerald-50" 
-          />
-          <StatCard 
-            title="Active Trusted Devices" 
-            value={trustedDeviceEvents.toString()} 
-            icon={Smartphone} 
+            title="Security Audit Events" 
+            value={securityEvents.toString()} 
+            icon={Key} 
             colorClass="text-purple-600" 
             bgClass="bg-purple-50" 
           />
@@ -149,78 +140,10 @@ const SecuritySettings = () => {
           
           <div className="lg:col-span-2 space-y-6">
             
-            {/* MFA Policy Configuration */}
-            <Card title="Multi-Factor Authentication (MFA) Policies">
-              <div className="space-y-6 mt-4">
-                
-                <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl border border-gray-200">
-                  <div>
-                    <h4 className="font-bold text-gray-900 text-sm">Global MFA Status</h4>
-                    <p className="text-xs text-gray-500 mt-0.5">Enforce two-factor security verification on login</p>
-                  </div>
-                  <label className="relative inline-flex items-center cursor-pointer">
-                    <input 
-                      type="checkbox" 
-                      checked={formData.mfaEnabled} 
-                      onChange={e => setFormData({...formData, mfaEnabled: e.target.checked})}
-                      className="sr-only peer"
-                    />
-                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600"></div>
-                  </label>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-bold text-gray-800 mb-2">Mandatory MFA Roles</label>
-                  <p className="text-xs text-gray-500 mb-3">Roles selected below will be required to pass 6-digit OTP verification upon login.</p>
-                  
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                    {[
-                      { key: 'admin', label: 'Admin' },
-                      { key: 'guide', label: 'Guide / Mentor' },
-                      { key: 'classroom_faculty', label: 'Faculty' },
-                      { key: 'reviewer', label: 'Reviewer' },
-                      { key: 'student', label: 'Student' }
-                    ].map(item => {
-                      const isMandatory = formData.mandatoryRoles.includes(item.key);
-                      return (
-                        <button
-                          key={item.key}
-                          type="button"
-                          onClick={() => handleRoleToggle(item.key)}
-                          className={`p-3 rounded-xl border text-xs font-bold transition-all text-left flex flex-col justify-between h-20 ${
-                            isMandatory ? 'bg-primary-50 border-primary-300 text-primary-900 shadow-sm' : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
-                          }`}
-                        >
-                          <span>{item.label}</span>
-                          <span className={`text-[10px] uppercase tracking-wider font-extrabold ${isMandatory ? 'text-primary-700' : 'text-gray-400'}`}>
-                            {isMandatory ? 'Mandatory' : 'Optional'}
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-              </div>
-            </Card>
-
-            {/* Trusted Device & Session Policy */}
-            <Card title="Device Trust & Session Rules">
+            {/* Session & Authentication Policy */}
+            <Card title="Session & Authentication Rules">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
                 
-                <div>
-                  <label className="block text-xs font-bold text-gray-700 mb-1">Trusted Device Duration (Days)</label>
-                  <Input 
-                    type="number"
-                    value={formData.trustedDeviceDays}
-                    onChange={e => setFormData({...formData, trustedDeviceDays: parseInt(e.target.value) || 30})}
-                    min="1"
-                    max="90"
-                    required
-                  />
-                  <p className="text-[11px] text-gray-400 mt-1">Number of days a recognized browser can bypass OTP.</p>
-                </div>
-
                 <div>
                   <label className="block text-xs font-bold text-gray-700 mb-1">Session Inactivity Timeout (Minutes)</label>
                   <Input 
@@ -235,7 +158,7 @@ const SecuritySettings = () => {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-gray-700 mb-1">Max OTP Failed Attempts</label>
+                  <label className="block text-xs font-bold text-gray-700 mb-1">Max Failed Login Attempts</label>
                   <Input 
                     type="number"
                     value={formData.maxLoginAttempts}
@@ -244,7 +167,7 @@ const SecuritySettings = () => {
                     max="10"
                     required
                   />
-                  <p className="text-[11px] text-gray-400 mt-1">Threshold before active OTP session is locked.</p>
+                  <p className="text-[11px] text-gray-400 mt-1">Threshold before account lock is enforced.</p>
                 </div>
 
                 <div>
@@ -260,6 +183,19 @@ const SecuritySettings = () => {
                   <p className="text-[11px] text-gray-400 mt-1">Temporary lock period after repeated failures.</p>
                 </div>
 
+                <div className="flex flex-col justify-center pt-2">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input 
+                      type="checkbox"
+                      checked={formData.requireSpecialCharPassword}
+                      onChange={e => setFormData({...formData, requireSpecialCharPassword: e.target.checked})}
+                      className="rounded text-primary-600 focus:ring-primary-500 h-4 w-4"
+                    />
+                    <span className="text-xs font-bold text-gray-700">Require Special Character in Password</span>
+                  </label>
+                  <p className="text-[11px] text-gray-400 mt-1">Enforce complex passwords for password resets.</p>
+                </div>
+
               </div>
             </Card>
 
@@ -269,11 +205,7 @@ const SecuritySettings = () => {
             
             <Card title="Save Security Policy">
               <div className="space-y-4 mt-4 text-sm text-gray-600">
-                <p>Updating security settings will immediately apply updated MFA enforcement and device trust rules across the system.</p>
-                <div className="p-3 bg-amber-50 rounded-lg border border-amber-200 text-amber-800 text-xs flex items-start gap-2">
-                  <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                  <span>Mandatory MFA changes will take effect on next login for affected user roles.</span>
-                </div>
+                <p>Updating security settings will immediately apply updated session and lockout rules across the system.</p>
 
                 <Button 
                   type="submit" 
@@ -288,22 +220,22 @@ const SecuritySettings = () => {
             <Card title="Security Status Summary">
               <div className="space-y-3 mt-3 text-xs">
                 <div className="flex justify-between py-2 border-b border-gray-100">
-                  <span className="text-gray-500">MFA Policy</span>
-                  <Badge variant={formData.mfaEnabled ? 'success' : 'warning'}>
-                    {formData.mfaEnabled ? 'Active' : 'Disabled'}
-                  </Badge>
-                </div>
-                <div className="flex justify-between py-2 border-b border-gray-100">
-                  <span className="text-gray-500">Enforced Roles</span>
-                  <span className="font-bold text-gray-800">{formData.mandatoryRoles.length} Roles</span>
-                </div>
-                <div className="flex justify-between py-2 border-b border-gray-100">
-                  <span className="text-gray-500">Device Bypass</span>
-                  <span className="font-bold text-gray-800">{formData.trustedDeviceDays} Days</span>
-                </div>
-                <div className="flex justify-between py-2">
                   <span className="text-gray-500">Session Max</span>
                   <span className="font-bold text-gray-800">{formData.sessionTimeoutMinutes} Mins</span>
+                </div>
+                <div className="flex justify-between py-2 border-b border-gray-100">
+                  <span className="text-gray-500">Max Attempts</span>
+                  <span className="font-bold text-gray-800">{formData.maxLoginAttempts} Tries</span>
+                </div>
+                <div className="flex justify-between py-2 border-b border-gray-100">
+                  <span className="text-gray-500">Lockout Duration</span>
+                  <span className="font-bold text-gray-800">{formData.accountLockMinutes} Mins</span>
+                </div>
+                <div className="flex justify-between py-2">
+                  <span className="text-gray-500">Password Policy</span>
+                  <Badge variant={formData.requireSpecialCharPassword ? 'success' : 'secondary'}>
+                    {formData.requireSpecialCharPassword ? 'Strict' : 'Standard'}
+                  </Badge>
                 </div>
               </div>
             </Card>

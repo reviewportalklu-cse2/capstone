@@ -6,6 +6,7 @@ import StudentManagement from './StudentManagement';
 import GuideManagement from './GuideManagement';
 import ReviewerManagement from './ReviewerManagement';
 import FacultyManagement from './FacultyManagement';
+import MembersManagement from './MembersManagement';
 import SubmissionsManagement from './SubmissionsManagement';
 import ProjectManagement from './ProjectManagement';
 import TeamManagement from './team-management/TeamManagement';
@@ -31,6 +32,7 @@ const AdminRoutes = () => {
         <Route path="dashboard" element={<AdminDashboard />} />
         
         {/* User Management */}
+        <Route path="members" element={<MembersManagement />} />
         <Route path="students" element={<StudentManagement />} />
         <Route path="guides" element={<GuideManagement />} />
         <Route path="reviewers" element={<ReviewerManagement />} />

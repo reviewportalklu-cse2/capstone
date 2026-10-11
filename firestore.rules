@@ -1,0 +1,157 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && (
+        request.auth.token.role == 'admin' ||
+        (exists(/databases/$(database)/documents/userRoles/$(request.auth.uid)) && (
+          get(/databases/$(database)/documents/userRoles/$(request.auth.uid)).data.defaultRole == 'admin' ||
+          'admin' in get(/databases/$(database)/documents/userRoles/$(request.auth.uid)).data.availableRoles
+        )) ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && (
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+          'admin' in get(/databases/$(database)/documents/users/$(request.auth.uid)).data.availableRoles
+        ))
+      );
+    }
+
+    // userRoles collection: Critical identity and role mapping
+    match /userRoles/{userId} {
+      allow read: if isAuthenticated();
+      // Administrators can create or modify; Users can create default student role if self
+      allow create: if isAdmin() || (
+        isOwner(userId) &&
+        request.resource.data.defaultRole == 'student' &&
+        request.resource.data.availableRoles == ['student']
+      );
+      allow delete: if isAdmin();
+      allow update: if isAdmin() || (
+        isOwner(userId) && 
+        // User cannot grant themselves new roles
+        request.resource.data.availableRoles == resource.data.availableRoles &&
+        request.resource.data.defaultRole == resource.data.defaultRole
+      );
+    }
+
+    // users collection: User profile data
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow create: if isAdmin() || isOwner(userId);
+      allow delete: if isAdmin();
+      allow update: if isAdmin() || (
+        isOwner(userId) &&
+        // Self updates only permitted for contact/department fields
+        request.resource.data.role == resource.data.role &&
+        request.resource.data.availableRoles == resource.data.availableRoles
+      );
+    }
+
+    // Evaluator domain collections: guides, classroomFaculty, reviewers
+    match /guides/{guideId} {
+      allow read: if isAuthenticated();
+      allow create, delete: if isAdmin();
+      allow update: if isAdmin() || (
+        isAuthenticated() && 
+        (
+          resource.data.uid == request.auth.uid || 
+          resource.data.email == request.auth.token.email ||
+          resource.data.Email == request.auth.token.email
+        )
+      );
+    }
+
+    match /classroomFaculty/{facultyId} {
+      allow read: if isAuthenticated();
+      allow create, delete: if isAdmin();
+      allow update: if isAdmin() || (
+        isAuthenticated() && 
+        (
+          resource.data.uid == request.auth.uid || 
+          resource.data.email == request.auth.token.email ||
+          resource.data.Email == request.auth.token.email
+        )
+      );
+    }
+
+    match /reviewers/{reviewerId} {
+      allow read: if isAuthenticated();
+      allow create, delete: if isAdmin();
+      allow update: if isAdmin() || (
+        isAuthenticated() && 
+        (
+          resource.data.uid == request.auth.uid || 
+          resource.data.email == request.auth.token.email ||
+          resource.data.Email == request.auth.token.email
+        )
+      );
+    }
+
+    // Students collection
+    match /students/{studentId} {
+      allow read: if isAuthenticated();
+      allow create, delete, update: if isAdmin();
+    }
+
+    // Teams and Projects
+    match /teams/{teamId} {
+      allow read: if isAuthenticated();
+      allow create, update, delete: if isAuthenticated();
+    }
+
+    match /projects/{projectId} {
+      allow read: if isAuthenticated();
+      allow create, update, delete: if isAuthenticated();
+    }
+
+    // Evaluations, Marks, and Rubrics
+    match /evaluations/{evalId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isAuthenticated();
+      allow delete: if isAdmin();
+    }
+
+    match /guideMarks/{markId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isAuthenticated();
+      allow delete: if isAdmin();
+    }
+
+    match /facultyMarks/{markId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isAuthenticated();
+      allow delete: if isAdmin();
+    }
+
+    match /rubrics/{rubricId} {
+      allow read: if isAuthenticated();
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /rubricCriteria/{critId} {
+      allow read: if isAuthenticated();
+      allow create, update, delete: if isAdmin();
+    }
+
+    // Audit logs: Read by admins; created on security/operational events; immutable
+    match /auditLogs/{logId} {
+      allow read: if isAdmin();
+      allow create: if isAuthenticated();
+      allow update, delete: if false; // Append-only audit trail
+    }
+
+    // Fallback rule for all other application collections
+    match /{document=**} {
+      allow read, write: if isAuthenticated();
+    }
+  }
+}

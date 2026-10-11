@@ -92,29 +92,65 @@ export const userRoleService = {
     if (!uid) return { availableRoles: ['student'], defaultRole: 'student', requiresPasswordChange: false };
 
     try {
-      const userRoleDoc = await FirestoreService.getById(COLLECTION_NAME, uid);
+      const [userRoleDoc, userDoc] = await Promise.all([
+        FirestoreService.getById(COLLECTION_NAME, uid),
+        FirestoreService.getById('users', uid)
+      ]);
 
-      if (userRoleDoc && userRoleDoc.availableRoles && userRoleDoc.availableRoles.length > 0) {
-        return {
-          availableRoles: userRoleDoc.availableRoles,
-          defaultRole: userRoleDoc.defaultRole || userRoleDoc.availableRoles[0],
-          requiresPasswordChange: userRoleDoc.requiresPasswordChange === true
-        };
+      let availableRoles = [...(userRoleDoc?.availableRoles || [])];
+
+      // Merge with users document
+      if (userDoc?.role && !availableRoles.includes(userDoc.role)) {
+        availableRoles.push(userDoc.role);
+      }
+      if (userDoc?.availableRoles && Array.isArray(userDoc.availableRoles)) {
+        userDoc.availableRoles.forEach(r => {
+          if (!availableRoles.includes(r)) availableRoles.push(r);
+        });
       }
 
-      // Auto-discover roles if doc missing or empty
-      const discoveredRoles = await userRoleService.discoverRoles(email);
-      const defaultRole = userRoleService.getDefaultRole(discoveredRoles);
+      // If user has staff/evaluator/admin roles, strip accidental 'student' entry
+      const hasStaffRole = availableRoles.some(r => ['admin', 'guide', 'classroom_faculty', 'faculty', 'reviewer'].includes(r));
+      if (hasStaffRole && availableRoles.length > 1) {
+        availableRoles = availableRoles.filter(r => r !== 'student');
+      }
 
-      // Check users doc as fallback for requiresPasswordChange
-      const userDoc = await FirestoreService.getById('users', uid);
-      const reqPass = userDoc ? userDoc.requiresPasswordChange === true : false;
+      // Auto-discover if empty or solely student
+      if (availableRoles.length === 0 || (!hasStaffRole && availableRoles.includes('student'))) {
+        const discoveredRoles = await userRoleService.discoverRoles(email);
+        if (discoveredRoles.length > 0) {
+          discoveredRoles.forEach(r => {
+            if (!availableRoles.includes(r)) availableRoles.push(r);
+          });
+          if (availableRoles.some(r => ['admin', 'guide', 'classroom_faculty', 'faculty', 'reviewer'].includes(r))) {
+            availableRoles = availableRoles.filter(r => r !== 'student');
+          }
+        }
+      }
 
-      // Persist to userRoles collection asynchronously
-      await userRoleService.syncUserRoles(uid, email, discoveredRoles, defaultRole);
+      if (availableRoles.length === 0) {
+        availableRoles = ['student'];
+      }
+
+      // Determine defaultRole using priority order
+      const defaultRole = userRoleService.getDefaultRole(availableRoles);
+      const reqPass = userRoleDoc?.requiresPasswordChange === true || userDoc?.requiresPasswordChange === true;
+
+      // Sync back to userRoles in Firestore if it was missing or out of sync
+      const needsSync = !userRoleDoc || 
+        JSON.stringify(userRoleDoc.availableRoles?.slice().sort()) !== JSON.stringify(availableRoles.slice().sort()) ||
+        userRoleDoc.defaultRole !== defaultRole;
+
+      if (needsSync) {
+        try {
+          await userRoleService.syncUserRoles(uid, email, availableRoles, defaultRole);
+        } catch (syncErr) {
+          console.warn("[USER_ROLE_SERVICE] Background sync notice:", syncErr);
+        }
+      }
 
       return {
-        availableRoles: discoveredRoles,
+        availableRoles,
         defaultRole,
         requiresPasswordChange: reqPass
       };
@@ -156,7 +192,7 @@ export const userRoleService = {
         defaultRole: defaultRole || availableRoles[0] || 'student',
         updatedAt: new Date().toISOString()
       };
-      await FirestoreService.set(COLLECTION_NAME, uid, payload);
+      await FirestoreService.set(COLLECTION_NAME, uid, payload, { merge: true });
     } catch (err) {
       console.error(`Error syncing userRoles for ${uid}:`, err);
     }

@@ -7,7 +7,7 @@ import RoleSwitcher from '@/components/common/RoleSwitcher';
 import { useNavigate } from 'react-router-dom';
 
 const Header = ({ title = "Dashboard", setMobileMenuOpen }) => {
-  const { currentUser, activeRole, userRole, domainUser, mfaVerified, isTrustedDevice } = useAuth();
+  const { currentUser, activeRole, userRole, domainUser } = useAuth();
   const { getNotificationsByRole } = useData();
   const navigate = useNavigate();
 
@@ -49,28 +49,15 @@ const Header = ({ title = "Dashboard", setMobileMenuOpen }) => {
           {/* Role Switcher */}
           <RoleSwitcher />
 
-          {/* Security Badge */}
+          {/* Device & Session Activity */}
           <button
             type="button"
             onClick={() => navigate('/devices')}
-            className={`hidden lg:flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[11px] font-bold transition-colors ${
-              isTrustedDevice 
-                ? 'bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100' 
-                : 'bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100'
-            }`}
-            title="Click to view security settings and trusted devices"
+            className="hidden lg:flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[11px] font-bold transition-colors bg-surface-dim text-gray-700 border-gray-200 hover:bg-gray-100"
+            title="Click to view device and session activity"
           >
-            {isTrustedDevice ? (
-              <>
-                <Smartphone className="w-3.5 h-3.5 text-amber-600" />
-                <span>Trusted Device</span>
-              </>
-            ) : (
-              <>
-                <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-                <span>MFA Protected</span>
-              </>
-            )}
+            <ShieldCheck className="w-3.5 h-3.5 text-primary-600" />
+            <span>Session Security</span>
           </button>
 
           {/* Academic Year */}

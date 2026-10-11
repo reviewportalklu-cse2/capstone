@@ -11,7 +11,9 @@ const Button = ({
   disabled = false, 
   className = '', 
   icon: Icon = null,
-  fullWidth = false
+  fullWidth = false,
+  id,
+  ...props
 }) => {
   const baseStyles = "inline-flex items-center justify-center font-semibold rounded-lg transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2";
   
@@ -30,9 +32,11 @@ const Button = ({
 
   return (
     <button
+      id={id}
       type={type}
       onClick={onClick}
       disabled={disabled || isLoading}
+      {...props}
       className={`
         ${baseStyles} 
         ${variants[variant]} 

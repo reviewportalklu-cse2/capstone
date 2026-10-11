@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { authService } from '@/firebase/services/authService';
 import { userService } from '@/firebase/services/userService';
@@ -19,8 +19,9 @@ const ROLE_ROUTES = {
 };
 
 const Login = () => {
-  const { currentUser, activeRole, requiresPasswordChange, mfaRequired, mfaVerified, loading: authLoading } = useAuth();
+  const { currentUser, activeRole, requiresPasswordChange, loading: authLoading } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -36,14 +37,18 @@ const Login = () => {
   useEffect(() => {
     if (!authLoading && currentUser) {
       if (requiresPasswordChange === true) {
-        navigate('/first-login-password-change');
-      } else if (mfaRequired && !mfaVerified) {
-        navigate('/mfa-verification');
-      } else if (activeRole && ROLE_ROUTES[activeRole]) {
-        navigate(ROLE_ROUTES[activeRole]);
+        navigate('/first-login-password-change', { replace: true });
+      } else {
+        const fromPath = location.state?.from?.pathname;
+        const fromSearch = location.state?.from?.search || '';
+        if (fromPath && fromPath !== '/login') {
+          navigate(fromPath + fromSearch, { replace: true });
+        } else if (activeRole && ROLE_ROUTES[activeRole]) {
+          navigate(ROLE_ROUTES[activeRole], { replace: true });
+        }
       }
     }
-  }, [currentUser, activeRole, requiresPasswordChange, mfaRequired, mfaVerified, authLoading, navigate]);
+  }, [currentUser, activeRole, requiresPasswordChange, authLoading, navigate, location]);
 
   const handleFormSubmit = async (e) => {
     if (e) e.preventDefault();

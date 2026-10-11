@@ -5,7 +5,7 @@ import { getStorage } from "firebase/storage";
 
 const env = (typeof import.meta !== 'undefined' && import.meta.env) ? import.meta.env : (process.env || {});
 
-const firebaseConfig = {
+export const firebaseConfig = {
   apiKey: env.VITE_FIREBASE_API_KEY || "AIzaSyD01a-evT_VhRa_ndcvc4v5Qnni2cS9SVc",
   authDomain: env.VITE_FIREBASE_AUTH_DOMAIN || "final-year-project-erp.firebaseapp.com",
   projectId: env.VITE_FIREBASE_PROJECT_ID || "final-year-project-erp",

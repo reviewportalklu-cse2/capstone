@@ -1,0 +1,375 @@
+<USER_REQUEST>
+IMPLEMENT ONLY THESE 2 UPDATES. DO NOT WORK ON MFA/TOTP OR EMAIL OTP.
+
+PROJECT:
+KL CSE Capstone Management & Evaluation Portal
+
+==================================================
+UPDATE 1 — FIX GUIDE PROFILE PAGE
+==================================================
+
+The Guide Profile page is currently not working correctly.
+
+Audit the complete flow:
+
+Login
+→ AuthContext
+→ authenticated Firebase user
+→ application user/evaluator record
+→ employeeId
+→ evaluator/guide profile data
+→ Guide Profile page
+
+Find the actual root cause instead of adding a workaround.
+
+The Guide Profile page must correctly load the currently logged-in Guide's real data.
+
+Use the existing application data and Firestore records.
+
+Do NOT hardcode a guide.
+
+Do NOT create dummy profile data.
+
+Do NOT expose passwords.
+
+The profile should correctly display the existing available information such as:
+- Name
+- Employee ID
+- Email
+- Department
+- Role(s)
+- Other existing profile fields already supported by the application
+
+IMPORTANT:
+The same employee can have multiple roles:
+- Guide
+- Classroom Faculty
+- Reviewer
+
+Do not assume one employee has only one role.
+
+If the currently logged-in evaluator has multiple roles, the profile should still resolve the same employee identity correctly.
+
+Do not break:
+- Role switching
+- ProtectedRoute
+- AuthContext
+- Firebase Authentication
+- Existing evaluator permissions
+
+Also test direct navigation to the Guide Profile page after login.
+
+==================================================
+UPDATE 2 — ADD ADMIN → MEMBERS PAGE
+==================================================
+
+Add a new "Members" page/section in the Admin Panel.
+
+Purpose:
+
+This is the ADMIN onboarding page for adding new faculty/evaluator members.
+
+The Admin must be able to add a new faculty member before that person can log in.
+
+Required fields:
+
+1. Full Name
+2. Employee ID
+3. Official Email
+4. Department
+5. Available Role(s)
+
+Available roles:
+
+- Guide
+- Classroom Faculty
+- Reviewer
+
+Allow selecting one or multiple roles because one employee may perform multiple evaluator roles.
+
+==================================================
+ACCOUNT CREATION
+==================================================
+
+When Admin adds a new member:
+
+Login Email:
+    = official email entered by Admin
+
+Initial Password:
+    = Employee ID
+
+Example:
+
+Email:
+newfaculty@kluniversity.in
+
+Employee ID:
+2456
+
+Initial password:
+2456
+
+The account must be created in Firebase Authentication using:
+
+email = official email
+password = employee ID
+
+DO NOT store the password in Firestore.
+
+DO NOT display the password after account creation except where necessary to clearly inform the Admin that:
+
+"Initial password is the employee ID."
+
+The employee must change this password at first login.
+
+==================================================
+FIRST LOGIN PASSWORD CHANGE
+==================================================
+
+Add a proper first-login password-change flow.
+
+When a newly created member logs in using:
+
+Email + Employee ID
+
+the application must detect that this is their first login.
+
+Redirect/block normal portal access and show:
+
+"Set New Password"
+
+The user must enter:
+
+- New Password
+- Confirm New Password
+
+Validate:
+- Required
+- Passwords match
+- Use the application's existing password policy if one already exists
+- Do not allow continuing with the initial Employee ID password
+
+After successful password change:
+
+1. Update Firebase Authentication password.
+2. Mark the user's first-login/password-change requirement as completed.
+3. Remove the first-login restriction.
+4. Continue to the originally intended destination/dashboard.
+
+Do NOT store the new password in Firestore.
+
+==================================================
+DATA MODEL
+==================================================
+
+Use the existing evaluator/member/application-user data model if one already exists.
+
+Do NOT create duplicate employee records.
+
+Before creating a member, check:
+
+- Firebase Auth email already exists
+- Employee ID already exists
+- Existing application user/evaluator record already exists
+
+If duplicate:
+
+Show a clear error instead of creating another record.
+
+The employee's available roles must be stored in the existing role structure.
+
+For example, conceptually:
+
+availableRoles:
+[
+  "guide",
+  "classroom_faculty",
+  "reviewer"
+]
+
+Use the application's existing role naming conventions rather than introducing a second naming system.
+
+==================================================
+MULTI-ROLE SUPPORT
+==================================================
+
+Example:
+
+Employee:
+Ravi Kumar
+Employee ID:
+2456
+Email:
+ravi@kluniversity.in
+
+Roles:
+Guide
+Classroom Faculty
+Reviewer
+
+The account must be ONE Firebase Authentication user.
+
+Do NOT create three Firebase accounts.
+
+The same user should be able to log in once and switch between available roles using the existing role-switching functionality.
+
+==================================================
+ADMIN MEMBERS PAGE UI
+==================================================
+
+Add:
+
+Admin Panel
+→ Members
+
+The page should contain:
+
+- Members list/table
+- Search
+- Filter by role
+- Add Member button
+- Edit member profile/details where safe
+- View assigned roles
+- Employee ID
+- Email
+- Status
+- First-login/password-change status
+
+Example statuses:
+
+ACTIVE
+PASSWORD CHANGE REQUIRED
+
+Do NOT display passwords.
+
+For adding a member, use a clean form/modal consistent with the existing Admin UI.
+
+==================================================
+IMPORTANT SECURITY REQUIREMENTS
+==================================================
+
+Firebase Authentication password creation must happen through a secure server-side/admin mechanism.
+
+Do NOT put Firebase Admin SDK credentials in the React/Vite frontend.
+
+Do NOT expose service-account credentials.
+
+Do NOT create users using insecure client-side admin credentials.
+
+Do NOT store passwords in Firestore.
+
+Do NOT store plaintext passwords anywhere.
+
+Do NOT create fake authentication.
+
+Do NOT bypass Firebase Authentication.
+
+==================================================
+EXISTING USERS
+==================================================
+
+Do NOT force existing faculty/evaluators to change their passwords unless their account is explicitly marked as requiring first-login password change.
+
+Do NOT reset existing passwords.
+
+Do NOT modify existing Firebase users unnecessarily.
+
+The new first-login flow should primarily apply to newly provisioned members.
+
+==================================================
+MFA / TOTP
+==================================================
+
+IMPORTANT:
+
+DO NOT implement MFA.
+
+DO NOT implement TOTP.
+
+DO NOT implement email OTP.
+
+DO NOT show Secure Your Account.
+
+DO NOT add any MFA requirement.
+
+MFA/TOTP is postponed and must not block login.
+
+Keep the current authentication flow working without MFA.
+
+==================================================
+VALIDATION
+==================================================
+
+After implementation:
+
+1. Run npm build.
+
+2. Test existing Guide login.
+
+3. Open Guide Profile.
+
+4. Confirm Guide Profile loads real data.
+
+5. Test Admin → Members.
+
+6. Add a TEST member only if a safe test environment/account is available.
+
+7. Confirm Firebase Authentication account creation works.
+
+8. Confirm application user/member record is created.
+
+9. Confirm selected roles are stored correctly.
+
+10. Log in using:
+    email + employee ID
+
+11. Confirm first-login password-change screen appears.
+
+12. Set a new password.
+
+13. Confirm the new password works.
+
+14. Confirm the employee can access the portal after changing password.
+
+15. Confirm the old employee-ID password no longer works.
+
+16. Confirm multi-role users remain supported.
+
+17. Confirm existing users are unaffected.
+
+18. Confirm no MFA/TOTP screen appears.
+
+19. Confirm no passwords are stored in Firestore.
+
+20. Confirm no service-account credentials are exposed to the frontend.
+
+IMPORTANT:
+Do not modify unrelated pages/features.
+
+At the end, provide:
+- Root cause of Guide Profile issue
+- Files changed
+- Members page implementation
+- Authentication provisioning method
+- First-login password-change implementation
+- Firestore/application-user changes
+- Build result
+- Test results
+- Any remaining blockers
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-10-07T15:21:54+05:30.
+
+The user's current state is as follows:
+Active Document: c:\Users\hp\Desktop\PROJECTS\Capstone\scratch\test_totp_mfa_availability.js (LANGUAGE_JAVASCRIPT)
+Cursor is on line: 1
+Other open documents:
+- c:\Users\hp\Desktop\PROJECTS\Capstone\scripts\test_mfa_enrollment_e2e.js (LANGUAGE_JAVASCRIPT)
+- c:\Users\hp\Desktop\PROJECTS\Capstone\scripts\test_native_totp_capability.js (LANGUAGE_JAVASCRIPT)
+- c:\Users\hp\Desktop\PROJECTS\Capstone\src\components\auth\MandatoryMfaEnrollmentModal.jsx (LANGUAGE_JAVASCRIPT)
+- c:\Users\hp\Desktop\PROJECTS\Capstone\src\firebase\services\totpMfaService.js (LANGUAGE_JAVASCRIPT)
+- c:\Users\hp\Desktop\PROJECTS\Capstone\src\App.jsx (LANGUAGE_JAVASCRIPT)
+Running terminal commands:
+- npm run dev (in c:\Users\hp\Desktop\PROJECTS\Capstone, running for 4m52s)
+</ADDITIONAL_METADATA>

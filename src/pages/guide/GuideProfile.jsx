@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { guideNavigation } from '@/constants/navigation';
 import Card from '@/components/common/Card';
@@ -9,11 +9,23 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useData } from '@/contexts/DataContext';
 import { useGuideAnalytics } from '@/hooks/useGuideAnalytics';
 import { FirestoreService } from '@/firebase/services/firestore';
-import { Loader2, User, Mail, Phone, Building2, Shield, CheckCircle, AlertTriangle, Users, Target, BookOpen } from 'lucide-react';
+import { Loader2, User, Mail, Phone, Building2, Shield, CheckCircle, AlertTriangle, Users, Target, BookOpen, ShieldCheck } from 'lucide-react';
+
+const formatRoleName = (roleKey) => {
+  switch (String(roleKey).toLowerCase()) {
+    case 'guide': return 'Project Guide';
+    case 'classroom_faculty':
+    case 'faculty': return 'Classroom Faculty';
+    case 'reviewer': return 'Reviewer';
+    case 'admin': return 'Administrator';
+    case 'student': return 'Student';
+    default: return roleKey;
+  }
+};
 
 const GuideProfile = () => {
-  const { currentUser, domainUser } = useAuth();
-  const { getGuideById, dataLoading } = useData();
+  const { currentUser, domainUser, availableRoles = [], activeRole, userRole, loading: authLoading } = useAuth();
+  const { guides = [], dataLoading } = useData();
   const { getSupervisedTeams } = useGuideAnalytics();
 
   const supervisedTeams = getSupervisedTeams() || [];
@@ -21,49 +33,58 @@ const GuideProfile = () => {
   const assignedStudentsCount = supervisedTeams.reduce((sum, t) => sum + (t.members?.length || 0), 0);
   const assignedProjectsCount = supervisedTeams.filter(t => t.project?.title || t.projectId).length;
 
-  const [profile, setProfile] = useState(() => ({
-    name: domainUser?.name || '',
-    email: domainUser?.email || currentUser?.email || '',
-    phone: domainUser?.phone || '',
-    department: domainUser?.department || 'Computer Science',
-    designation: (domainUser?.role === 'guide' || !domainUser?.designation || domainUser?.designation === 'External Assessor') ? 'Project Guide' : (domainUser?.designation || 'Project Guide'),
-    employeeId: domainUser?.employeeId || domainUser?.guideId || domainUser?.id || ''
-  }));
+  // Multi-key lookup to find guide document in data.guides
+  const matchedGuide = useMemo(() => {
+    if (!guides || guides.length === 0) return null;
+    const lookupKeys = [
+      currentUser?.email,
+      domainUser?.email,
+      domainUser?.employeeId,
+      domainUser?.guideId,
+      domainUser?.id,
+      domainUser?.domainId,
+      currentUser?.uid
+    ].filter(Boolean).map(k => String(k).toLowerCase());
+
+    for (const key of lookupKeys) {
+      const match = guides.find(g => {
+        const gEmail = String(g.email || g.Email || '').toLowerCase();
+        const gEmpId = String(g.employeeId || g['Employee ID'] || g.guideId || g.id || '').toLowerCase();
+        const gUid = String(g.uid || '').toLowerCase();
+        return gEmail === key || gEmpId === key || gUid === key;
+      });
+      if (match) return match;
+    }
+    return null;
+  }, [guides, currentUser, domainUser]);
+
+  const [profile, setProfile] = useState({
+    name: '',
+    email: '',
+    phone: '',
+    department: 'Computer Science',
+    designation: 'Project Guide',
+    employeeId: ''
+  });
 
   const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    if (domainUser) {
+    const src = matchedGuide || domainUser;
+    if (src || currentUser) {
+      const rawEmpId = src?.employeeId ?? src?.['Employee ID'] ?? domainUser?.employeeId ?? src?.guideId ?? src?.id ?? '';
       setProfile({
-        name: domainUser.name || '',
-        email: domainUser.email || currentUser?.email || '',
-        phone: domainUser.phone || '',
-        department: domainUser.department || 'Computer Science',
-        designation: (domainUser.role === 'guide' || !domainUser.designation || domainUser.designation === 'External Assessor') ? 'Project Guide' : domainUser.designation,
-        employeeId: domainUser.employeeId || domainUser.guideId || domainUser.id || 'G001'
+        name: src?.name || src?.['Guide Name'] || src?.Name || currentUser?.displayName || currentUser?.email?.split('@')[0] || '',
+        email: src?.email || src?.Email || currentUser?.email || '',
+        phone: src?.phone || src?.Phone || '',
+        department: src?.department || src?.Department || 'Computer Science',
+        designation: (src?.designation || src?.Designation) ? (src.designation || src.Designation) : 'Project Guide',
+        employeeId: rawEmpId != null ? String(rawEmpId) : ''
       });
-    } else if (currentUser?.uid && !dataLoading) {
-      const guideData = getGuideById(currentUser.uid);
-      if (guideData) {
-        setProfile({
-          name: guideData.name || '',
-          email: guideData.email || currentUser.email,
-          phone: guideData.phone || '',
-          department: guideData.department || 'Computer Science',
-          designation: guideData.designation || 'Project Guide',
-          employeeId: guideData.employeeId || guideData.id
-        });
-      } else {
-        setProfile(prev => ({
-          ...prev,
-          email: currentUser.email || '',
-          name: currentUser.displayName || currentUser.email.split('@')[0]
-        }));
-      }
     }
-  }, [domainUser, currentUser, getGuideById, dataLoading]);
+  }, [domainUser, matchedGuide, currentUser]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -77,14 +98,35 @@ const GuideProfile = () => {
     setError(null);
 
     try {
-      if (domainUser?.id) {
-        await FirestoreService.updateDocument('guides', domainUser.id, {
-          name: profile.name,
-          phone: profile.phone,
-          department: profile.department,
-          updatedAt: new Date().toISOString()
-        });
+      const updatePayload = {
+        name: profile.name.trim(),
+        phone: profile.phone.trim(),
+        department: profile.department.trim(),
+        updatedAt: new Date().toISOString()
+      };
+
+      // Security ownership validation: Ensure guide document strictly matches authenticated user
+      const authorizedEmpId = domainUser?.employeeId || matchedGuide?.employeeId;
+      const targetGuideId = matchedGuide?.id || (authorizedEmpId ? String(authorizedEmpId) : null);
+
+      if (targetGuideId) {
+        const isMatchedValid = matchedGuide ? (
+          (matchedGuide.email && matchedGuide.email.toLowerCase() === currentUser?.email?.toLowerCase()) ||
+          (matchedGuide.uid && matchedGuide.uid === currentUser?.uid) ||
+          (authorizedEmpId && String(matchedGuide.employeeId || matchedGuide.id) === String(authorizedEmpId))
+        ) : true;
+
+        if (!isMatchedValid) {
+          throw new Error("Security violation: You can only update your own evaluator profile.");
+        }
+
+        await FirestoreService.set('guides', targetGuideId, updatePayload, { merge: true });
       }
+
+      if (currentUser?.uid) {
+        await FirestoreService.set('users', currentUser.uid, updatePayload, { merge: true });
+      }
+
       setSuccess(true);
       setTimeout(() => setSuccess(false), 3000);
     } catch (err) {
@@ -95,7 +137,14 @@ const GuideProfile = () => {
     }
   };
 
-  if (dataLoading && !domainUser) {
+  const displayRoles = useMemo(() => {
+    const roles = (domainUser?.availableRoles && domainUser.availableRoles.length > 0)
+      ? domainUser.availableRoles
+      : (availableRoles && availableRoles.length > 0 ? availableRoles : [activeRole || userRole || 'guide']);
+    return [...new Set(roles)];
+  }, [domainUser, availableRoles, activeRole, userRole]);
+
+  if ((authLoading || (dataLoading && guides.length === 0)) && !domainUser) {
     return (
       <DashboardLayout navigationItems={guideNavigation} title="KL CSE Capstone Portal - Profile">
         <div className="flex h-[calc(100vh-4rem)] items-center justify-center">
@@ -124,15 +173,31 @@ const GuideProfile = () => {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div className="md:col-span-1 space-y-6">
             <Card>
-              <div className="flex flex-col items-center p-4">
+              <div className="flex flex-col items-center p-4 text-center">
                 <div className="w-24 h-24 bg-primary-100 text-primary-700 rounded-full flex items-center justify-center mb-4 border-4 border-white shadow-sm font-bold text-xl">
                   <User className="w-10 h-10" />
                 </div>
                 <h3 className="font-bold text-lg text-gray-900">{profile.name || 'Guide Profile'}</h3>
-                <p className="text-sm font-medium text-gray-500 mb-4">{profile.designation}</p>
-                <Badge variant="primary" className="w-full justify-center py-1.5 font-mono">
-                  ID: {profile.employeeId ? profile.employeeId.toUpperCase() : 'GUIDE'}
+                <p className="text-sm font-medium text-gray-500 mb-3">{profile.designation}</p>
+                <Badge variant="primary" className="w-full justify-center py-1.5 font-mono text-xs font-bold">
+                  ID: {profile.employeeId ? String(profile.employeeId).toUpperCase() : 'GUIDE'}
                 </Badge>
+
+                {/* Assigned Evaluator Roles */}
+                <div className="w-full mt-4 pt-4 border-t border-gray-100 text-left">
+                  <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-2">Assigned Roles</label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {displayRoles.map(r => (
+                      <Badge 
+                        key={r} 
+                        variant={r === (activeRole || 'guide') ? 'primary' : 'secondary'} 
+                        className="text-[11px] font-semibold"
+                      >
+                        {formatRoleName(r)} {r === (activeRole || 'guide') ? ' (Active)' : ''}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
               </div>
             </Card>
 
@@ -158,8 +223,12 @@ const GuideProfile = () => {
 
             <Card title="Security & Device">
               <div className="space-y-4 pt-2">
-                <Button variant="outline" className="w-full flex justify-center items-center gap-2 text-sm text-gray-700 border-gray-300">
-                  <Shield className="w-4 h-4" /> Manage MFA & Security
+                <Button 
+                  variant="outline" 
+                  onClick={() => window.location.href = '/devices'}
+                  className="w-full flex justify-center items-center gap-2 text-sm text-gray-700 border-gray-300"
+                >
+                  <Shield className="w-4 h-4" /> Account Security & Sessions
                 </Button>
               </div>
             </Card>
@@ -183,6 +252,7 @@ const GuideProfile = () => {
                         <User className="h-4 w-4 text-gray-400" />
                       </div>
                       <Input
+                        id="profileName"
                         name="name"
                         value={profile.name}
                         onChange={handleChange}
@@ -199,6 +269,7 @@ const GuideProfile = () => {
                         <Mail className="h-4 w-4 text-gray-400" />
                       </div>
                       <Input
+                        id="profileEmail"
                         name="email"
                         value={profile.email}
                         disabled
@@ -214,6 +285,7 @@ const GuideProfile = () => {
                         <Phone className="h-4 w-4 text-gray-400" />
                       </div>
                       <Input
+                        id="profilePhone"
                         name="phone"
                         value={profile.phone}
                         onChange={handleChange}
@@ -230,6 +302,7 @@ const GuideProfile = () => {
                         <Building2 className="h-4 w-4 text-gray-400" />
                       </div>
                       <Input
+                        id="profileDepartment"
                         name="department"
                         value={profile.department}
                         onChange={handleChange}
