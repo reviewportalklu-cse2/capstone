@@ -24,6 +24,7 @@ import RubricsManagement from './rubrics/RubricsManagement';
 import RubricBuilder from './rubrics/RubricBuilder';
 import ReviewCycles from './reviewer-rotation/ReviewCycles';
 import ReviewerAssignmentImport from './reviewer-rotation/ReviewerAssignmentImport';
+import EvaluationWorkspace from '@/pages/common/evaluation/EvaluationWorkspace';
 
 const AdminRoutes = () => {
   return (
@@ -57,6 +58,8 @@ const AdminRoutes = () => {
         <Route path="reviewer-assignments" element={<ReviewerAssignmentImport />} />
         
         {/* Evaluation & Results */}
+        <Route path="evaluation/:teamId?" element={<EvaluationWorkspace />} />
+        <Route path="evaluate/:teamId?" element={<EvaluationWorkspace />} />
         <Route path="evaluation-center/*" element={<EvaluationCenter />} />
         <Route path="semester-results" element={<SemesterResults />} />
         

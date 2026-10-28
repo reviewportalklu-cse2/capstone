@@ -219,7 +219,7 @@ const ReviewCycles = () => {
                     </div>
                     <div className="flex justify-between">
                       <span className="font-semibold text-gray-500">Linked Rubric:</span>
-                      <span className="font-bold text-primary-700">{linkedRubric ? linkedRubric.title : (cycle.rubricId || 'Not Linked')}</span>
+                      <span className="font-bold text-primary-700">{linkedRubric ? `${linkedRubric.title} (${linkedRubric.totalMarks || 50} Marks)` : (cycle.rubricId || 'Not Linked')}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="font-semibold text-gray-500">Active From:</span>
@@ -341,7 +341,7 @@ const ReviewCycles = () => {
                   <option value="">-- Select Rubric --</option>
                   {rubrics?.map(r => (
                     <option key={r.id} value={r.id || r.rubricId}>
-                      {r.title} ({r.reviewCycle || 'General'} - v{r.version || '1.0'})
+                      {r.title} ({r.reviewCycle || 'General'} - {r.totalMarks || 50} Marks - v{r.version || '1.0'})
                     </option>
                   ))}
                 </select>

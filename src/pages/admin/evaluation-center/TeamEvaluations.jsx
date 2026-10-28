@@ -43,7 +43,6 @@ const TeamEvaluations = () => {
     return items.map(t => ({
       'Team ID': t.teamId || t.id,
       'Project Title': t.projectTitle || t.teamName || t.title || 'N/A',
-      'Review Cycle': 'Review 1',
       'Guide Evaluator': t.guideName || 'Unassigned',
       'Guide Employee ID': t.guideEmployeeId || t.guideId || 'N/A',
       'Guide Score': t.guideMarks !== null && t.guideMarks !== undefined ? t.guideMarks : 'PENDING',
@@ -54,8 +53,20 @@ const TeamEvaluations = () => {
       'Faculty Status': t.facultyMarks !== null && t.facultyMarks !== undefined ? 'Submitted' : 'PENDING',
       'Reviewer Evaluator': t.reviewerName || 'Unassigned',
       'Reviewer Employee ID': t.reviewerEmployeeId || t.reviewerId || 'N/A',
-      'Reviewer Score': t.review1Score !== null && t.review1Score !== undefined ? t.review1Score : 'PENDING',
-      'Reviewer Status': t.review1Score !== null && t.review1Score !== undefined ? 'Submitted' : 'PENDING',
+      'Review 1 Score': t.review1Score !== null && t.review1Score !== undefined ? t.review1Score : 'PENDING',
+      'Review 1 Status': t.review1Score !== null && t.review1Score !== undefined ? 'Submitted' : 'PENDING',
+      'Review 2 Score': t.review2Score !== null && t.review2Score !== undefined ? t.review2Score : 'PENDING',
+      'Review 2 Status': t.review2Score !== null && t.review2Score !== undefined ? 'Submitted' : 'PENDING',
+      'Review 3 Rubric Name': 'Review 3 Evaluation Rubric',
+      'Review 3 Max Marks': 50,
+      'Review 3 Evaluator Role': 'Reviewer',
+      'Review 3 Evaluation Status': t.review3Status || (t.review3Score !== null && t.review3Score !== undefined ? 'Submitted' : 'PENDING'),
+      'Review 3 Submitted Score': t.review3Score !== null && t.review3Score !== undefined ? t.review3Score : 'PENDING',
+      'Prototype Rubric Name': 'Prototype Rubric',
+      'Prototype Rubric Max Marks': 50,
+      'Prototype Evaluator Role': 'Reviewer',
+      'Prototype Evaluation Status': t.prototypeStatus || (t.prototypeScore !== null && t.prototypeScore !== undefined ? 'Submitted' : 'PENDING'),
+      'Prototype Submitted Score': t.prototypeScore !== null && t.prototypeScore !== undefined ? t.prototypeScore : 'PENDING',
       'Final Score': t.finalScore !== null && t.finalScore !== undefined ? t.finalScore : 'PENDING',
       'Grade': t.finalScore !== null && t.finalScore !== undefined ? (t.grade || 'N/A') : 'PENDING',
       'Latest Submitted Date': t.latestEvalDate && t.latestEvalDate !== 'Pending' ? t.latestEvalDate : 'PENDING'
@@ -188,12 +199,29 @@ const TeamEvaluations = () => {
     },
     {
       key: 'reviews',
-      header: 'R1 / R2 / R3',
+      header: 'R1 / R2',
       render: (row) => (
         <div className="text-xs font-medium space-x-1">
-          <span className={row.review1Score !== null && row.review1Score !== undefined ? 'text-gray-900 font-bold' : 'text-amber-600 italic'}>{row.review1Score !== null && row.review1Score !== undefined ? `${row.review1Score}` : 'PENDING'}</span> /
-          <span className={row.review2Score !== null && row.review2Score !== undefined ? 'text-gray-900 font-bold' : 'text-amber-600 italic'}>{row.review2Score !== null && row.review2Score !== undefined ? `${row.review2Score}` : 'PENDING'}</span> /
-          <span className={row.review3Score !== null && row.review3Score !== undefined ? 'text-gray-900 font-bold' : 'text-amber-600 italic'}>{row.review3Score !== null && row.review3Score !== undefined ? `${row.review3Score}` : 'PENDING'}</span>
+          <span className={row.review1Score !== null && row.review1Score !== undefined ? 'text-gray-900 font-bold' : 'text-amber-600 italic'}>{row.review1Score !== null && row.review1Score !== undefined ? `${row.review1Score}/100` : 'PENDING'}</span> /
+          <span className={row.review2Score !== null && row.review2Score !== undefined ? 'text-gray-900 font-bold' : 'text-amber-600 italic'}>{row.review2Score !== null && row.review2Score !== undefined ? `${row.review2Score}/100` : 'PENDING'}</span>
+        </div>
+      )
+    },
+    {
+      key: 'review3Rubrics',
+      header: 'Review 3 Rubrics',
+      render: (row) => (
+        <div className="text-xs space-y-1 min-w-[210px]">
+          <div className="p-1 rounded bg-slate-50 border border-slate-100">
+            <span className={`block font-bold text-[11px] ${row.review3Score !== null && row.review3Score !== undefined ? 'text-primary-700' : 'text-amber-600 italic'}`}>
+              {row.review3Score !== null && row.review3Score !== undefined ? `Review 3 Evaluation Rubric — ${row.review3Score} / 50` : <span className="font-medium text-gray-500">Review 3 Evaluation Rubric — <span className="italic text-amber-600 font-bold">PENDING</span></span>}
+            </span>
+          </div>
+          <div className="p-1 rounded bg-slate-50 border border-slate-100">
+            <span className={`block font-bold text-[11px] ${row.prototypeScore !== null && row.prototypeScore !== undefined ? 'text-indigo-700' : 'text-amber-600 italic'}`}>
+              {row.prototypeScore !== null && row.prototypeScore !== undefined ? `Prototype Rubric — ${row.prototypeScore} / 50` : <span className="font-medium text-gray-500">Prototype Rubric — <span className="italic text-amber-600 font-bold">PENDING</span></span>}
+            </span>
+          </div>
         </div>
       )
     },

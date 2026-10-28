@@ -129,9 +129,27 @@ export const evaluationCenterService = {
 
         const guideEval = teamEvals.find(e => e.role === 'guide');
         const facultyEval = teamEvals.find(e => e.role === 'classroom_faculty' || e.role === 'faculty');
-        const reviewerEvalR1 = teamEvals.find(e => e.role === 'reviewer' && (e.reviewCycle === 'Review 1' || e.reviewCycleId === 'cycle-1'));
-        const reviewerEvalR2 = teamEvals.find(e => e.role === 'reviewer' && (e.reviewCycle === 'Review 2' || e.reviewCycleId === 'cycle-2'));
-        const reviewerEvalR3 = teamEvals.find(e => e.role === 'reviewer' && (e.reviewCycle === 'Review 3' || e.reviewCycleId === 'cycle-3'));
+        const isR3 = (e) => {
+          const c = String(e.reviewCycle || e.reviewCycleId || '').trim().toLowerCase();
+          return c === 'review 3' || c === 'review3' || c === 'cycle-3' || c === 'review-3';
+        };
+
+        const reviewerEvalR1 = teamEvals.find(e => (e.role === 'reviewer' || !e.role) && (e.reviewCycle === 'Review 1' || e.reviewCycleId === 'cycle-1'));
+        const reviewerEvalR2 = teamEvals.find(e => (e.role === 'reviewer' || !e.role) && (e.reviewCycle === 'Review 2' || e.reviewCycleId === 'cycle-2'));
+
+        const review3Eval = teamEvals.find(e => {
+          if (!isR3(e)) return false;
+          const rId = String(e.rubricId || '').toLowerCase();
+          const rTitle = String(e.rubricTitle || '').toLowerCase();
+          return rId === 'e8dde2gkwbflhz0b0j8b' || rTitle.includes('review 3 evaluation') || (!rTitle.includes('prototype') && rId !== 'rubric_prototype_review3');
+        });
+
+        const prototypeEval = teamEvals.find(e => {
+          if (!isR3(e)) return false;
+          const rId = String(e.rubricId || '').toLowerCase();
+          const rTitle = String(e.rubricTitle || '').toLowerCase();
+          return rId === 'rubric_prototype_review3' || rTitle.includes('prototype');
+        });
 
         // Mentor details resolved canonically
         const guideName = resolved.guideName || team.guideName || guideEval?.evaluatorName || 'Unassigned';
@@ -143,9 +161,19 @@ export const evaluationCenterService = {
 
         const r1 = reviewerEvalR1?.teamAverage ?? (team.review1Score > 0 ? team.review1Score : null);
         const r2 = reviewerEvalR2?.teamAverage ?? (team.review2Score > 0 ? team.review2Score : null);
-        const r3 = reviewerEvalR3?.teamAverage ?? (team.review3Score > 0 ? team.review3Score : null);
 
-        const validScores = [gMark, fMark, r1, r2, r3].filter(v => v !== null && v !== undefined);
+        const r3 = (review3Eval?.totalScore !== undefined && review3Eval?.totalScore !== null)
+          ? review3Eval.totalScore
+          : (review3Eval?.teamAverage !== undefined && review3Eval?.teamAverage !== null ? review3Eval.teamAverage : (team.review3Score > 0 ? team.review3Score : null));
+
+        const protoScore = (prototypeEval?.totalScore !== undefined && prototypeEval?.totalScore !== null)
+          ? prototypeEval.totalScore
+          : (prototypeEval?.teamAverage !== undefined && prototypeEval?.teamAverage !== null ? prototypeEval.teamAverage : null);
+
+        const r3Status = review3Eval ? (review3Eval.status === 'Locked' || review3Eval.status === 'Submitted' ? 'Submitted' : (review3Eval.status || 'Draft')) : 'PENDING';
+        const protoStatus = prototypeEval ? (prototypeEval.status === 'Locked' || prototypeEval.status === 'Submitted' ? 'Submitted' : (prototypeEval.status || 'Draft')) : 'PENDING';
+
+        const validScores = [gMark, fMark, r1, r2, r3, protoScore].filter(v => v !== null && v !== undefined);
         const totalWeightedScore = validScores.length > 0
           ? Math.round(validScores.reduce((sum, v) => sum + v, 0) / validScores.length)
           : null;
@@ -156,14 +184,15 @@ export const evaluationCenterService = {
 
         // Stage progress
         let stageProgress = 0;
-        if (gMark !== null) stageProgress += 20;
-        if (fMark !== null) stageProgress += 20;
-        if (r1 !== null) stageProgress += 20;
-        if (r2 !== null) stageProgress += 20;
-        if (r3 !== null) stageProgress += 20;
+        if (gMark !== null) stageProgress += 16.6;
+        if (fMark !== null) stageProgress += 16.6;
+        if (r1 !== null) stageProgress += 16.6;
+        if (r2 !== null) stageProgress += 16.6;
+        if (r3 !== null) stageProgress += 16.6;
+        if (protoScore !== null) stageProgress += 17.0;
 
         // Formatted timestamp of last evaluation activity
-        const latestEvalDate = [guideEval, facultyEval, reviewerEvalR1, reviewerEvalR2, reviewerEvalR3]
+        const latestEvalDate = [guideEval, facultyEval, reviewerEvalR1, reviewerEvalR2, review3Eval, prototypeEval]
           .filter(Boolean)
           .map(e => e.submittedAt || e.evaluatedAt || e.updatedAt || e.createdAt)
           .sort()
@@ -193,6 +222,15 @@ export const evaluationCenterService = {
           review1Score: r1,
           review2Score: r2,
           review3Score: r3,
+          prototypeScore: protoScore,
+          review3Status: r3Status,
+          prototypeStatus: protoStatus,
+          review3RubricName: 'Review 3 Evaluation Rubric',
+          prototypeRubricName: 'Prototype Rubric',
+          review3MaxMarks: 50,
+          prototypeMaxMarks: 50,
+          review3Eval,
+          prototypeEval,
           finalScore: totalWeightedScore,
           percentage,
           grade,

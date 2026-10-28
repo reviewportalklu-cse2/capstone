@@ -28,6 +28,16 @@ const EvaluationWorkspace = () => {
   const [selectedCycle, setSelectedCycle] = useState('Review 1');
   const [teamSelection, setTeamSelection] = useState('');
 
+  const queryParams = useMemo(() => new URLSearchParams(location.search), [location.search]);
+  const urlRubricId = queryParams.get('rubricId') || queryParams.get('rubric');
+  const [selectedRubricId, setSelectedRubricId] = useState(urlRubricId || '');
+
+  useEffect(() => {
+    if (urlRubricId) {
+      setSelectedRubricId(urlRubricId);
+    }
+  }, [urlRubricId]);
+
   useEffect(() => {
     if (activeCycle && userRole !== 'admin') {
       setSelectedCycle(activeCycle.name || activeCycle.reviewName || 'Review 1');
@@ -134,23 +144,6 @@ const EvaluationWorkspace = () => {
     };
   }, [teamId, teams, directTeam, projects, students, facultyList, guides, reviewers, reviewCycles, reviewerAssignments, guideAssignments, facultyAssignments, getGuideById, getFacultyById, getReviewerById]);
 
-  // Active Published Rubric lookup for selectedCycle
-  const activeRubric = useMemo(() => {
-    if (!rubrics || rubrics.length === 0) return null;
-
-    const cycleName = String(selectedCycle || activeCycle?.name || activeCycle?.reviewName || 'Review 1').trim().toLowerCase();
-
-    const matchesCycle = (r) => {
-      const rCycleName = String(r.reviewCycle || r.reviewCycleName || '').trim().toLowerCase();
-      return rCycleName && (rCycleName === cycleName || cycleName.includes(rCycleName) || rCycleName.includes(cycleName));
-    };
-
-    const publishedMatch = rubrics.find(r => matchesCycle(r) && (r.status === 'Published' || r.status === 'Active'));
-    if (publishedMatch) return publishedMatch;
-
-    return rubrics.find(r => r.status === 'Published' || r.status === 'Active') || null;
-  }, [rubrics, selectedCycle, activeCycle]);
-
   const cycleConfig = useMemo(() => {
     return reviewCycles?.find(c => c.reviewName === selectedCycle || c.name === selectedCycle || c.id === selectedCycle);
   }, [reviewCycles, selectedCycle]);
@@ -195,35 +188,142 @@ const EvaluationWorkspace = () => {
     return reviewerAssignments?.find(a => String(a.teamId).toLowerCase() === String(teamId).toLowerCase() && (a.reviewCycleId === cycleConfig.id || a.status === 'Active'));
   }, [cycleConfig, teamId, userRole, reviewerAssignments]);
 
-  // Active Criteria derived from published rubric
+  // Discover all published rubrics matching the selected review cycle
+  const availableCycleRubrics = useMemo(() => {
+    if (!rubrics || rubrics.length === 0) return [];
+    const cycleName = String(selectedCycle || activeCycle?.name || activeCycle?.reviewName || 'Review 1').trim().toLowerCase();
+
+    return rubrics.filter(r => {
+      if (r.status !== 'Published' && r.status !== 'Active') return false;
+      const rCycle = String(r.reviewCycle || r.reviewCycleId || '').trim().toLowerCase();
+      const rTitle = String(r.title || '').trim().toLowerCase();
+
+      // Review 3 supports both "Review 3 Evaluation Rubric" and "Prototype Rubric"
+      if (cycleName === 'review 3' || cycleName === 'review-3' || cycleName.includes('review 3')) {
+        return rCycle === 'review 3' || rCycle === 'review-3' || rTitle.includes('review 3') || rTitle.includes('prototype');
+      }
+      if (cycleName === 'review 1' || cycleName === 'review-1' || cycleName.includes('review 1')) {
+        return rCycle === 'review 1' || rCycle === 'review-1' || rTitle.includes('review 1');
+      }
+      if (cycleName === 'review 2' || cycleName === 'review-2' || cycleName.includes('review 2')) {
+        return rCycle === 'review 2' || rCycle === 'review-2' || rTitle.includes('review 2');
+      }
+      return rCycle === cycleName || cycleName.includes(rCycle);
+    });
+  }, [rubrics, selectedCycle, activeCycle]);
+
+  // Resolved Rubric based on explicit assignment, URL param, user selection, or cycle uniqueness
+  const activeRubric = useMemo(() => {
+    if (!rubrics || rubrics.length === 0) return null;
+
+    // 1. Explicit user selection in Workspace UI
+    if (selectedRubricId) {
+      const match = rubrics.find(r =>
+        (String(r.id || '').toLowerCase() === String(selectedRubricId).toLowerCase() ||
+         String(r.rubricId || '').toLowerCase() === String(selectedRubricId).toLowerCase()) &&
+        (r.status === 'Published' || r.status === 'Active')
+      );
+      if (match) return match;
+    }
+
+    // 2. URL search param (?rubricId=... or ?rubric=...)
+    if (urlRubricId) {
+      const match = rubrics.find(r =>
+        (String(r.id || '').toLowerCase() === String(urlRubricId).toLowerCase() ||
+         String(r.rubricId || '').toLowerCase() === String(urlRubricId).toLowerCase() ||
+         String(r.title || '').toLowerCase() === String(urlRubricId).toLowerCase()) &&
+        (r.status === 'Published' || r.status === 'Active')
+      );
+      if (match) return match;
+    }
+
+    // 3. Team-level explicit rubric assignment
+    const teamAssignment =
+      teamData?.rubricAssignments?.[selectedCycle] ||
+      teamData?.rubricAssignments?.[cycleConfig?.id] ||
+      teamData?.rubricAssignments?.['Review 3'] ||
+      teamData?.review3RubricAssignment ||
+      teamData?.assignedRubricId;
+    if (teamAssignment && teamAssignment !== 'both') {
+      const match = rubrics.find(r =>
+        (String(r.id || '').toLowerCase() === String(teamAssignment).toLowerCase() ||
+         String(r.rubricId || '').toLowerCase() === String(teamAssignment).toLowerCase() ||
+         String(r.title || '').toLowerCase() === String(teamAssignment).toLowerCase()) &&
+        (r.status === 'Published' || r.status === 'Active')
+      );
+      if (match) return match;
+    }
+
+    // 4. Reviewer assignment explicit rubric
+    if (activeAssignment?.rubricId) {
+      const match = rubrics.find(r =>
+        (String(r.id || '').toLowerCase() === String(activeAssignment.rubricId).toLowerCase() ||
+         String(r.rubricId || '').toLowerCase() === String(activeAssignment.rubricId).toLowerCase()) &&
+        (r.status === 'Published' || r.status === 'Active')
+      );
+      if (match) return match;
+    }
+
+    // 5. Review Cycle configured rubric (ONLY IF the cycle has a single rubric and is not a multi-rubric cycle like Review 3)
+    const isMultiRubricCycle = availableCycleRubrics.length > 1;
+    if (!isMultiRubricCycle && cycleConfig?.rubricId) {
+      const match = rubrics.find(r =>
+        (String(r.id || '').toLowerCase() === String(cycleConfig.rubricId).toLowerCase() ||
+         String(r.rubricId || '').toLowerCase() === String(cycleConfig.rubricId).toLowerCase()) &&
+        (r.status === 'Published' || r.status === 'Active')
+      );
+      if (match) return match;
+    }
+
+    // 6. If the cycle only has 1 published rubric (e.g. Review 1, Review 2), safely use it
+    if (availableCycleRubrics.length === 1) {
+      return availableCycleRubrics[0];
+    }
+
+    // 7. For cycles with multiple rubrics (e.g. Review 3: Review 3 Evaluation Rubric vs Prototype Rubric),
+    // DO NOT pick rubrics[0] or cycleConfig.rubricId!
+    // Return null so "No rubric has been assigned to this evaluation." is shown.
+    return null;
+  }, [rubrics, selectedRubricId, urlRubricId, teamData, selectedCycle, cycleConfig, activeAssignment, availableCycleRubrics]);
+
+  // Active Criteria derived strictly from published activeRubric
   const activeCriteria = useMemo(() => {
     if (!activeRubric) return [];
 
     let result = [];
+    const rId = String(activeRubric.id || activeRubric.rubricId || '').toLowerCase();
 
-    if (Array.isArray(activeRubric.criteria) && activeRubric.criteria.length > 0) {
-      result = activeRubric.criteria.map((c, idx) => ({
-        id: c.id || c.criterionId || `crit_${idx + 1}`,
-        criterionId: c.criterionId || c.id || `crit_${idx + 1}`,
-        title: c.title || c.criterionName || `Criterion ${idx + 1}`,
-        description: c.description || '',
-        maximumMarks: Number(c.maximumMarks || c.maxMarks || 10),
-        displayOrder: Number(c.displayOrder || c.order || idx + 1)
-      }));
-    } else if (rubricCriteria && rubricCriteria.length > 0) {
-      const rId = String(activeRubric.id || activeRubric.rubricId || '').toLowerCase();
+    if (rubricCriteria && rubricCriteria.length > 0) {
       const filtered = rubricCriteria.filter(c => String(c.rubricId || '').toLowerCase() === rId);
-
       if (filtered.length > 0) {
         result = filtered.map((c, idx) => ({
           id: c.id || c.criterionId || `crit_${idx + 1}`,
           criterionId: c.criterionId || c.id || `crit_${idx + 1}`,
-          title: c.title || c.criterionName || `Criterion ${idx + 1}`,
+          title: c.name || c.title || c.criterionName || `Criterion ${idx + 1}`,
+          name: c.name || c.title || c.criterionName || `Criterion ${idx + 1}`,
+          criterionName: c.name || c.title || c.criterionName || `Criterion ${idx + 1}`,
           description: c.description || '',
-          maximumMarks: Number(c.maximumMarks || c.maxMarks || 10),
-          displayOrder: Number(c.displayOrder || c.order || idx + 1)
+          maximumMarks: Number(c.maximumMarks !== undefined ? c.maximumMarks : (c.maxMarks !== undefined ? c.maxMarks : 10)),
+          maxMarks: Number(c.maximumMarks !== undefined ? c.maximumMarks : (c.maxMarks !== undefined ? c.maxMarks : 10)),
+          displayOrder: Number(c.displayOrder || c.order || idx + 1),
+          order: Number(c.order || c.displayOrder || idx + 1)
         }));
       }
+    }
+
+    if (result.length === 0 && Array.isArray(activeRubric.criteria) && activeRubric.criteria.length > 0) {
+      result = activeRubric.criteria.map((c, idx) => ({
+        id: c.id || c.criterionId || `crit_${idx + 1}`,
+        criterionId: c.criterionId || c.id || `crit_${idx + 1}`,
+        title: c.name || c.title || c.criterionName || `Criterion ${idx + 1}`,
+        name: c.name || c.title || c.criterionName || `Criterion ${idx + 1}`,
+        criterionName: c.name || c.title || c.criterionName || `Criterion ${idx + 1}`,
+        description: c.description || '',
+        maximumMarks: Number(c.maximumMarks !== undefined ? c.maximumMarks : (c.maxMarks !== undefined ? c.maxMarks : 10)),
+        maxMarks: Number(c.maximumMarks !== undefined ? c.maximumMarks : (c.maxMarks !== undefined ? c.maxMarks : 10)),
+        displayOrder: Number(c.displayOrder || c.order || idx + 1),
+        order: Number(c.order || c.displayOrder || idx + 1)
+      }));
     }
 
     return result.sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0));
@@ -231,12 +331,13 @@ const EvaluationWorkspace = () => {
 
   const userKeys = useMemo(() => getEntityKeys(domainUser || currentUser), [domainUser, currentUser]);
 
-  // Existing Evaluation scoped strictly by team, reviewCycle, and role
+  // Existing Evaluation scoped strictly by team, reviewCycle, role, AND rubricId
   const existingEvaluation = useMemo(() => {
-    if (!evaluations || !teamId) return null;
+    if (!evaluations || !teamId || !activeRubric) return null;
     const cleanParamId = String(teamId).replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
     const isFacRole = userRole === 'classroom_faculty' || userRole === 'faculty';
     const evalRole = isFacRole ? 'faculty' : String(userRole).toLowerCase();
+    const activeRId = String(activeRubric.id || activeRubric.rubricId || '').toLowerCase();
 
     return evaluations.find(e => {
       const eTeamId = String(e.teamId || e.team || '').replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
@@ -246,7 +347,11 @@ const EvaluationWorkspace = () => {
       const sCycle = String(selectedCycle || '').trim().toLowerCase();
       if (eCycle !== sCycle) return false;
 
-      const eRole = String(e.role || '').toLowerCase();
+      // Must strictly match the active rubric ID
+      const eRubricId = String(e.rubricId || '').toLowerCase();
+      if (eRubricId && eRubricId !== activeRId) return false;
+
+      const eRole = String(e.role || e.evaluatorRole || '').toLowerCase();
       const isEFac = eRole === 'faculty' || eRole === 'classroom_faculty';
 
       if (isFacRole && isEFac) return true;
@@ -261,7 +366,7 @@ const EvaluationWorkspace = () => {
 
       return userKeys.some(k => eKeys.includes(k));
     }) || null;
-  }, [evaluations, teamId, selectedCycle, userRole, userKeys]);
+  }, [evaluations, teamId, selectedCycle, userRole, userKeys, activeRubric]);
 
   const allEvaluationsForCycle = useMemo(() => {
     if (!evaluations || !teamId) return [];
@@ -317,7 +422,7 @@ const EvaluationWorkspace = () => {
     if (isNaN(numVal) || numVal < 0 || numVal > maxMarks) {
       setMarkErrors(prev => ({
         ...prev,
-        [markKey]: `Must be 0 – ${maxMarks}`
+        [markKey]: `Must be 0 â€“ ${maxMarks}`
       }));
     } else {
       setMarkErrors(prev => {
@@ -417,7 +522,8 @@ const EvaluationWorkspace = () => {
       const evalRole = (userRole === 'classroom_faculty' || userRole === 'faculty') ? 'faculty' : userRole;
       const cleanCycle = String(selectedCycle).toLowerCase().replace(/[^a-z0-9]/g, '_');
       const cleanTeam = String(teamData.id).toLowerCase().replace(/[^a-z0-9]/g, '_');
-      const evalDocId = existingEvaluation?.id || `eval_${cleanCycle}_${cleanTeam}_${evalRole}`;
+      const cleanRubricId = String(activeRubric.id || activeRubric.rubricId || '').toLowerCase().replace(/[^a-z0-9]/g, '_');
+      const evalDocId = existingEvaluation?.id || `eval_${cleanCycle}_${cleanTeam}_${evalRole}_${cleanRubricId}`;
 
       const evaluationData = {
         id: evalDocId,
@@ -431,14 +537,18 @@ const EvaluationWorkspace = () => {
         rubricId: activeRubric.id || activeRubric.rubricId,
         rubricTitle: activeRubric.title || 'Evaluation Rubric',
         rubricVersion: activeRubric.version || '1.0',
+        rubricTotalMarks: Number(activeRubric.totalMarks || 50),
         evaluatorId: currentUser.uid,
         evaluatorEmployeeId: currentUser.employeeId || currentUser.uid,
         evaluatorName: currentUser.displayName || currentUser.email,
+        evaluatorRole: evalRole,
         role: evalRole,
+        scores: sanitizedMarks,
         marks: sanitizedMarks,
         remarks,
         attendance,
         studentTotals,
+        totalScore: teamAvg,
         teamAverage: teamAvg,
         status: 'Locked',
         updatedAt: now,
@@ -453,7 +563,7 @@ const EvaluationWorkspace = () => {
       try {
         const pendings = await FirestoreService.getAll('pendingEvaluations');
         const cleanTid = String(teamData.id).toLowerCase();
-        const matchingPendings = (pendings || []).filter(p => 
+        const matchingPendings = (pendings || []).filter(p =>
           String(p.teamId || '').toLowerCase() === cleanTid &&
           (p.reviewCycle === selectedCycle || p.reviewCycleId === cycleConfig?.id || p.reviewCycleId === selectedCycle)
         );
@@ -530,7 +640,8 @@ const EvaluationWorkspace = () => {
       const evalRole = (userRole === 'classroom_faculty' || userRole === 'faculty') ? 'faculty' : userRole;
       const cleanCycle = String(selectedCycle).toLowerCase().replace(/[^a-z0-9]/g, '_');
       const cleanTeam = String(teamData.id).toLowerCase().replace(/[^a-z0-9]/g, '_');
-      const evalDocId = existingEvaluation?.id || `eval_${cleanCycle}_${cleanTeam}_${evalRole}`;
+      const cleanRubricId = String(activeRubric.id || activeRubric.rubricId || '').toLowerCase().replace(/[^a-z0-9]/g, '_');
+      const evalDocId = existingEvaluation?.id || `eval_${cleanCycle}_${cleanTeam}_${evalRole}_${cleanRubricId}`;
 
       const evaluationData = {
         id: evalDocId,
@@ -544,14 +655,18 @@ const EvaluationWorkspace = () => {
         rubricId: activeRubric.id || activeRubric.rubricId,
         rubricTitle: activeRubric.title || 'Evaluation Rubric',
         rubricVersion: activeRubric.version || '1.0',
+        rubricTotalMarks: Number(activeRubric.totalMarks || 50),
         evaluatorId: currentUser.uid,
         evaluatorEmployeeId: currentUser.employeeId || currentUser.uid,
         evaluatorName: currentUser.displayName || currentUser.email,
+        evaluatorRole: evalRole,
         role: evalRole,
+        scores: sanitizedMarks,
         marks: sanitizedMarks,
         remarks,
         attendance,
         studentTotals,
+        totalScore: teamAvg,
         teamAverage: teamAvg,
         status: 'Draft',
         updatedAt: now,
@@ -673,17 +788,37 @@ const EvaluationWorkspace = () => {
             </div>
           </div>
 
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-4 flex-wrap">
             <select
               className="rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm p-2 border bg-white font-semibold text-gray-800"
               value={selectedCycle}
-              onChange={(e) => setSelectedCycle(e.target.value)}
+              onChange={(e) => {
+                setSelectedCycle(e.target.value);
+                setSelectedRubricId('');
+              }}
               disabled={isLocked || userRole !== 'admin'}
             >
               {reviewCycles?.map(rc => (
                 <option key={rc.id} value={rc.reviewName}>{rc.reviewName}</option>
               ))}
             </select>
+
+            {availableCycleRubrics.length > 0 && (
+              <select
+                className="rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm p-2 border bg-white font-semibold text-gray-800"
+                value={activeRubric?.id || selectedRubricId || ''}
+                onChange={(e) => setSelectedRubricId(e.target.value)}
+                disabled={isLocked && userRole !== 'admin'}
+                title="Select Evaluation Rubric"
+              >
+                <option value="">-- Select Rubric --</option>
+                {availableCycleRubrics.map(r => (
+                  <option key={r.id} value={r.id || r.rubricId}>
+                    {r.title} ({r.totalMarks || 50} Marks)
+                  </option>
+                ))}
+              </select>
+            )}
 
             {isLocked && userRole === 'admin' && (
               <Button onClick={handleUnlock} variant="outline" className="flex items-center gap-2 border-orange-500 text-orange-600 hover:bg-orange-50">
@@ -703,17 +838,36 @@ const EvaluationWorkspace = () => {
           </div>
         </div>
 
-        {/* Rule 5 Requirement: If no published rubric, show exact required message */}
+        {/* Rule Requirement: If no assigned/selected rubric, show exact required message */}
         {!activeRubric ? (
           <div className="bg-amber-50 border border-amber-200 text-amber-900 p-6 rounded-xl flex items-start gap-4 shadow-sm">
             <AlertCircle className="w-6 h-6 text-amber-600 shrink-0 mt-0.5" />
-            <div>
+            <div className="flex-1">
               <h3 className="font-bold text-base text-amber-900">
-                No published rubric is configured for this review cycle.
+                No rubric has been assigned to this evaluation.
               </h3>
               <p className="text-xs text-amber-700 mt-1">
-                An Admin must configure and publish a rubric for <strong>{selectedCycle}</strong> in the Rubrics Engine before evaluators can enter marks.
+                An explicit rubric assignment or selection is required for <strong>{selectedCycle}</strong>. Please select one of the published rubrics below to load criteria:
               </p>
+              {availableCycleRubrics.length > 0 ? (
+                <div className="mt-4 flex flex-wrap gap-3">
+                  {availableCycleRubrics.map(r => (
+                    <Button
+                      key={r.id}
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setSelectedRubricId(r.id || r.rubricId)}
+                      className="bg-white hover:bg-amber-100 text-amber-900 border-amber-300 font-bold shadow-sm"
+                    >
+                      Select {r.title} ({r.totalMarks || 50} Marks)
+                    </Button>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-amber-600 mt-2 font-semibold">
+                  No published rubrics exist for {selectedCycle}. Please create and publish a rubric in Admin Rubrics Engine.
+                </p>
+              )}
             </div>
           </div>
         ) : (
@@ -726,7 +880,7 @@ const EvaluationWorkspace = () => {
             )}
 
             {/* Attendance Section */}
-            <Card title={`Attendance — ${selectedCycle}`} icon={CheckCircle2}>
+            <Card title={`Attendance â€” ${selectedCycle}`} icon={CheckCircle2}>
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
                 {teamData.members.map(student => (
                   <div key={student.id} className="border border-gray-200 rounded-lg p-3 bg-gray-50">
@@ -747,7 +901,7 @@ const EvaluationWorkspace = () => {
             </Card>
 
             {/* Rubric Marks Entry Table */}
-            <Card title={`Rubric Marks Entry — ${activeRubric.title} (v${activeRubric.version})`} icon={ShieldCheck} className="overflow-x-auto">
+            <Card title={`Rubric Marks Entry â€” ${activeRubric.title} (v${activeRubric.version})`} icon={ShieldCheck} className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
@@ -865,7 +1019,7 @@ const EvaluationWorkspace = () => {
 
                       <div className="text-2xl font-black text-gray-900 mt-2">
                         {evalObj && evalObj.teamAverage !== undefined && evalObj.teamAverage !== null
-                          ? `${evalObj.teamAverage} / 100`
+                          ? `${evalObj.teamAverage} / ${evalObj.rubricTotalMarks || 50}`
                           : <span className="text-sm font-bold text-amber-600 italic">PENDING</span>
                         }
                       </div>

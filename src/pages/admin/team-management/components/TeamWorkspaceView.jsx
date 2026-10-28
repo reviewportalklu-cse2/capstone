@@ -5,30 +5,31 @@ import Badge from '@/components/common/Badge';
 import Button from '@/components/common/Button';
 import Modal from '@/components/common/Modal';
 import EmptyState from '@/components/common/EmptyState';
-import { 
-  Users, UserCheck, GraduationCap, UserCog, BookOpen, 
-  BarChart3, Calendar, Clock, Activity, Download, Edit2, 
-  ExternalLink, FolderGit2, HardDrive, CheckCircle2, AlertTriangle, 
+import {
+  Users, UserCheck, GraduationCap, UserCog, BookOpen,
+  BarChart3, Calendar, Clock, Activity, Download, Edit2,
+  ExternalLink, FolderGit2, HardDrive, CheckCircle2, AlertTriangle,
   MessageSquare, Shield, Zap, RefreshCw, FileText, ChevronRight, Eye, ArrowLeft
 } from 'lucide-react';
 import { generateTeamPDF } from '@/utils/teamPdfExport';
 import { adminService } from '@/firebase/services/adminService';
 import { auditService } from '@/firebase/services/auditService';
+import { FirestoreService } from '@/firebase/services/firestore';
 import { useAuth } from '@/contexts/AuthContext';
 
 export const TeamWorkspaceView = ({ team, contextData = {}, onRefresh }) => {
   const navigate = useNavigate();
   const { currentUser } = useAuth();
-  const { 
-    guides = [], 
-    faculty = [], 
-    reviewers = [], 
+  const {
+    guides = [],
+    faculty = [],
+    reviewers = [],
     reviewCycles = [],
     rubrics = [],
     rubricCriteria = [],
-    evaluations = [], 
-    remarks = [], 
-    attendance = [], 
+    evaluations = [],
+    remarks = [],
+    attendance = [],
     notifications = [],
     auditLogs = []
   } = contextData;
@@ -36,6 +37,10 @@ export const TeamWorkspaceView = ({ team, contextData = {}, onRefresh }) => {
   const [reassignModal, setReassignModal] = useState({ open: false, type: '', currentId: '' });
   const [selectedStaffId, setSelectedStaffId] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [review3Assignment, setReview3Assignment] = useState(
+    team?.review3RubricAssignment || team?.assignedRubricId || 'both'
+  );
+  const [isSavingRubric, setIsSavingRubric] = useState(false);
 
   if (!team) return null;
 
@@ -96,9 +101,9 @@ export const TeamWorkspaceView = ({ team, contextData = {}, onRefresh }) => {
   const healthStatus = (teamEvaluations.length === 0 && !team.avgMarks)
     ? { label: 'Not Evaluated', variant: 'secondary', bg: 'bg-gray-100 text-gray-700 border-gray-300 font-extrabold' }
     : avgMarks >= 75
-    ? { label: 'Healthy', variant: 'success', bg: 'bg-emerald-100 text-emerald-900 border-emerald-300 font-extrabold' } 
-    : avgMarks >= 50 
-    ? { label: 'Attention Required', variant: 'warning', bg: 'bg-amber-100 text-amber-900 border-amber-300 font-extrabold' } 
+    ? { label: 'Healthy', variant: 'success', bg: 'bg-emerald-100 text-emerald-900 border-emerald-300 font-extrabold' }
+    : avgMarks >= 50
+    ? { label: 'Attention Required', variant: 'warning', bg: 'bg-amber-100 text-amber-900 border-amber-300 font-extrabold' }
     : { label: 'Critical Performance', variant: 'danger', bg: 'bg-red-100 text-red-900 border-red-300 font-extrabold' };
 
   // Reassignment Action
@@ -135,10 +140,47 @@ export const TeamWorkspaceView = ({ team, contextData = {}, onRefresh }) => {
     }
   };
 
+  const handleSaveRubricAssignment = async () => {
+    setIsSavingRubric(true);
+    try {
+      const rubricMap = {
+        'e8dDE2gKWbfLHZ0b0j8B': 'Review 3 Evaluation Rubric',
+        'rubric_prototype_review3': 'Prototype Rubric',
+        'both': 'Both Rubrics (Comprehensive Evaluation)'
+      };
+      const assignedTitle = rubricMap[review3Assignment] || 'Both Rubrics';
+
+      const payload = {
+        review3RubricAssignment: review3Assignment,
+        assignedRubricId: review3Assignment === 'both' ? null : review3Assignment,
+        assignedRubricTitle: assignedTitle,
+        updatedAt: new Date().toISOString()
+      };
+
+      await FirestoreService.updateDocument('teams', team.id || teamId, payload);
+
+      await auditService.log(
+        currentUser?.uid || 'admin',
+        'ASSIGN_REVIEW3_RUBRIC',
+        'teams',
+        teamId,
+        { assignedRubric: review3Assignment, title: assignedTitle }
+      );
+
+      alert(`Review 3 rubric assignment updated to: ${assignedTitle}`);
+      if (onRefresh) onRefresh();
+    } catch (err) {
+      console.error("Failed to update rubric assignment:", err);
+      alert("Failed to update rubric assignment: " + err.message);
+    } finally {
+      setIsSavingRubric(false);
+    }
+  };
+
   return (
     <div className="w-full font-sans space-y-8 pb-16">
-      
-      {/* 360° Full-Page Hero Header */}
+
+      {/* 360Â° Full-Page Hero Header */}
       <div className="bg-slate-900 text-white rounded-2xl p-6 sm:p-8 shadow-2xl relative overflow-hidden border border-slate-800">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 relative z-10">
           <div className="space-y-2">
@@ -150,14 +192,14 @@ export const TeamWorkspaceView = ({ team, contextData = {}, onRefresh }) => {
                 Health: {healthStatus.label} ({avgMarks}%)
               </span>
               <span className="bg-white/10 text-slate-200 border border-white/15 text-xs font-semibold px-3 py-1 rounded-full">
-                Batch {team.batch || 'CSE-2026'} • Section {team.section || 'A'}
+                Batch {team.batch || 'CSE-2026'} â€¢ Section {team.section || 'A'}
               </span>
             </div>
             <h1 className="text-2xl sm:text-4xl font-extrabold tracking-tight text-white">
               {team.projectTitle || team.project?.title || 'Capstone Team Workspace'}
             </h1>
             <p className="text-sm text-slate-300">
-              Department of {team.department || 'Computer Science & Engineering'} • KL University
+              Department of {team.department || 'Computer Science & Engineering'} â€¢ KL University
             </p>
           </div>
 
@@ -209,8 +251,8 @@ export const TeamWorkspaceView = ({ team, contextData = {}, onRefresh }) => {
         {/* LEFT COLUMN: Overview, Students, Project (6 Cols on lg) */}
         <div className="lg:col-span-6 space-y-8">
 
-          {/* PANEL 1 – Team Overview */}
-          <Card title={<div className="flex items-center gap-2 font-extrabold text-slate-900 text-sm uppercase tracking-wider"><Users className="w-5 h-5 text-primary-600" /> Panel 1 – Team Overview & Metadata</div>}>
+          {/* PANEL 1 â€“ Team Overview */}
+          <Card title={<div className="flex items-center gap-2 font-extrabold text-slate-900 text-sm uppercase tracking-wider"><Users className="w-5 h-5 text-primary-600" /> Panel 1 â€“ Team Overview & Metadata</div>}>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
               <div className="p-4 bg-slate-50 rounded-xl border border-slate-200">
                 <span className="text-slate-500 font-bold uppercase text-xs block mb-1">Team ID</span>
@@ -233,8 +275,8 @@ export const TeamWorkspaceView = ({ team, contextData = {}, onRefresh }) => {
             </div>
           </Card>
 
-          {/* PANEL 2 – Student Members */}
-          <Card title={<div className="flex items-center gap-2 font-extrabold text-slate-900 text-sm uppercase tracking-wider"><Users className="w-5 h-5 text-emerald-600" /> Panel 2 – Student Members ({(team.members || team.students || []).length})</div>}>
+          {/* PANEL 2 â€“ Student Members */}
+          <Card title={<div className="flex items-center gap-2 font-extrabold text-slate-900 text-sm uppercase tracking-wider"><Users className="w-5 h-5 text-emerald-600" /> Panel 2 â€“ Student Members ({(team.members || team.students || []).length})</div>}>
             <div className="overflow-x-auto">
               <table className="w-full text-sm text-left text-slate-700">
                 <thead className="bg-slate-100 uppercase text-xs text-slate-600 font-extrabold border-b">
@@ -280,8 +322,8 @@ export const TeamWorkspaceView = ({ team, contextData = {}, onRefresh }) => {
             </div>
           </Card>
 
-          {/* PANEL 3 – Capstone Project Details */}
-          <Card title={<div className="flex items-center gap-2 font-extrabold text-slate-900 text-sm uppercase tracking-wider"><BookOpen className="w-5 h-5 text-indigo-600" /> Panel 3 – Capstone Project Details</div>}>
+          {/* PANEL 3 â€“ Capstone Project Details */}
+          <Card title={<div className="flex items-center gap-2 font-extrabold text-slate-900 text-sm uppercase tracking-wider"><BookOpen className="w-5 h-5 text-indigo-600" /> Panel 3 â€“ Capstone Project Details</div>}>
             <div className="space-y-4 text-sm">
               <div className="p-4 bg-indigo-50/60 rounded-xl border border-indigo-200 flex items-center justify-between">
                 <div>
@@ -311,10 +353,10 @@ export const TeamWorkspaceView = ({ team, contextData = {}, onRefresh }) => {
         {/* RIGHT COLUMN: Mentors, Marks, Progress, Meetings, Activity (6 Cols on lg) */}
         <div className="lg:col-span-6 space-y-8">
 
-          {/* PANEL 4 – Staff Mentors */}
-          <Card title={<div className="flex items-center gap-2 font-extrabold text-slate-900 text-sm uppercase tracking-wider"><Shield className="w-5 h-5 text-primary-600" /> Panel 4 – Assigned Staff Mentors</div>}>
+          {/* PANEL 4 â€“ Staff Mentors */}
+          <Card title={<div className="flex items-center gap-2 font-extrabold text-slate-900 text-sm uppercase tracking-wider"><Shield className="w-5 h-5 text-primary-600" /> Panel 4 â€“ Assigned Staff Mentors</div>}>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
-              
+
               {/* Guide */}
               <div className="p-3.5 bg-emerald-50/70 rounded-xl border border-emerald-200 space-y-1">
                 <div className="flex items-center justify-between">
@@ -354,8 +396,46 @@ export const TeamWorkspaceView = ({ team, contextData = {}, onRefresh }) => {
             </div>
           </Card>
 
-          {/* PANEL 5 – Marks & Evaluation Summary */}
-          <Card title={<div className="flex items-center gap-2 font-extrabold text-slate-900 text-sm uppercase tracking-wider"><BarChart3 className="w-5 h-5 text-amber-600" /> Panel 5 – Evaluation Marks Summary</div>}>
+          {/* PANEL 4B â€“ Admin Rubric Assignment Configuration (Review 3) */}
+          <Card title={<div className="flex items-center gap-2 font-extrabold text-slate-900 text-sm uppercase tracking-wider"><Zap className="w-5 h-5 text-indigo-600" /> Panel 4B â€“ Review 3 Rubric Assignment</div>}>
+            <div className="space-y-3 text-xs">
+              <p className="text-slate-600 text-[11px]">
+                Explicitly assign the evaluation rubric for Review 3. The evaluator's Evaluation Workspace will automatically resolve and lock into the assigned criteria.
+              </p>
+
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+                <select
+                  value={review3Assignment}
+                  onChange={(e) => setReview3Assignment(e.target.value)}
+                  className="flex-1 text-xs border border-slate-300 rounded-lg p-2.5 bg-white font-bold text-slate-800 focus:ring-primary-500 shadow-sm"
+                >
+                  <option value="e8dDE2gKWbfLHZ0b0j8B">Review 3 Evaluation Rubric (50 Marks)</option>
+                  <option value="rubric_prototype_review3">Prototype Rubric (50 Marks)</option>
+                  <option value="both">Both Rubrics (Allow Evaluator to Complete Both)</option>
+                </select>
+
+                <Button
+                  size="sm"
+                  variant="primary"
+                  onClick={handleSaveRubricAssignment}
+                  disabled={isSavingRubric}
+                  className="whitespace-nowrap"
+                >
+                  {isSavingRubric ? 'Saving...' : 'Save Rubric'}
+                </Button>
+              </div>
+
+              <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[11px]">
+                <span className="text-slate-500 font-medium">Currently Configured:</span>
+                <Badge variant={review3Assignment === 'both' ? 'info' : 'primary'} className="font-bold">
+                  {review3Assignment === 'e8dDE2gKWbfLHZ0b0j8B' ? 'Review 3 Evaluation Rubric (50)' : review3Assignment === 'rubric_prototype_review3' ? 'Prototype Rubric (50)' : 'Both Rubrics (50+50)'}
+                </Badge>
+              </div>
+            </div>
+          </Card>
+
+          {/* PANEL 5 â€“ Marks & Evaluation Summary */}
+          <Card title={<div className="flex items-center gap-2 font-extrabold text-slate-900 text-sm uppercase tracking-wider"><BarChart3 className="w-5 h-5 text-amber-600" /> Panel 5 â€“ Evaluation Marks Summary</div>}>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-center">
               <div className="p-4 bg-blue-50/80 rounded-xl border border-blue-200">
                 <span className="text-blue-700 font-bold block uppercase text-xs">Guide Marks</span>
@@ -384,8 +464,8 @@ export const TeamWorkspaceView = ({ team, contextData = {}, onRefresh }) => {
             </div>
           </Card>
 
-          {/* PANEL 6 – Review Evaluation Timeline */}
-          <Card title={<div className="flex items-center gap-2 font-extrabold text-slate-900 text-sm uppercase tracking-wider"><Clock className="w-5 h-5 text-sky-600" /> Panel 6 – Review Evaluation Timeline</div>}>
+          {/* PANEL 6 â€“ Review Evaluation Timeline */}
+          <Card title={<div className="flex items-center gap-2 font-extrabold text-slate-900 text-sm uppercase tracking-wider"><Clock className="w-5 h-5 text-sky-600" /> Panel 6 â€“ Review Evaluation Timeline</div>}>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
               {(() => {
                 const cyclesToRender = (Array.isArray(reviewCycles) && reviewCycles.length > 0) ? reviewCycles.slice(0, 3) : [
@@ -421,8 +501,8 @@ export const TeamWorkspaceView = ({ team, contextData = {}, onRefresh }) => {
             </div>
           </Card>
 
-          {/* PANEL 7 – Meetings & Attendance */}
-          <Card title={<div className="flex items-center gap-2 font-extrabold text-slate-900 text-sm uppercase tracking-wider"><Calendar className="w-5 h-5 text-blue-600" /> Panel 7 – Meetings & Attendance Record</div>}>
+          {/* PANEL 7 â€“ Meetings & Attendance */}
+          <Card title={<div className="flex items-center gap-2 font-extrabold text-slate-900 text-sm uppercase tracking-wider"><Calendar className="w-5 h-5 text-blue-600" /> Panel 7 â€“ Meetings & Attendance Record</div>}>
             <div className="space-y-3 text-xs">
               <div className="flex justify-between items-center p-3 bg-slate-50 rounded-xl border border-slate-200">
                 <span className="text-slate-600 font-semibold text-sm">Total Guide Meetings Held:</span>
@@ -456,8 +536,8 @@ export const TeamWorkspaceView = ({ team, contextData = {}, onRefresh }) => {
             </div>
           </Card>
 
-          {/* PANEL 8 – Activity Feed & Notifications */}
-          <Card title={<div className="flex items-center gap-2 font-extrabold text-slate-900 text-sm uppercase tracking-wider"><Activity className="w-4 h-4 text-teal-600" /> Panel 8 – Activity Feed & Notifications</div>}>
+          {/* PANEL 8 â€“ Activity Feed & Notifications */}
+          <Card title={<div className="flex items-center gap-2 font-extrabold text-slate-900 text-sm uppercase tracking-wider"><Activity className="w-4 h-4 text-teal-600" /> Panel 8 â€“ Activity Feed & Notifications</div>}>
             <div className="space-y-3 text-xs max-h-60 overflow-y-auto">
               <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex items-start gap-3">
                 <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0 mt-0.5" />

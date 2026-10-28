@@ -27,9 +27,9 @@ const RubricsManagement = () => {
         academicYear: new Date().getFullYear().toString(),
         semester: 'Odd',
         department: 'CSE',
-        reviewCycle: 'Review 1',
+        reviewCycle: 'Review 3',
         status: 'Draft',
-        totalMarks: 0,
+        totalMarks: 50,
         createdBy: currentUser.uid,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
@@ -133,7 +133,7 @@ const RubricsManagement = () => {
           {dataLoading ? (
             <div className="py-12 flex justify-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div></div>
           ) : rubrics && rubrics.length > 0 ? (
-            <Table columns={columns} data={rubrics} keyExtractor={r => r.id} />
+            <Table columns={columns} data={rubrics} keyExtractor={r => r.id} itemsPerPage={25} />
           ) : (
             <EmptyState 
               icon={Layers}

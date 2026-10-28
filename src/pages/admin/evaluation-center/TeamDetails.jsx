@@ -169,13 +169,14 @@ const TeamDetails = () => {
       {/* Visual Stage Progress Tracker */}
       <Card className="p-6">
         <h3 className="text-sm font-bold text-gray-900 mb-4 tracking-wider uppercase">Evaluation Stage Progression</h3>
-        <div className="grid grid-cols-2 md:grid-cols-6 gap-3 text-center">
+        <div className="grid grid-cols-2 md:grid-cols-7 gap-3 text-center">
           {[
             { stage: 'Guide Eval', score: team.guideMarks > 0 ? `${team.guideMarks}/20` : 'Pending', done: team.guideMarks > 0 },
             { stage: 'Faculty Eval', score: team.facultyMarks > 0 ? `${team.facultyMarks}/20` : 'Pending', done: team.facultyMarks > 0 },
             { stage: 'Review 1', score: team.review1Score > 0 ? `${team.review1Score}/100` : 'Pending', done: team.review1Score > 0 },
             { stage: 'Review 2', score: team.review2Score > 0 ? `${team.review2Score}/100` : 'Pending', done: team.review2Score > 0 },
-            { stage: 'Review 3', score: team.review3Score > 0 ? `${team.review3Score}/100` : 'Pending', done: team.review3Score > 0 },
+            { stage: 'Review 3 Eval', score: (team.review3Score !== null && team.review3Score !== undefined) ? `${team.review3Score}/50` : 'Pending', done: (team.review3Score !== null && team.review3Score !== undefined) },
+            { stage: 'Prototype Rubric', score: (team.prototypeScore !== null && team.prototypeScore !== undefined) ? `${team.prototypeScore}/50` : 'Pending', done: (team.prototypeScore !== null && team.prototypeScore !== undefined) },
             { stage: 'Final Published', score: team.approvalStage === 'Published' ? 'Published' : 'Awaiting', done: team.approvalStage === 'Published' }
           ].map((item, idx) => (
             <div key={idx} className={`p-3 rounded-lg border text-xs font-semibold ${item.done ? 'bg-green-50 border-green-200 text-green-800' : 'bg-gray-50 border-gray-200 text-gray-500'}`}>
@@ -258,6 +259,42 @@ const TeamDetails = () => {
                 <div className="flex justify-between text-gray-600"><span>Viva & Tech Defense:</span><span className="font-semibold">{team.rubrics?.faculty?.viva} pts</span></div>
                 <div className="flex justify-between text-gray-600"><span>Implementation:</span><span className="font-semibold">{team.rubrics?.faculty?.implementation} pts</span></div>
                 <div className="flex justify-between font-bold text-gray-900 border-t pt-1"><span>Total Faculty Score:</span><span>{team.facultyMarks}/20</span></div>
+              </div>
+
+              {/* Review 3 Evaluation Rubric Card */}
+              <div className="p-3 bg-blue-50/70 border border-blue-200 rounded-lg space-y-1">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-blue-950">Review 3 Evaluation Rubric</span>
+                  <Badge variant={team.review3Score !== null && team.review3Score !== undefined ? 'success' : 'warning'} className="text-[10px]">
+                    {team.review3Status || (team.review3Score !== null && team.review3Score !== undefined ? 'Submitted' : 'PENDING')}
+                  </Badge>
+                </div>
+                <div className="flex justify-between text-gray-600"><span>Cycle / Role:</span><span className="font-medium text-gray-800">Review 3 • Reviewer</span></div>
+                <div className="flex justify-between text-gray-600"><span>Maximum Marks:</span><span className="font-medium text-gray-800">50</span></div>
+                <div className="flex justify-between font-bold text-blue-900 border-t border-blue-200 pt-1">
+                  <span>Submitted Score:</span>
+                  <span className={team.review3Score !== null && team.review3Score !== undefined ? 'text-primary-700' : 'text-amber-600 italic'}>
+                    {team.review3Score !== null && team.review3Score !== undefined ? `Review 3 Evaluation Rubric — ${team.review3Score} / 50` : 'PENDING'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Prototype Rubric Card */}
+              <div className="p-3 bg-indigo-50/70 border border-indigo-200 rounded-lg space-y-1">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-indigo-950">Prototype Rubric</span>
+                  <Badge variant={team.prototypeScore !== null && team.prototypeScore !== undefined ? 'success' : 'warning'} className="text-[10px]">
+                    {team.prototypeStatus || (team.prototypeScore !== null && team.prototypeScore !== undefined ? 'Submitted' : 'PENDING')}
+                  </Badge>
+                </div>
+                <div className="flex justify-between text-gray-600"><span>Cycle / Role:</span><span className="font-medium text-gray-800">Review 3 • Reviewer / Panel</span></div>
+                <div className="flex justify-between text-gray-600"><span>Maximum Marks:</span><span className="font-medium text-gray-800">50</span></div>
+                <div className="flex justify-between font-bold text-indigo-900 border-t border-indigo-200 pt-1">
+                  <span>Submitted Score:</span>
+                  <span className={team.prototypeScore !== null && team.prototypeScore !== undefined ? 'text-indigo-700' : 'text-amber-600 italic'}>
+                    {team.prototypeScore !== null && team.prototypeScore !== undefined ? `Prototype Rubric — ${team.prototypeScore} / 50` : 'PENDING'}
+                  </span>
+                </div>
               </div>
             </div>
           </Card>
